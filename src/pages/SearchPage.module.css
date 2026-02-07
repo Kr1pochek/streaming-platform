@@ -1,0 +1,609 @@
+﻿.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  padding: 8px 0 0;
+  overflow: hidden;
+}
+
+.shell {
+  flex: 1;
+  min-height: 0;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(120% 80% at 12% -20%, rgba(255, 255, 255, 0.06), transparent 60%),
+    linear-gradient(180deg, #0b0d11 0%, #090a0e 44%, #07080c 100%);
+  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.45);
+  padding: 20px 22px 28px;
+  color: rgba(255, 255, 255, 0.95);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.shell::-webkit-scrollbar {
+  width: 8px;
+}
+
+.shell::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 10px;
+}
+
+.shell::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.shellScrolling {
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.shellScrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.searchBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.searchLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.searchInputWrap {
+  position: relative;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 19px;
+  height: 19px;
+  color: rgba(255, 255, 255, 0.44);
+}
+
+.searchInput {
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.94);
+  padding: 0 18px 0 50px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.searchInput::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+.tabs {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tabButton {
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  padding: 0 16px;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tabButtonActive {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.tabButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionHeading {
+  margin: 0;
+  color: #fafafa;
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.sectionArrow {
+  width: 22px;
+  height: 22px;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.collectionsGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 148px));
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.collectionCard {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.collectionCover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+
+.collectionCover::after {
+  content: "*";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: rgba(255, 235, 105, 0.95);
+  font-size: 12px;
+}
+
+.collectionTitle {
+  margin-top: 8px;
+  display: block;
+  color: #f4f5f7;
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tracksGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.trackList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.trackRow {
+  width: 100%;
+  min-height: 52px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 30px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.trackCover {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.trackMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trackTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.explicitTag {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.67);
+  border-radius: 5px;
+  line-height: 1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 4px;
+}
+
+.trackArtist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.54);
+  font-weight: 600;
+}
+
+.likeButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.likeButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.likeButton:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.likeButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.trackDuration {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.historySection {
+  margin-top: 28px;
+}
+
+.historyGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+
+.historyTrackList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.historyTrackRow {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 28px 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.historyCover {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.historyMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.historyTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.historySubtitle {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.historyActionButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.historyActionButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.historyActionButton:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.historyActionButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.historyDuration {
+  min-width: 46px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.clearHistoryButton {
+  margin: 18px auto 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 24px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clearHistoryButton:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.clearHistoryButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.moreGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 148px));
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.moreCard {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+}
+
+button.moreCard {
+  cursor: pointer;
+}
+
+.moreCover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.32);
+}
+
+.moreTitle {
+  margin-top: 8px;
+  display: block;
+  color: #f4f5f7;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moreArtist {
+  margin-top: 2px;
+  display: block;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artistResultsGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.artistResultCard {
+  min-height: 68px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.artistResultAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.artistResultMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.artistResultName {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artistResultFollowers {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+@media (max-width: 1400px) {
+  .searchInput {
+    font-size: 17px;
+  }
+
+  .tabButton {
+    font-size: 16px;
+  }
+
+  .sectionHeading {
+    font-size: 33px;
+  }
+
+  .collectionTitle {
+    font-size: 14px;
+  }
+
+  .trackTitle {
+    font-size: 17px;
+  }
+
+  .trackArtist {
+    font-size: 13px;
+  }
+
+  .trackDuration {
+    font-size: 13px;
+  }
+
+  .historyTitle {
+    font-size: 15px;
+  }
+
+  .historySubtitle {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .collectionsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: unset;
+  }
+
+  .moreGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: unset;
+  }
+
+  .tracksGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .historyGrid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .artistResultsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sectionHeading {
+    font-size: 28px;
+  }
+}

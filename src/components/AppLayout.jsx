@@ -1,9 +1,31 @@
 ﻿import { Outlet } from "react-router-dom";
-import { FiSkipBack, FiSkipForward, FiPause, FiVolume2 } from "react-icons/fi";
+import { FiSkipBack, FiSkipForward, FiPause, FiPlay, FiVolume2 } from "react-icons/fi";
+import { LuHeart, LuHeartOff } from "react-icons/lu";
 import Sidebar from "./Sidebar.jsx";
 import styles from "./AppLayout.module.css";
+import { usePlayer } from "../context/PlayerContext.jsx";
 
 export default function AppLayout() {
+  const {
+    currentTrack,
+    isPlaying,
+    volume,
+    progressPercent,
+    progressLabel,
+    durationLabel,
+    isCurrentTrackLiked,
+    togglePlay,
+    nextTrack,
+    prevTrack,
+    setProgressPercent,
+    setVolume,
+    likeTrack,
+    unlikeTrack,
+  } = usePlayer();
+
+  const canLikeCurrent = Boolean(currentTrack && !isCurrentTrackLiked);
+  const canUnlikeCurrent = Boolean(currentTrack && isCurrentTrackLiked);
+
   return (
     <div className={styles.appShell}>
       <div className={styles.sidebar}>
@@ -15,42 +37,73 @@ export default function AppLayout() {
           <Outlet />
         </div>
 
-        <footer className={styles.player}>
+        <footer className={styles.player} aria-label="Плеер">
           <div className={styles.playerLeft}>
-            <div className={styles.trackArt} />
-            <div className={styles.trackMeta}>
-              <div className={styles.trackTitle}>Я хочу убиться</div>
-              <div className={styles.trackArtist}>Pain</div>
+            <div className={styles.trackArt} style={{ background: currentTrack?.cover }} />
+            <div className={styles.trackMeta} aria-live="polite">
+              <div className={styles.trackTitle}>{currentTrack?.title ?? "Нет трека"}</div>
+              <div className={styles.trackArtist}>{currentTrack?.artist ?? "Очередь пуста"}</div>
             </div>
           </div>
 
           <div className={styles.playerCenter}>
             <div className={styles.controls}>
-              <button className={styles.iconButton} aria-label="Предыдущий трек">
+              <button
+                type="button"
+                className={`${styles.iconButton} ${canLikeCurrent ? "" : styles.iconButtonDisabled}`.trim()}
+                aria-label="Добавить трек в избранное"
+                aria-pressed={isCurrentTrackLiked}
+                disabled={!canLikeCurrent}
+                onClick={() => currentTrack && likeTrack(currentTrack.id)}
+              >
+                <LuHeart />
+              </button>
+              <button
+                type="button"
+                className={styles.iconButton}
+                aria-label="Предыдущий трек"
+                onClick={prevTrack}
+              >
                 <FiSkipBack />
               </button>
-              <button className={styles.playButton} aria-label="Пауза">
-                <FiPause />
+              <button
+                type="button"
+                className={styles.playButton}
+                aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
+                aria-pressed={isPlaying}
+                onClick={togglePlay}
+              >
+                {isPlaying ? <FiPause /> : <FiPlay />}
               </button>
-              <button className={styles.iconButton} aria-label="Следующий трек">
+              <button type="button" className={styles.iconButton} aria-label="Следующий трек" onClick={nextTrack}>
                 <FiSkipForward />
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconButton} ${canUnlikeCurrent ? "" : styles.iconButtonDisabled}`.trim()}
+                aria-label="Убрать трек из избранного"
+                disabled={!canUnlikeCurrent}
+                onClick={() => currentTrack && unlikeTrack(currentTrack.id)}
+              >
+                <LuHeartOff />
               </button>
             </div>
             <div className={styles.progressRow}>
-              <span className={styles.time}>1:04</span>
+              <span className={styles.time}>{progressLabel}</span>
               <input
                 className={`${styles.range} ${styles.progress}`}
                 type="range"
                 min="0"
                 max="100"
-                defaultValue="32"
+                value={progressPercent}
+                onChange={(event) => setProgressPercent(Number(event.target.value))}
               />
-              <span className={styles.time}>3:42</span>
+              <span className={styles.time}>{durationLabel}</span>
             </div>
           </div>
 
           <div className={styles.playerRight}>
-            <button className={styles.iconButton} aria-label="Громкость">
+            <button type="button" className={styles.iconButton} aria-label="Громкость">
               <FiVolume2 />
             </button>
             <input
@@ -58,7 +111,8 @@ export default function AppLayout() {
               type="range"
               min="0"
               max="100"
-              defaultValue="70"
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
             />
           </div>
         </footer>

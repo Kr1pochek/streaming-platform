@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: 36px;
-  overflow: auto;
+  overflow: hidden;
   padding: 24px 28px 32px;
   min-height: 0;
 }
@@ -24,6 +24,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  min-height: 0;
 }
 
 .player {
@@ -86,7 +87,9 @@
 .controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .iconButton {
@@ -116,6 +119,20 @@
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
+}
+
+.iconButtonDisabled,
+.iconButton:disabled {
+  opacity: 0.38;
+  cursor: default;
+  transform: none;
+}
+
+.iconButtonDisabled:hover,
+.iconButton:disabled:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: none;
 }
 
 .iconButton:active {

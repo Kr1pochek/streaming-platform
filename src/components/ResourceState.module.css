@@ -1,0 +1,45 @@
+.stateCard {
+  min-height: 220px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 24px 20px;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 800;
+}
+
+.description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+.button {
+  margin-top: 4px;
+  height: 38px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1b1208;
+  background: #f5cc46;
+  cursor: pointer;
+}
+
+.button:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}

@@ -1,0 +1,255 @@
+﻿.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  padding: 8px 0;
+  overflow: hidden;
+}
+
+.shell {
+  flex: 1;
+  min-height: 0;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(100% 90% at 8% -12%, rgba(255, 255, 255, 0.08), transparent 62%),
+    linear-gradient(180deg, #0b0d11 0%, #090a0e 44%, #07080c 100%);
+  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.45);
+  padding: 20px 22px 28px;
+  color: rgba(255, 255, 255, 0.95);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.shell::-webkit-scrollbar {
+  width: 8px;
+}
+
+.shell::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 10px;
+}
+
+.shell::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.shellScrolling {
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.shellScrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.1;
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 10px 0 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 15px;
+}
+
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.statCard {
+  min-height: 72px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.statValue {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.section {
+  margin-top: 26px;
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 850;
+}
+
+.sectionArrow {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.trackGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.trackList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.trackRow {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 10px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 28px auto;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.trackCover {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+}
+
+.trackMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trackTitle {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackArtist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unlikeButton {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trackDuration {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.actionsRow {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 40px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.primaryButton {
+  color: #1d1508;
+  background: #f5cc46;
+}
+
+.secondaryButton {
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.trackRow:focus-visible,
+.unlikeButton:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1220px) {
+  .statsRow {
+    grid-template-columns: 1fr;
+  }
+
+  .trackGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: 32px;
+  }
+
+  .sectionTitle {
+    font-size: 24px;
+  }
+}
