@@ -1,0 +1,39 @@
+.menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 168px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 16, 18, 0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.menuButton,
+.menuButtonGhost {
+  min-height: 34px;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.menuButton {
+  color: #191307;
+  background: #f5cc46;
+}
+
+.menuButtonGhost {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menuButton:focus-visible,
+.menuButtonGhost:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}

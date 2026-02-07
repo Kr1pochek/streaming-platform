@@ -1,53 +1,4 @@
-﻿.page {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  padding: 8px 0 0;
-  overflow: hidden;
-}
-
-.shell {
-  flex: 1;
-  min-height: 0;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(120% 80% at 12% -20%, rgba(255, 255, 255, 0.06), transparent 60%),
-    linear-gradient(180deg, #0b0d11 0%, #090a0e 44%, #07080c 100%);
-  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.45);
-  padding: 20px 22px 28px;
-  color: rgba(255, 255, 255, 0.95);
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.shell::-webkit-scrollbar {
-  width: 8px;
-}
-
-.shell::-webkit-scrollbar-track {
-  background: transparent;
-  margin-block: 10px;
-}
-
-.shell::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 999px;
-}
-
-.shellScrolling {
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-}
-
-.shellScrolling::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.searchBlock {
+﻿.searchBlock {
   display: flex;
   flex-direction: column;
 }
@@ -106,6 +57,32 @@
   gap: 8px;
 }
 
+.searchFilters {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterButton {
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.78);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filterButtonActive {
+  border-color: rgba(245, 204, 70, 0.65);
+  background: rgba(245, 204, 70, 0.2);
+  color: rgba(255, 241, 189, 0.96);
+}
+
 .tabButton {
   height: 38px;
   border-radius: 999px;
@@ -125,6 +102,11 @@
 }
 
 .tabButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.filterButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }
@@ -224,11 +206,16 @@
   color: inherit;
   text-align: left;
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 30px auto;
+  grid-template-columns: 46px minmax(0, 1fr) 30px 30px 30px auto;
   align-items: center;
   gap: 10px;
   padding: 0;
   cursor: pointer;
+}
+
+.trackRowActive {
+  border-radius: 10px;
+  background: rgba(245, 204, 70, 0.1);
 }
 
 .trackCover {
@@ -257,6 +244,15 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
+.currentDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5cc46;
+  box-shadow: 0 0 10px rgba(245, 204, 70, 0.72);
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .explicitTag {
   border: 1px solid rgba(255, 255, 255, 0.42);
   color: rgba(255, 255, 255, 0.67);
@@ -268,12 +264,35 @@
 }
 
 .trackArtist {
+  display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.54);
   font-weight: 600;
+}
+
+.trackArtistButton {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.76);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.trackArtistButton:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.trackArtistButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .likeButton {
@@ -298,6 +317,60 @@
 }
 
 .likeButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.queueButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.queueButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.queueButton:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.queueButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.openButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.openButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.openButton:hover {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.openButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
   border-radius: 999px;
@@ -337,11 +410,16 @@
   color: inherit;
   text-align: left;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 28px 46px;
+  grid-template-columns: 42px minmax(0, 1fr) 28px 28px 28px 46px;
   align-items: center;
   gap: 10px;
   padding: 0;
   cursor: pointer;
+}
+
+.historyTrackRowActive {
+  border-radius: 10px;
+  background: rgba(245, 204, 70, 0.1);
 }
 
 .historyCover {
@@ -372,6 +450,7 @@
 }
 
 .historySubtitle {
+  display: block;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -379,6 +458,29 @@
   font-size: 13px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.54);
+}
+
+.historyArtistButton {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.74);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.historyArtistButton:hover {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.historyArtistButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .historyActionButton {
@@ -403,6 +505,60 @@
 }
 
 .historyActionButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.historyQueueButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.historyQueueButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.historyQueueButton:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.historyQueueButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.historyOpenButton {
+  height: 28px;
+  width: 28px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.historyOpenButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.historyOpenButton:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.historyOpenButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
   border-radius: 999px;
@@ -455,10 +611,53 @@
   color: inherit;
   text-align: left;
   padding: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 button.moreCard {
   cursor: pointer;
+}
+
+.cardActions {
+  display: none;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.moreCard:hover .cardActions,
+.moreCard:focus-visible .cardActions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cardActionButton {
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 12, 14, 0.88);
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cardActionButton:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cardActionButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
 }
 
 .moreCover {
@@ -502,10 +701,23 @@ button.moreCard {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  text-align: left;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 12px;
+  cursor: pointer;
+}
+
+.artistResultCard:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.artistResultCard:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
 }
 
 .artistResultAvatar {
@@ -539,6 +751,19 @@ button.moreCard {
 .artistResultFollowers {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.55);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 @media (max-width: 1400px) {
@@ -607,3 +832,4 @@ button.moreCard {
     font-size: 28px;
   }
 }
+

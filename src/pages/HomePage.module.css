@@ -1,53 +1,4 @@
-.page {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  padding: 8px 0;
-  overflow: hidden;
-}
-
-.shell {
-  flex: 1;
-  min-height: 0;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(120% 80% at 12% -20%, rgba(255, 255, 255, 0.06), transparent 60%),
-    linear-gradient(180deg, #0b0d11 0%, #090a0e 44%, #07080c 100%);
-  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.45);
-  padding: 20px 22px 28px;
-  color: rgba(255, 255, 255, 0.95);
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.shell::-webkit-scrollbar {
-  width: 8px;
-}
-
-.shell::-webkit-scrollbar-track {
-  background: transparent;
-  margin-block: 10px;
-}
-
-.shell::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 999px;
-}
-
-.shellScrolling {
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-}
-
-.shellScrolling::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.hero {
+﻿.hero {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(250px, 0.82fr);
@@ -156,6 +107,8 @@
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .vibeTag:focus-visible,
+.nowOpenButton:focus-visible,
+.nowArtistButton:focus-visible,
 .actionCard:focus-visible,
 .showcaseCard:focus-visible,
 .trackRow:focus-visible {
@@ -226,9 +179,36 @@
 }
 
 .nowArtist {
+  display: block;
   margin: 2px 0 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;
+}
+
+.nowArtistButton {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.nowArtistButton:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.nowOpenButton {
+  margin-top: 8px;
+  min-height: 30px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .progressWrap {
@@ -367,6 +347,8 @@
   color: inherit;
   text-align: left;
   padding: 0;
+  position: relative;
+  overflow: hidden;
   cursor: pointer;
 }
 
@@ -398,6 +380,47 @@
   text-overflow: ellipsis;
 }
 
+.cardActions {
+  display: none;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.showcaseCard:hover .cardActions,
+.showcaseCard:focus-visible .cardActions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cardActionButton {
+  width: 27px;
+  height: 27px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 12, 14, 0.88);
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cardActionButton:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cardActionButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
 .trackGrid {
   margin-top: 14px;
   display: grid;
@@ -421,7 +444,7 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0 10px;
   display: grid;
-  grid-template-columns: 34px 1fr auto;
+  grid-template-columns: 34px 1fr 28px auto;
   align-items: center;
   gap: 10px;
   cursor: pointer;
@@ -433,6 +456,11 @@
 .trackRow:hover {
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.07);
+}
+
+.trackRowActive {
+  border-color: rgba(245, 204, 70, 0.52);
+  background: rgba(245, 204, 70, 0.11);
 }
 
 .trackIcon {
@@ -469,6 +497,15 @@
   text-overflow: ellipsis;
 }
 
+.currentDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5cc46;
+  box-shadow: 0 0 10px rgba(245, 204, 70, 0.72);
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .trackLikedDot {
   width: 8px;
   height: 8px;
@@ -478,6 +515,7 @@
 }
 
 .trackArtist {
+  display: block;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.56);
   white-space: nowrap;
@@ -485,10 +523,46 @@
   text-overflow: ellipsis;
 }
 
+.trackArtistButton {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.trackArtistButton:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.trackArtistButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .trackTime {
   font-size: 12px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.54);
+}
+
+.queueButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.66);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.queueButton svg {
+  width: 16px;
+  height: 16px;
 }
 
 @keyframes floatCover {
@@ -573,6 +647,19 @@
   outline-offset: 2px;
 }
 
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
 @media (max-width: 1100px) {
   .hero {
     grid-template-columns: 1fr;
@@ -597,10 +684,6 @@
 }
 
 @media (max-width: 700px) {
-  .shell {
-    padding: 16px 14px 20px;
-  }
-
   .heroTitle {
     font-size: 30px;
   }
@@ -662,3 +745,4 @@
     justify-self: stretch;
   }
 }
+

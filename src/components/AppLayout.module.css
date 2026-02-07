@@ -1,4 +1,4 @@
-.appShell {
+﻿.appShell {
   height: 100vh;
   display: grid;
   grid-template-columns: 228px minmax(0, 1fr);
@@ -11,10 +11,11 @@
 }
 
 .main {
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 20px;
   overflow: hidden;
   padding: 24px 28px 32px;
   min-height: 0;
@@ -27,7 +28,185 @@
   min-height: 0;
 }
 
+.queuePanel {
+  position: absolute;
+  right: 28px;
+  bottom: 148px;
+  width: 340px;
+  max-height: min(52vh, 460px);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(150deg, rgba(45, 31, 27, 0.96), rgba(24, 19, 19, 0.96));
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 6;
+}
+
+.queueHeader {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.queueTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.queueSubtitle {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
+.queueHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queueCloseButton,
+.queueClearButton {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.queueCloseButton:disabled,
+.queueClearButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.queueEmpty {
+  margin: 0;
+  padding: 16px 14px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.queueList {
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+}
+
+.queueRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.queueItem {
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  padding: 0 8px;
+  display: grid;
+  grid-template-columns: 22px 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.queueItemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.queueActionButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.queueActionButton:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.queueItem:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.queueActionButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.queueItemActive {
+  border-color: rgba(255, 205, 77, 0.45);
+  background: rgba(255, 205, 77, 0.12);
+}
+
+.queueIndex {
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.queueCover {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.queueMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.queueTrackTitle {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queueTrackArtist {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .player {
+  position: relative;
+  z-index: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   align-items: center;
@@ -64,17 +243,55 @@
   min-width: 0;
 }
 
-.trackTitle {
+.trackTitleButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.trackTitleButton:disabled {
+  opacity: 0.8;
+  cursor: default;
 }
 
 .trackArtist {
+  display: block;
   font-size: 12px;
-  opacity: 0.55;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackArtistButton {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0 0 0 1px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  text-align: left;
+}
+
+.trackArtistText {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.trackArtistButton:hover {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .playerCenter {
@@ -106,6 +323,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
@@ -119,6 +337,25 @@
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
+}
+
+.iconButtonActive {
+  border-color: rgba(255, 205, 77, 0.45);
+  background: rgba(255, 205, 77, 0.14);
+  color: #ffd35d;
+}
+
+.repeatBadge {
+  min-width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 205, 77, 0.22);
+  color: #ffd35d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
 }
 
 .iconButtonDisabled,
@@ -245,6 +482,42 @@
   --thumb-color: #d6d6d6;
 }
 
+.toastStack {
+  position: absolute;
+  right: 30px;
+  bottom: 126px;
+  z-index: 7;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100% - 56px));
+}
+
+.toastCard {
+  min-height: 38px;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: rgba(20, 20, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+}
+
+.trackTitleButton:focus-visible,
+.trackArtistButton:focus-visible,
+.queueCloseButton:focus-visible,
+.queueClearButton:focus-visible,
+.queueItem:focus-visible,
+.queueActionButton:focus-visible,
+.iconButton:focus-visible,
+.playButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
 @media (max-width: 900px) {
   .appShell {
     grid-template-columns: 1fr;
@@ -254,12 +527,26 @@
     display: none;
   }
 
+  .queuePanel {
+    right: 14px;
+    left: 14px;
+    width: auto;
+    bottom: 140px;
+  }
+
   .player {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .toastStack {
+    right: 14px;
+    left: 14px;
+    width: auto;
   }
 
   .playerRight {
     justify-content: center;
   }
 }
+

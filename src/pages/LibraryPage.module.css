@@ -1,53 +1,4 @@
-﻿.page {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  padding: 8px 0;
-  overflow: hidden;
-}
-
-.shell {
-  flex: 1;
-  min-height: 0;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(100% 90% at 8% -12%, rgba(255, 255, 255, 0.08), transparent 62%),
-    linear-gradient(180deg, #0b0d11 0%, #090a0e 44%, #07080c 100%);
-  box-shadow: 0 28px 62px rgba(0, 0, 0, 0.45);
-  padding: 20px 22px 28px;
-  color: rgba(255, 255, 255, 0.95);
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.shell::-webkit-scrollbar {
-  width: 8px;
-}
-
-.shell::-webkit-scrollbar-track {
-  background: transparent;
-  margin-block: 10px;
-}
-
-.shell::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 999px;
-}
-
-.shellScrolling {
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-}
-
-.shellScrolling::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.header {
+﻿.header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -130,14 +81,53 @@
 }
 
 .playlistCard {
+  position: relative;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.05);
   padding: 12px;
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) auto;
+  grid-template-columns: 82px minmax(0, 1fr) auto 56px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.playlistQuickActions {
+  display: inline-flex;
+  justify-self: center;
+  align-self: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 56px;
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.playlistCard:hover .playlistQuickActions,
+.playlistCard:focus-within .playlistQuickActions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.quickActionButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 12, 14, 0.88);
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.quickActionButton:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .playlistCover {
@@ -175,19 +165,43 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
-.playlistButton {
+.playlistActions {
+  display: flex;
+  flex-direction: column;
+  justify-self: start;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.playlistButton,
+.playlistGhostButton {
   min-height: 34px;
   border: none;
   border-radius: 999px;
   padding: 0 12px;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.92);
   font-size: 13px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   cursor: pointer;
+}
+
+.playlistButton {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.playlistGhostButton {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.playlistDeleteButton {
+  border-color: rgba(255, 106, 106, 0.35);
+  color: rgba(255, 170, 170, 0.9);
 }
 
 .artistGrid {
@@ -264,6 +278,35 @@
   gap: 10px;
 }
 
+.sortRow {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sortButton {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.sortButtonActive {
+  border-color: rgba(245, 204, 70, 0.64);
+  background: rgba(245, 204, 70, 0.2);
+  color: rgba(255, 241, 189, 0.96);
+}
+
 .trackRow {
   width: 100%;
   min-height: 50px;
@@ -272,11 +315,26 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0 10px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 28px auto;
+  grid-template-columns: minmax(0, 1fr) 28px 28px 28px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.trackRowActive {
+  border: 1px solid rgba(245, 204, 70, 0.5);
+  background: rgba(245, 204, 70, 0.1);
+}
+
+.trackMainButton {
+  min-height: 50px;
+  border: none;
+  background: transparent;
   color: inherit;
   text-align: left;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
 }
 
@@ -294,6 +352,9 @@
 }
 
 .trackTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
@@ -301,7 +362,17 @@
   text-overflow: ellipsis;
 }
 
+.currentDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5cc46;
+  box-shadow: 0 0 10px rgba(245, 204, 70, 0.72);
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .trackArtist {
+  display: block;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.58);
   white-space: nowrap;
@@ -309,7 +380,30 @@
   text-overflow: ellipsis;
 }
 
-.likeButton {
+.trackArtistButton {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.76);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.trackArtistButton:hover {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.trackArtistButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.likeButton,
+.queueButton,
+.trackOpenButton {
   width: 28px;
   height: 28px;
   border: none;
@@ -318,6 +412,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+}
+
+.likeButtonActive {
+  color: #ffd35d;
 }
 
 .trackDuration {
@@ -329,11 +428,28 @@
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .playlistButton:focus-visible,
+.playlistGhostButton:focus-visible,
+.quickActionButton:focus-visible,
 .artistButton:focus-visible,
-.trackRow:focus-visible,
-.likeButton:focus-visible {
+.sortButton:focus-visible,
+.trackMainButton:focus-visible,
+.likeButton:focus-visible,
+.trackOpenButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 @media (max-width: 1220px) {
@@ -343,7 +459,7 @@
   }
 
   .playlistCard {
-    grid-template-columns: 72px minmax(0, 1fr) auto;
+    grid-template-columns: 72px minmax(0, 1fr) auto 52px;
   }
 
   .playlistCover {
@@ -359,3 +475,4 @@
     font-size: 24px;
   }
 }
+

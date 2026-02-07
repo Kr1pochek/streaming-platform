@@ -43,3 +43,59 @@
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }
+
+.skeletonCard {
+  min-height: 220px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 20px;
+}
+
+.skeletonLine {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+.skeletonTitle {
+  width: min(360px, 80%);
+  height: 28px;
+}
+
+.skeletonText {
+  width: min(520px, 92%);
+  height: 14px;
+}
+
+.skeletonTextShort {
+  width: min(410px, 72%);
+  height: 14px;
+}
+
+.skeletonButton {
+  margin-top: 8px;
+  width: 128px;
+  height: 38px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -20% 0;
+  }
+}

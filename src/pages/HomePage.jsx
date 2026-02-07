@@ -1,4 +1,4 @@
-﻿import { useMemo } from "react";
+﻿import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiArrowRight,
@@ -7,17 +7,21 @@ import {
   FiHeart,
   FiMusic,
   FiPlay,
+  FiPlus,
   FiRadio,
   FiTrendingUp,
   FiZap,
 } from "react-icons/fi";
 import styles from "./HomePage.module.css";
-import useScrollingVisibility from "../hooks/useScrollingVisibility.js";
+import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
 import { fetchHomeFeed } from "../api/musicApi.js";
-import { usePlayer } from "../context/PlayerContext.jsx";
+import usePlayer from "../hooks/usePlayer.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
+import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
+import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
+import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 
 const actionIcons = {
   wave: FiRadio,
@@ -28,11 +32,23 @@ const actionIcons = {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { isScrolling, setScrollElement } = useScrollingVisibility();
-  const { status, data, error, reload } = useAsyncResource(fetchHomeFeed, []);
+  const loadHomeFeed = useCallback(() => fetchHomeFeed(), []);
+  const { status, data, error, reload } = useAsyncResource(loadHomeFeed);
 
-  const { trackMap, currentTrack, progressSec, durationLabel, playTrack, togglePlay, likedIds, isPlaying } =
-    usePlayer();
+  const {
+    trackMap,
+    currentTrack,
+    currentTrackId,
+    progressSec,
+    durationLabel,
+    playTrack,
+    togglePlay,
+    likedIds,
+    isPlaying,
+    toggleLikeTrack,
+    addTrackNext,
+  } = usePlayer();
+  const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -50,11 +66,7 @@ export default function HomePage() {
   const sectionsEmpty = status === "success" && !data?.showcases?.length && !freshTracks.length;
 
   return (
-    <div className={styles.page}>
-      <section
-        ref={setScrollElement}
-        className={`${styles.shell} ${isScrolling ? styles.shellScrolling : ""}`.trim()}
-      >
+    <PageShell>
         <header className={styles.hero}>
           <div className={styles.heroMain}>
             <p className={styles.kicker}>
@@ -92,7 +104,26 @@ export default function HomePage() {
             <div className={styles.nowMeta}>
               <p className={styles.nowLabel}>Сейчас играет</p>
               <h2 className={styles.nowTitle}>{currentTrack?.title ?? "Выбери трек"}</h2>
-              <p className={styles.nowArtist}>{currentTrack?.artist ?? "Начни с поиска"}</p>
+              {currentTrack?.artist ? (
+                <ArtistInlineLinks
+                  artistLine={currentTrack.artist}
+                  className={styles.nowArtist}
+                  linkClassName={styles.nowArtistButton}
+                  textClassName={styles.nowArtist}
+                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                />
+              ) : (
+                <p className={styles.nowArtist}>Начни с поиска</p>
+              )}
+              {currentTrack ? (
+                <button
+                  type="button"
+                  className={styles.nowOpenButton}
+                  onClick={() => navigate(`/track/${currentTrack.id}`)}
+                >
+                  Открыть трек
+                </button>
+              ) : null}
             </div>
             <div className={styles.progressWrap}>
               <span>{formatDurationClock(progressSec)}</span>
@@ -175,10 +206,76 @@ export default function HomePage() {
               </div>
               <div className={styles.showcaseGrid}>
                 {data.showcases.map((item) => (
-                  <button key={item.id} className={styles.showcaseCard} type="button" onClick={() => navigate("/search")}>
+                  <button
+                    key={item.id}
+                    className={styles.showcaseCard}
+                    type="button"
+                    onClick={() => navigate(`/playlist/${item.playlistId ?? "pl-fresh"}`)}
+                  >
                     <span className={styles.showcaseCover} style={{ background: item.cover }} />
                     <span className={styles.showcaseTitle}>{item.title}</span>
                     <span className={styles.showcaseSubtitle}>{item.subtitle}</span>
+                    {item.trackIds?.[0] ? (
+                      <span className={styles.cardActions}>
+                        <span
+                          className={styles.cardActionButton}
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Слушать трек"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            playTrack(item.trackIds[0]);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              playTrack(item.trackIds[0]);
+                            }
+                          }}
+                        >
+                          <FiPlay />
+                        </span>
+                        <span
+                          className={styles.cardActionButton}
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Лайк"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleLikeTrack(item.trackIds[0]);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              toggleLikeTrack(item.trackIds[0]);
+                            }
+                          }}
+                        >
+                          <FiHeart />
+                        </span>
+                        <span
+                          className={styles.cardActionButton}
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Добавить далее"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            addTrackNext(item.trackIds[0]);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              addTrackNext(item.trackIds[0]);
+                            }
+                          }}
+                        >
+                          <FiArrowRight />
+                        </span>
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -193,37 +290,85 @@ export default function HomePage() {
                 <TrackColumn
                   tracks={freshTracks.slice(0, Math.ceil(freshTracks.length / 2))}
                   likedIds={likedIds}
+                  currentTrackId={currentTrackId}
                   onPlay={playTrack}
+                  onAddNext={addTrackNext}
+                  onOpenTrackMenu={openTrackMenu}
+                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
                 />
                 <TrackColumn
                   tracks={freshTracks.slice(Math.ceil(freshTracks.length / 2))}
                   likedIds={likedIds}
+                  currentTrackId={currentTrackId}
                   onPlay={playTrack}
+                  onAddNext={addTrackNext}
+                  onOpenTrackMenu={openTrackMenu}
+                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
                 />
               </div>
             </section>
           </>
         ) : null}
-      </section>
-    </div>
+      <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
+    </PageShell>
   );
 }
 
-function TrackColumn({ tracks, likedIds, onPlay }) {
+function TrackColumn({
+  tracks,
+  likedIds,
+  currentTrackId,
+  onPlay,
+  onAddNext,
+  onOpenTrackMenu,
+  onOpenArtist,
+}) {
   return (
     <ul className={styles.trackList}>
       {tracks.map((track) => (
         <li key={track.id}>
-          <button type="button" className={styles.trackRow} onClick={() => onPlay(track.id)}>
+          <button
+            type="button"
+            className={`${styles.trackRow} ${currentTrackId === track.id ? styles.trackRowActive : ""}`.trim()}
+            onClick={() => onPlay(track.id)}
+            onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
+          >
             <span className={styles.trackIcon}>
               <FiMusic />
             </span>
             <span className={styles.trackMeta}>
               <span className={styles.trackTitle}>
+                {currentTrackId === track.id ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                 {track.title}
                 {likedIds.includes(track.id) ? <span className={styles.trackLikedDot} aria-hidden="true" /> : null}
               </span>
-              <span className={styles.trackArtist}>{track.artist}</span>
+              <ArtistInlineLinks
+                artistLine={track.artist}
+                className={styles.trackArtist}
+                linkClassName={styles.trackArtistButton}
+                textClassName={styles.trackArtist}
+                onOpenArtist={onOpenArtist}
+                stopPropagation
+              />
+            </span>
+            <span
+              className={styles.queueButton}
+              role="button"
+              tabIndex={0}
+              aria-label="Добавить далее в очередь"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddNext(track.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onAddNext(track.id);
+                }
+              }}
+            >
+              <FiPlus />
             </span>
             <span className={styles.trackTime}>{formatDurationClock(track.durationSec)}</span>
           </button>
@@ -232,3 +377,5 @@ function TrackColumn({ tracks, likedIds, onPlay }) {
     </ul>
   );
 }
+
+

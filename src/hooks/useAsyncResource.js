@@ -1,6 +1,8 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 
-export default function useAsyncResource(loader, deps = []) {
+export default function useAsyncResource(loader, options = {}) {
+  const { immediate = true } = options;
+
   const [status, setStatus] = useState("loading");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -8,20 +10,27 @@ export default function useAsyncResource(loader, deps = []) {
   const reload = useCallback(async () => {
     setStatus("loading");
     setError("");
+
     try {
       const result = await loader();
       setData(result);
       setStatus("success");
+      return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка загрузки.");
       setStatus("error");
+      return null;
     }
   }, [loader]);
 
   useEffect(() => {
+    if (!immediate) {
+      return;
+    }
+
     let cancelled = false;
 
-    (async () => {
+    const run = async () => {
       setStatus("loading");
       setError("");
       try {
@@ -34,13 +43,14 @@ export default function useAsyncResource(loader, deps = []) {
         setError(err instanceof Error ? err.message : "Произошла ошибка загрузки.");
         setStatus("error");
       }
-    })();
+    };
+
+    void run();
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [loader, immediate]);
 
   return { status, data, error, reload };
 }

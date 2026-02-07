@@ -1,4 +1,4 @@
-﻿import { NavLink } from "react-router-dom";
+﻿import { NavLink, useNavigate } from "react-router-dom";
 import {
   FiHome,
   FiSearch,
@@ -10,7 +10,8 @@ import {
 import styles from "./Sidebar.module.css";
 
 export default function Sidebar() {
-  const user = null; // потом заменишь на реального юзера из auth
+  const navigate = useNavigate();
+  const user = null;
 
   return (
     <aside className={styles.sidebar}>
@@ -63,12 +64,22 @@ export default function Sidebar() {
             <FiHeart className={styles.navIcon} />
             <span>Мне нравится</span>
           </NavLink>
+
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `${styles.navItem} ${isActive ? styles.navItemActive : ""}`.trim()
+            }
+          >
+            <FiUser className={styles.navIcon} />
+            <span>Профиль</span>
+          </NavLink>
         </nav>
       </div>
 
       <div className={styles.sidebarBottom}>
         {user ? (
-          <button className={styles.account}>
+          <button type="button" className={styles.account} onClick={() => navigate("/profile")}>
             <div className={styles.accountAvatar}>R</div>
             <div className={styles.accountMeta}>
               <div className={styles.accountName}>Роман</div>
@@ -77,7 +88,11 @@ export default function Sidebar() {
             <FiUser className={styles.accountChev} />
           </button>
         ) : (
-          <button className={`${styles.account} ${styles.accountGuest}`.trim()}>
+          <button
+            type="button"
+            className={`${styles.account} ${styles.accountGuest}`.trim()}
+            onClick={() => navigate("/profile")}
+          >
             <div className={`${styles.accountAvatar} ${styles.accountAvatarGhost}`.trim()}>
               <FiUser />
             </div>
