@@ -201,12 +201,22 @@
 .trackRow {
   width: 100%;
   min-height: 52px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 30px 30px 30px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+
+.trackMainButton {
+  grid-column: 1 / 3;
+  min-height: 52px;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 30px 30px 30px auto;
+  grid-template-columns: 46px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 0;
@@ -322,6 +332,13 @@
   border-radius: 999px;
 }
 
+.trackMainButton:focus-visible,
+.historyMainButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
 .queueButton {
   height: 28px;
   width: 28px;
@@ -405,12 +422,22 @@
 .historyTrackRow {
   width: 100%;
   min-height: 50px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 28px 28px 28px 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+
+.historyMainButton {
+  grid-column: 1 / 3;
+  min-height: 50px;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 28px 28px 28px 46px;
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 0;
@@ -597,6 +624,32 @@
   outline-offset: 2px;
 }
 
+.loadMoreButton {
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.loadMoreButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.loadMoreButton:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.loadMoreButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
 .moreGrid {
   margin-top: 16px;
   display: grid;
@@ -615,7 +668,22 @@
   overflow: hidden;
 }
 
-button.moreCard {
+.moreMainButton {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  width: 100%;
+  cursor: pointer;
+}
+
+.moreMainButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.moreCard {
   cursor: pointer;
 }
 
@@ -633,7 +701,7 @@ button.moreCard {
 }
 
 .moreCard:hover .cardActions,
-.moreCard:focus-visible .cardActions {
+.moreCard:focus-within .cardActions {
   opacity: 1;
   transform: translateY(0);
 }

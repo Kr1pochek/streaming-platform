@@ -1,4 +1,38 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const AUTH_TOKEN_STORAGE_KEY = "music.auth.token.v1";
+let authToken = "";
+
+if (typeof window !== "undefined") {
+  try {
+    authToken = String(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ?? "").trim();
+  } catch {
+    authToken = "";
+  }
+}
+
+function persistAuthToken(token) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (token) {
+      window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+    } else {
+      window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // noop
+  }
+}
+
+export function getAuthToken() {
+  return authToken;
+}
+
+export function setAuthToken(token) {
+  authToken = String(token ?? "").trim();
+  persistAuthToken(authToken);
+}
 
 function buildUrl(path, query = null) {
   const normalizedBase = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
@@ -20,15 +54,21 @@ function buildUrl(path, query = null) {
 }
 
 async function request(path, options = {}) {
-  const { method = "GET", body, query } = options;
+  const { method = "GET", body, query, headers = {} } = options;
 
   let response;
   try {
+    const requestHeaders = {
+      "Content-Type": "application/json",
+      ...headers,
+    };
+    if (authToken) {
+      requestHeaders.Authorization = `Bearer ${authToken}`;
+    }
+
     response = await fetch(buildUrl(path, query), {
       method,
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: requestHeaders,
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -89,6 +129,8 @@ export async function searchCatalog(query, options = {}) {
     query: {
       query,
       filter: options.filter ?? "all",
+      limit: options.limit ?? 12,
+      offset: options.offset ?? 0,
     },
   });
 }
@@ -119,4 +161,49 @@ export async function fetchReleasePage(releaseId) {
 
 export async function fetchSmartRecommendations() {
   return request("/smart-recommendations");
+}
+
+export async function registerAuth(payload) {
+  const response = await request("/auth/register", {
+    method: "POST",
+    body: payload,
+  });
+  if (response?.token) {
+    setAuthToken(response.token);
+  }
+  return response;
+}
+
+export async function loginAuth(payload) {
+  const response = await request("/auth/login", {
+    method: "POST",
+    body: payload,
+  });
+  if (response?.token) {
+    setAuthToken(response.token);
+  }
+  return response;
+}
+
+export async function logoutAuth() {
+  try {
+    await request("/auth/logout", { method: "POST" });
+  } finally {
+    setAuthToken("");
+  }
+}
+
+export async function fetchCurrentUser() {
+  return request("/auth/me");
+}
+
+export async function fetchPlayerState() {
+  return request("/me/player-state");
+}
+
+export async function updatePlayerState(payload) {
+  return request("/me/player-state", {
+    method: "PUT",
+    body: payload,
+  });
 }

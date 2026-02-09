@@ -27,15 +27,39 @@ const searchFilters = [
   { id: "albums", label: "Альбомы" },
 ];
 
+const PAGE_LIMIT = 12;
+const defaultPagination = {
+  limit: PAGE_LIMIT,
+  offset: 0,
+  hasMore: false,
+  nextOffset: null,
+};
+
 const emptySearchState = {
   status: "idle",
   data: { tracks: [], playlists: [], artists: [], albums: [] },
   error: "",
+  pagination: defaultPagination,
+  loadingMore: false,
 };
 
 function splitColumns(items) {
   const splitPoint = Math.ceil(items.length / 2);
   return [items.slice(0, splitPoint), items.slice(splitPoint)];
+}
+
+function mergeById(currentItems = [], nextItems = []) {
+  const result = [...currentItems];
+  const seen = new Set(currentItems.map((item) => item?.id).filter(Boolean));
+  for (const item of nextItems) {
+    const id = item?.id;
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    result.push(item);
+  }
+  return result;
 }
 
 export default function SearchPage() {
@@ -59,6 +83,7 @@ export default function SearchPage() {
   const [activeTab, setActiveTab] = useState("popular");
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState("all");
+  const [searchOffset, setSearchOffset] = useState(0);
   const [searchState, setSearchState] = useState(emptySearchState);
 
   const normalizedQuery = query.trim();
@@ -66,17 +91,41 @@ export default function SearchPage() {
   const resetSearch = () => {
     setQuery("");
     setResultFilter("all");
+    setSearchOffset(0);
     setSearchState(emptySearchState);
   };
 
   const handleQueryChange = (value) => {
     setQuery(value);
+    setSearchOffset(0);
     if (!value.trim()) {
       setResultFilter("all");
       setSearchState(emptySearchState);
       return;
     }
-    setSearchState((prev) => ({ ...prev, status: "loading", error: "" }));
+    setSearchState((prev) => ({
+      ...prev,
+      status: "loading",
+      error: "",
+      loadingMore: false,
+      pagination: defaultPagination,
+    }));
+  };
+
+  const handleFilterChange = (nextFilterId) => {
+    setResultFilter(nextFilterId);
+    setSearchOffset(0);
+    setSearchState((prev) => ({
+      ...prev,
+      status: normalizedQuery ? "loading" : "idle",
+      error: "",
+      loadingMore: false,
+      pagination: defaultPagination,
+      data:
+        normalizedQuery && prev.status === "success"
+          ? { tracks: [], playlists: [], artists: [], albums: [] }
+          : prev.data,
+    }));
   };
 
   useEffect(() => {
@@ -88,16 +137,53 @@ export default function SearchPage() {
 
     const timeoutId = setTimeout(async () => {
       try {
-        const result = await searchCatalog(normalizedQuery, { filter: resultFilter });
+        if (searchOffset > 0) {
+          setSearchState((prev) => ({ ...prev, loadingMore: true, error: "" }));
+        }
+        const result = await searchCatalog(normalizedQuery, {
+          filter: resultFilter,
+          limit: PAGE_LIMIT,
+          offset: searchOffset,
+        });
         if (cancelled) return;
-        setSearchState({ status: "success", data: result, error: "" });
+        setSearchState((prev) => {
+          if (searchOffset <= 0) {
+            return {
+              status: "success",
+              data: {
+                tracks: result?.tracks ?? [],
+                playlists: result?.playlists ?? [],
+                artists: result?.artists ?? [],
+                albums: result?.albums ?? [],
+              },
+              error: "",
+              loadingMore: false,
+              pagination: result?.pagination ?? defaultPagination,
+            };
+          }
+
+          return {
+            status: "success",
+            data: {
+              tracks: mergeById(prev.data?.tracks ?? [], result?.tracks ?? []),
+              playlists: mergeById(prev.data?.playlists ?? [], result?.playlists ?? []),
+              artists: mergeById(prev.data?.artists ?? [], result?.artists ?? []),
+              albums: mergeById(prev.data?.albums ?? [], result?.albums ?? []),
+            },
+            error: "",
+            loadingMore: false,
+            pagination: result?.pagination ?? defaultPagination,
+          };
+        });
       } catch (err) {
         if (cancelled) return;
-        setSearchState({
-          status: "error",
-          data: { tracks: [], playlists: [], artists: [], albums: [] },
+        setSearchState((prev) => ({
+          status: searchOffset > 0 ? "success" : "error",
+          data: searchOffset > 0 ? prev.data : { tracks: [], playlists: [], artists: [], albums: [] },
           error: err instanceof Error ? err.message : "Не удалось выполнить поиск.",
-        });
+          loadingMore: false,
+          pagination: searchOffset > 0 ? prev.pagination : defaultPagination,
+        }));
       }
     }, 220);
 
@@ -105,7 +191,7 @@ export default function SearchPage() {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [normalizedQuery, resultFilter]);
+  }, [normalizedQuery, resultFilter, searchOffset]);
 
   const popularTracks = useMemo(
     () => (data?.newTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
@@ -174,7 +260,7 @@ export default function SearchPage() {
                 key={filter.id}
                 type="button"
                 className={`${styles.filterButton} ${resultFilter === filter.id ? styles.filterButtonActive : ""}`.trim()}
-                onClick={() => setResultFilter(filter.id)}
+                onClick={() => handleFilterChange(filter.id)}
               >
                 {filter.label}
               </button>
@@ -205,6 +291,8 @@ export default function SearchPage() {
           likedIds={likedIds}
           currentTrackId={currentTrackId}
           recommendationTracks={recommendations}
+          pagination={searchState.pagination}
+          loadingMore={searchState.loadingMore}
           onPlay={playTrack}
           onToggleLike={toggleLikeTrack}
           onAddNext={addTrackNext}
@@ -213,6 +301,13 @@ export default function SearchPage() {
           onOpenArtist={(id) => navigate(`/artist/${id}`)}
           onOpenRelease={(id) => navigate(`/release/${id}`)}
           onClearQuery={resetSearch}
+          onLoadMore={() =>
+            setSearchOffset((prev) =>
+              Number.isFinite(searchState.pagination?.nextOffset)
+                ? searchState.pagination.nextOffset
+                : prev + PAGE_LIMIT
+            )
+          }
           onOpenTrackMenu={openTrackMenu}
         />
       ) : null}
@@ -274,77 +369,45 @@ export default function SearchPage() {
               {data.morePlaylists.map((playlist) => {
                 const firstTrackId = playlist.trackIds?.[0] ?? null;
                 return (
-                  <button
-                    key={playlist.id}
-                    type="button"
-                    className={styles.moreCard}
-                    onClick={() => navigate(`/playlist/${playlist.id}`)}
-                  >
-                    <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                    <span className={styles.moreTitle}>{playlist.title}</span>
-                    <span className={styles.moreArtist}>{playlist.artist}</span>
+                  <article key={playlist.id} className={styles.moreCard}>
+                    <button
+                      type="button"
+                      className={styles.moreMainButton}
+                      onClick={() => navigate(`/playlist/${playlist.id}`)}
+                    >
+                      <span className={styles.moreCover} style={{ background: playlist.cover }} />
+                      <span className={styles.moreTitle}>{playlist.title}</span>
+                      <span className={styles.moreArtist}>{playlist.artist}</span>
+                    </button>
                     {firstTrackId ? (
                       <span className={styles.cardActions}>
-                        <span
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Слушать"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            playTrack(firstTrackId);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              playTrack(firstTrackId);
-                            }
-                          }}
+                          onClick={() => playTrack(firstTrackId)}
                         >
                           <FiPlay />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Лайк"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleLikeTrack(firstTrackId);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              toggleLikeTrack(firstTrackId);
-                            }
-                          }}
+                          onClick={() => toggleLikeTrack(firstTrackId)}
                         >
                           <FiHeart />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Добавить далее"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            addTrackNext(firstTrackId);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addTrackNext(firstTrackId);
-                            }
-                          }}
+                          onClick={() => addTrackNext(firstTrackId)}
                         >
                           <FiPlus />
-                        </span>
+                        </button>
                       </span>
                     ) : null}
-                  </button>
+                  </article>
                 );
               })}
             </div>
@@ -421,6 +484,8 @@ function SearchResults({
   likedIds,
   currentTrackId,
   recommendationTracks,
+  pagination,
+  loadingMore,
   onPlay,
   onToggleLike,
   onAddNext,
@@ -429,6 +494,7 @@ function SearchResults({
   onOpenArtist,
   onOpenRelease,
   onClearQuery,
+  onLoadMore,
   onOpenTrackMenu,
 }) {
   if (searchState.status === "loading") {
@@ -518,77 +584,45 @@ function SearchResults({
             {searchResults.playlists.map((playlist) => {
               const firstTrackId = playlist.trackIds?.[0] ?? null;
               return (
-                <button
-                  key={playlist.id}
-                  type="button"
-                  className={styles.moreCard}
-                  onClick={() => onOpenPlaylist(playlist.id)}
-                >
-                  <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                  <span className={styles.moreTitle}>{playlist.title}</span>
-                  <span className={styles.moreArtist}>{playlist.subtitle}</span>
+                <article key={playlist.id} className={styles.moreCard}>
+                  <button
+                    type="button"
+                    className={styles.moreMainButton}
+                    onClick={() => onOpenPlaylist(playlist.id)}
+                  >
+                    <span className={styles.moreCover} style={{ background: playlist.cover }} />
+                    <span className={styles.moreTitle}>{playlist.title}</span>
+                    <span className={styles.moreArtist}>{playlist.subtitle}</span>
+                  </button>
                   {firstTrackId ? (
                     <span className={styles.cardActions}>
-                      <span
+                      <button
+                        type="button"
                         className={styles.cardActionButton}
-                        role="button"
-                        tabIndex={0}
                         aria-label="Слушать"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onPlay(firstTrackId);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onPlay(firstTrackId);
-                          }
-                        }}
+                        onClick={() => onPlay(firstTrackId)}
                       >
                         <FiPlay />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className={styles.cardActionButton}
-                        role="button"
-                        tabIndex={0}
                         aria-label="Лайк"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleLike(firstTrackId);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onToggleLike(firstTrackId);
-                          }
-                        }}
+                        onClick={() => onToggleLike(firstTrackId)}
                       >
                         <FiHeart />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className={styles.cardActionButton}
-                        role="button"
-                        tabIndex={0}
                         aria-label="Добавить далее"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onAddNext(firstTrackId);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onAddNext(firstTrackId);
-                          }
-                        }}
+                        onClick={() => onAddNext(firstTrackId)}
                       >
                         <FiPlus />
-                      </span>
+                      </button>
                     </span>
                   ) : null}
-                </button>
+                </article>
               );
             })}
           </div>
@@ -637,6 +671,19 @@ function SearchResults({
           </div>
         </section>
       )}
+
+      {pagination?.hasMore ? (
+        <section className={styles.section}>
+          <button
+            type="button"
+            className={styles.loadMoreButton}
+            onClick={onLoadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "Загружаем..." : "Показать еще"}
+          </button>
+        </section>
+      ) : null}
     </>
   );
 }
@@ -658,10 +705,10 @@ function TrackListColumn({
         const liked = likedIds.includes(track.id);
         const isActive = currentTrackId === track.id;
         return (
-          <li key={track.id}>
+          <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
             <button
               type="button"
-              className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}
+              className={styles.trackMainButton}
               onClick={() => onPlay(track.id)}
               onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
             >
@@ -681,65 +728,32 @@ function TrackListColumn({
                   stopPropagation
                 />
               </span>
-              <span
-                className={styles.likeButton}
-                role="button"
-                tabIndex={0}
-                aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleLike(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onToggleLike(track.id);
-                  }
-                }}
-              >
-                {liked ? <FiHeart /> : <LuHeart />}
-              </span>
-              <span
-                className={styles.queueButton}
-                role="button"
-                tabIndex={0}
-                aria-label="Добавить далее в очередь"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAddNext(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onAddNext(track.id);
-                  }
-                }}
-              >
-                <FiPlus />
-              </span>
-              <span
-                className={styles.openButton}
-                role="button"
-                tabIndex={0}
-                aria-label="Открыть страницу трека"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenTrack(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenTrack(track.id);
-                  }
-                }}
-              >
-                <FiExternalLink />
-              </span>
-              <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
             </button>
+            <button
+              type="button"
+              className={styles.likeButton}
+              aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
+              onClick={() => onToggleLike(track.id)}
+            >
+              {liked ? <FiHeart /> : <LuHeart />}
+            </button>
+            <button
+              type="button"
+              className={styles.queueButton}
+              aria-label="Добавить далее в очередь"
+              onClick={() => onAddNext(track.id)}
+            >
+              <FiPlus />
+            </button>
+            <button
+              type="button"
+              className={styles.openButton}
+              aria-label="Открыть страницу трека"
+              onClick={() => onOpenTrack(track.id)}
+            >
+              <FiExternalLink />
+            </button>
+            <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
           </li>
         );
       })}
@@ -764,10 +778,13 @@ function HistoryColumn({
         const liked = likedIds.includes(track.id);
         const isActive = currentTrackId === track.id;
         return (
-          <li key={track.id}>
+          <li
+            key={track.id}
+            className={`${styles.historyTrackRow} ${isActive ? styles.historyTrackRowActive : ""}`.trim()}
+          >
             <button
               type="button"
-              className={`${styles.historyTrackRow} ${isActive ? styles.historyTrackRowActive : ""}`.trim()}
+              className={styles.historyMainButton}
               onClick={() => onPlay(track.id)}
               onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
             >
@@ -787,65 +804,32 @@ function HistoryColumn({
                   stopPropagation
                 />
               </span>
-              <span
-                className={styles.historyActionButton}
-                role="button"
-                tabIndex={0}
-                aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleLike(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onToggleLike(track.id);
-                  }
-                }}
-              >
-                {liked ? <FiHeart /> : <LuHeartOff />}
-              </span>
-              <span
-                className={styles.historyQueueButton}
-                role="button"
-                tabIndex={0}
-                aria-label="Добавить далее в очередь"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAddNext(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onAddNext(track.id);
-                  }
-                }}
-              >
-                <FiPlus />
-              </span>
-              <span
-                className={styles.historyOpenButton}
-                role="button"
-                tabIndex={0}
-                aria-label="Открыть страницу трека"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpenTrack(track.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenTrack(track.id);
-                  }
-                }}
-              >
-                <FiExternalLink />
-              </span>
-              <span className={styles.historyDuration}>{formatDurationClock(track.durationSec)}</span>
             </button>
+            <button
+              type="button"
+              className={styles.historyActionButton}
+              aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
+              onClick={() => onToggleLike(track.id)}
+            >
+              {liked ? <FiHeart /> : <LuHeartOff />}
+            </button>
+            <button
+              type="button"
+              className={styles.historyQueueButton}
+              aria-label="Добавить далее в очередь"
+              onClick={() => onAddNext(track.id)}
+            >
+              <FiPlus />
+            </button>
+            <button
+              type="button"
+              className={styles.historyOpenButton}
+              aria-label="Открыть страницу трека"
+              onClick={() => onOpenTrack(track.id)}
+            >
+              <FiExternalLink />
+            </button>
+            <span className={styles.historyDuration}>{formatDurationClock(track.durationSec)}</span>
           </li>
         );
       })}

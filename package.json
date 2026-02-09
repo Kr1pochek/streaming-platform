@@ -9,6 +9,10 @@
     "dev:server": "node server/index.js",
     "server": "node server/index.js",
     "audio:import": "node scripts/import-track-audio.mjs",
+    "db:migrate": "node scripts/db/migrate.mjs",
+    "db:seed": "node scripts/db/seed.mjs",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "test": "node --test --test-isolation=none \"tests/**/*.test.mjs\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

@@ -17,6 +17,7 @@ import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
 import { fetchHomeFeed } from "../api/musicApi.js";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
@@ -32,6 +33,7 @@ const actionIcons = {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const loadHomeFeed = useCallback(() => fetchHomeFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadHomeFeed);
 
@@ -57,6 +59,7 @@ export default function HomePage() {
     if (hour < 18) return "Добрый день";
     return "Добрый вечер";
   }, []);
+  const greetingName = user?.displayName ?? user?.username ?? "гость";
 
   const freshTracks = useMemo(
     () => (data?.freshTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
@@ -71,7 +74,7 @@ export default function HomePage() {
           <div className={styles.heroMain}>
             <p className={styles.kicker}>
               <FiHeadphones />
-              <span>{greeting}, Роман</span>
+              <span>{greeting}, {greetingName}</span>
             </p>
 
             <h1 className={styles.heroTitle}>Музыка, которая попадает в настроение.</h1>
@@ -206,77 +209,45 @@ export default function HomePage() {
               </div>
               <div className={styles.showcaseGrid}>
                 {data.showcases.map((item) => (
-                  <button
-                    key={item.id}
-                    className={styles.showcaseCard}
-                    type="button"
-                    onClick={() => navigate(`/playlist/${item.playlistId ?? "pl-fresh"}`)}
-                  >
-                    <span className={styles.showcaseCover} style={{ background: item.cover }} />
-                    <span className={styles.showcaseTitle}>{item.title}</span>
-                    <span className={styles.showcaseSubtitle}>{item.subtitle}</span>
+                  <article key={item.id} className={styles.showcaseCard}>
+                    <button
+                      className={styles.showcaseMainButton}
+                      type="button"
+                      onClick={() => navigate(`/playlist/${item.playlistId ?? "pl-fresh"}`)}
+                    >
+                      <span className={styles.showcaseCover} style={{ background: item.cover }} />
+                      <span className={styles.showcaseTitle}>{item.title}</span>
+                      <span className={styles.showcaseSubtitle}>{item.subtitle}</span>
+                    </button>
                     {item.trackIds?.[0] ? (
                       <span className={styles.cardActions}>
-                        <span
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Слушать трек"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            playTrack(item.trackIds[0]);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              playTrack(item.trackIds[0]);
-                            }
-                          }}
+                          onClick={() => playTrack(item.trackIds[0])}
                         >
                           <FiPlay />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Лайк"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleLikeTrack(item.trackIds[0]);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              toggleLikeTrack(item.trackIds[0]);
-                            }
-                          }}
+                          onClick={() => toggleLikeTrack(item.trackIds[0])}
                         >
                           <FiHeart />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.cardActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Добавить далее"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            addTrackNext(item.trackIds[0]);
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addTrackNext(item.trackIds[0]);
-                            }
-                          }}
+                          onClick={() => addTrackNext(item.trackIds[0])}
                         >
                           <FiArrowRight />
-                        </span>
+                        </button>
                       </span>
                     ) : null}
-                  </button>
+                  </article>
                 ))}
               </div>
             </section>
@@ -326,10 +297,13 @@ function TrackColumn({
   return (
     <ul className={styles.trackList}>
       {tracks.map((track) => (
-        <li key={track.id}>
+        <li
+          key={track.id}
+          className={`${styles.trackRow} ${currentTrackId === track.id ? styles.trackRowActive : ""}`.trim()}
+        >
           <button
             type="button"
-            className={`${styles.trackRow} ${currentTrackId === track.id ? styles.trackRowActive : ""}`.trim()}
+            className={styles.trackMainButton}
             onClick={() => onPlay(track.id)}
             onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
           >
@@ -351,27 +325,16 @@ function TrackColumn({
                 stopPropagation
               />
             </span>
-            <span
-              className={styles.queueButton}
-              role="button"
-              tabIndex={0}
-              aria-label="Добавить далее в очередь"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAddNext(track.id);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onAddNext(track.id);
-                }
-              }}
-            >
-              <FiPlus />
-            </span>
-            <span className={styles.trackTime}>{formatDurationClock(track.durationSec)}</span>
           </button>
+          <button
+            type="button"
+            className={styles.queueButton}
+            aria-label="Добавить далее в очередь"
+            onClick={() => onAddNext(track.id)}
+          >
+            <FiPlus />
+          </button>
+          <span className={styles.trackTime}>{formatDurationClock(track.durationSec)}</span>
         </li>
       ))}
     </ul>

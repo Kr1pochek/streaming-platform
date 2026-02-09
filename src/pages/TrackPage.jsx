@@ -115,77 +115,45 @@ export default function TrackPage() {
                 {data.inPlaylists.map((playlist) => {
                   const firstTrackId = playlist.trackIds?.[0] ?? null;
                   return (
-                    <button
-                      key={playlist.id}
-                      type="button"
-                      className={styles.playlistCard}
-                      onClick={() => navigate(`/playlist/${playlist.id}`)}
-                    >
-                      <span className={styles.playlistCover} style={{ background: playlist.cover }} />
-                      <span className={styles.playlistTitle}>{playlist.title}</span>
-                      <span className={styles.playlistSubtitle}>{playlist.subtitle}</span>
+                    <article key={playlist.id} className={styles.playlistCard}>
+                      <button
+                        type="button"
+                        className={styles.playlistMainButton}
+                        onClick={() => navigate(`/playlist/${playlist.id}`)}
+                      >
+                        <span className={styles.playlistCover} style={{ background: playlist.cover }} />
+                        <span className={styles.playlistTitle}>{playlist.title}</span>
+                        <span className={styles.playlistSubtitle}>{playlist.subtitle}</span>
+                      </button>
                       {firstTrackId ? (
                         <span className={styles.cardActions}>
-                          <span
+                          <button
+                            type="button"
                             className={styles.cardActionButton}
-                            role="button"
-                            tabIndex={0}
                             aria-label="Слушать"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              playTrack(firstTrackId);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                playTrack(firstTrackId);
-                              }
-                            }}
+                            onClick={() => playTrack(firstTrackId)}
                           >
                             <FiPlay />
-                          </span>
-                          <span
+                          </button>
+                          <button
+                            type="button"
                             className={styles.cardActionButton}
-                            role="button"
-                            tabIndex={0}
                             aria-label="Лайк"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleLikeTrack(firstTrackId);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                toggleLikeTrack(firstTrackId);
-                              }
-                            }}
+                            onClick={() => toggleLikeTrack(firstTrackId)}
                           >
                             <FiHeart />
-                          </span>
-                          <span
+                          </button>
+                          <button
+                            type="button"
                             className={styles.cardActionButton}
-                            role="button"
-                            tabIndex={0}
                             aria-label="Добавить далее"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              addTrackNext(firstTrackId);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                addTrackNext(firstTrackId);
-                              }
-                            }}
+                            onClick={() => addTrackNext(firstTrackId)}
                           >
                             <FiPlus />
-                          </span>
+                          </button>
                         </span>
                       ) : null}
-                    </button>
+                    </article>
                   );
                 })}
               </div>

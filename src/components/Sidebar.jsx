@@ -8,10 +8,12 @@ import {
   FiLogIn,
 } from "react-icons/fi";
 import styles from "./Sidebar.module.css";
+import useAuth from "../hooks/useAuth.js";
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const user = null;
+  const { isAuthenticated, user } = useAuth();
+  const accountName = user?.displayName ?? user?.username ?? "Пользователь";
 
   return (
     <aside className={styles.sidebar}>
@@ -78,11 +80,11 @@ export default function Sidebar() {
       </div>
 
       <div className={styles.sidebarBottom}>
-        {user ? (
+        {isAuthenticated ? (
           <button type="button" className={styles.account} onClick={() => navigate("/profile")}>
-            <div className={styles.accountAvatar}>R</div>
+            <div className={styles.accountAvatar}>{accountName.slice(0, 1).toUpperCase()}</div>
             <div className={styles.accountMeta}>
-              <div className={styles.accountName}>Роман</div>
+              <div className={styles.accountName}>{accountName}</div>
               <div className={styles.accountHint}>Аккаунт</div>
             </div>
             <FiUser className={styles.accountChev} />

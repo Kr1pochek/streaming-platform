@@ -207,9 +207,19 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.playlistMainButton {
+  border: none;
+  background: transparent;
   color: inherit;
   text-align: left;
-  padding: 10px;
+  padding: 0;
+  width: 100%;
   display: grid;
   gap: 8px;
   cursor: pointer;
@@ -229,7 +239,7 @@
 }
 
 .playlistCard:hover .cardActions,
-.playlistCard:focus-visible .cardActions {
+.playlistCard:focus-within .cardActions {
   opacity: 1;
   transform: translateY(0);
 }
@@ -423,6 +433,7 @@
 .heroArtistButton:focus-visible,
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
+.playlistMainButton:focus-visible,
 .playlistCard:focus-visible,
 .trackMain:focus-visible,
 .iconButton:focus-visible,

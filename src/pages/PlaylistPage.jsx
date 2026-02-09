@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FiArrowLeft,
@@ -26,6 +26,7 @@ import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
+import ModalDialog from "../components/ModalDialog.jsx";
 
 function shuffleTrackIds(trackIds) {
   const ids = [...trackIds];
@@ -42,9 +43,12 @@ export default function PlaylistPage() {
   const loadPlaylistPage = useCallback(() => fetchPlaylistPage(playlistId), [playlistId]);
   const { status, data, error, reload } = useAsyncResource(loadPlaylistPage);
 
-  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext, addQueueNext } =
+  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext, addQueueNext, notify } =
     usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const totalDuration = useMemo(
     () => (data?.tracks ?? []).reduce((sum, track) => sum + (track.durationSec ?? 0), 0),
@@ -53,27 +57,33 @@ export default function PlaylistPage() {
 
   const handleRenamePlaylist = async () => {
     if (!data?.playlist?.isCustom) return;
-    const nextTitle = window.prompt("Новое название плейлиста", data.playlist.title);
-    if (nextTitle === null) return;
+    const nextTitle = renameValue.trim();
+    if (!nextTitle) {
+      notify("Название плейлиста не может быть пустым.");
+      return;
+    }
 
     try {
       await renameUserPlaylist(data.playlist.id, nextTitle);
+      setRenameDialogOpen(false);
+      setRenameValue("");
       await reload();
-    } catch {
-      // noop
+      notify("Плейлист переименован.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Не удалось переименовать плейлист.");
     }
   };
 
   const handleDeletePlaylist = async () => {
     if (!data?.playlist?.isCustom) return;
-    const shouldDelete = window.confirm(`Удалить плейлист "${data.playlist.title}"?`);
-    if (!shouldDelete) return;
 
     try {
       await deleteUserPlaylist(data.playlist.id);
+      setDeleteDialogOpen(false);
+      notify("Плейлист удален.");
       navigate("/library");
-    } catch {
-      // noop
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Не удалось удалить плейлист.");
     }
   };
 
@@ -83,8 +93,9 @@ export default function PlaylistPage() {
     try {
       await removeTrackFromUserPlaylist(data.playlist.id, trackId);
       await reload();
-    } catch {
-      // noop
+      notify("Трек удален из плейлиста.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Не удалось удалить трек из плейлиста.");
     }
   };
 
@@ -143,7 +154,14 @@ export default function PlaylistPage() {
                   В очередь
                 </button>
                 {data.playlist.isCustom ? (
-                  <button type="button" className={styles.secondaryButton} onClick={handleRenamePlaylist}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => {
+                      setRenameValue(data.playlist.title);
+                      setRenameDialogOpen(true);
+                    }}
+                  >
                     Переименовать
                   </button>
                 ) : null}
@@ -151,7 +169,7 @@ export default function PlaylistPage() {
                   <button
                     type="button"
                     className={`${styles.secondaryButton} ${styles.dangerButton}`.trim()}
-                    onClick={handleDeletePlaylist}
+                    onClick={() => setDeleteDialogOpen(true)}
                   >
                     Удалить
                   </button>
@@ -249,63 +267,39 @@ export default function PlaylistPage() {
                     <span className={styles.relatedSubtitle}>{playlist.subtitle}</span>
                     {firstTrackId ? (
                       <span className={styles.relatedActions}>
-                        <span
+                        <button
+                          type="button"
                           className={styles.relatedActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Слушать"
                           onClick={(event) => {
                             event.stopPropagation();
                             playTrack(firstTrackId);
                           }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              playTrack(firstTrackId);
-                            }
-                          }}
                         >
                           <FiPlay />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.relatedActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Лайк"
                           onClick={(event) => {
                             event.stopPropagation();
                             toggleLikeTrack(firstTrackId);
                           }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              toggleLikeTrack(firstTrackId);
-                            }
-                          }}
                         >
                           <FiHeart />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className={styles.relatedActionButton}
-                          role="button"
-                          tabIndex={0}
                           aria-label="Добавить далее"
                           onClick={(event) => {
                             event.stopPropagation();
                             addTrackNext(firstTrackId);
                           }}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              addTrackNext(firstTrackId);
-                            }
-                          }}
                         >
                           <FiPlus />
-                        </span>
+                        </button>
                       </span>
                     ) : null}
                   </button>
@@ -315,6 +309,48 @@ export default function PlaylistPage() {
           </section>
         </>
       ) : null}
+
+      <ModalDialog
+        open={renameDialogOpen}
+        title="Переименовать плейлист"
+        description={data?.playlist ? `Текущий плейлист: ${data.playlist.title}` : ""}
+        onClose={() => setRenameDialogOpen(false)}
+        actions={
+          <>
+            <button type="button" className={styles.dialogGhostButton} onClick={() => setRenameDialogOpen(false)}>
+              Отмена
+            </button>
+            <button type="button" className={styles.dialogPrimaryButton} onClick={handleRenamePlaylist}>
+              Сохранить
+            </button>
+          </>
+        }
+      >
+        <input
+          className={styles.dialogInput}
+          value={renameValue}
+          onChange={(event) => setRenameValue(event.target.value)}
+          placeholder="Новое название"
+          maxLength={80}
+        />
+      </ModalDialog>
+
+      <ModalDialog
+        open={deleteDialogOpen}
+        title="Удалить плейлист?"
+        description={data?.playlist ? `Плейлист "${data.playlist.title}" будет удален без восстановления.` : ""}
+        onClose={() => setDeleteDialogOpen(false)}
+        actions={
+          <>
+            <button type="button" className={styles.dialogGhostButton} onClick={() => setDeleteDialogOpen(false)}>
+              Отмена
+            </button>
+            <button type="button" className={styles.dialogDangerButton} onClick={handleDeletePlaylist}>
+              Удалить
+            </button>
+          </>
+        }
+      />
 
       <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
     </PageShell>

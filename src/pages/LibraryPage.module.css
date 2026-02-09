@@ -434,9 +434,53 @@
 .sortButton:focus-visible,
 .trackMainButton:focus-visible,
 .likeButton:focus-visible,
-.trackOpenButton:focus-visible {
+.queueButton:focus-visible,
+.trackOpenButton:focus-visible,
+.dialogPrimaryButton:focus-visible,
+.dialogGhostButton:focus-visible,
+.dialogDangerButton:focus-visible,
+.dialogInput:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
+}
+
+.dialogInput {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(18, 18, 20, 0.72);
+  color: rgba(255, 255, 255, 0.95);
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.dialogPrimaryButton,
+.dialogGhostButton,
+.dialogDangerButton {
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dialogPrimaryButton {
+  border: 1px solid rgba(255, 214, 108, 0.45);
+  background: rgba(214, 171, 67, 0.22);
+  color: rgba(255, 238, 193, 0.98);
+}
+
+.dialogGhostButton {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.dialogDangerButton {
+  border: 1px solid rgba(255, 122, 122, 0.45);
+  background: rgba(166, 50, 50, 0.2);
+  color: rgba(255, 191, 191, 0.98);
 }
 
 @keyframes pulse {

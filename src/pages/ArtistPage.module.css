@@ -280,15 +280,24 @@
 
 .latestReleaseCard {
   border: 1px solid rgba(255, 255, 255, 0.12);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
   margin-top: 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   padding: 12px;
   display: grid;
   gap: 8px;
+}
+
+.latestReleaseMainButton {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .latestReleaseCover {
@@ -379,14 +388,23 @@
 
 .albumCard {
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   padding: 10px;
   display: grid;
   gap: 8px;
+}
+
+.albumMainButton {
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .albumCover {
@@ -505,9 +523,9 @@
 .trackArtistLink:focus-visible,
 .iconButton:focus-visible,
 .latestReleaseButton:focus-visible,
-.latestReleaseCard:focus-visible,
+.latestReleaseMainButton:focus-visible,
 .latestReleaseOpen:focus-visible,
-.albumCard:focus-visible,
+.albumMainButton:focus-visible,
 .albumPlayButton:focus-visible,
 .releaseRow:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);

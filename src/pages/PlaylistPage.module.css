@@ -338,9 +338,52 @@
 .secondaryButton:focus-visible,
 .trackMain:focus-visible,
 .iconButton:focus-visible,
-.relatedCard:focus-visible {
+.relatedCard:focus-visible,
+.dialogPrimaryButton:focus-visible,
+.dialogGhostButton:focus-visible,
+.dialogDangerButton:focus-visible,
+.dialogInput:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
+}
+
+.dialogInput {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(24, 24, 24, 0.72);
+  color: rgba(255, 255, 255, 0.95);
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.dialogPrimaryButton,
+.dialogGhostButton,
+.dialogDangerButton {
+  min-height: 34px;
+  border-radius: 999px;
+  border: none;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dialogPrimaryButton {
+  background: #f5cc46;
+  color: #1d1508;
+}
+
+.dialogGhostButton {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dialogDangerButton {
+  background: rgba(169, 45, 45, 0.16);
+  color: rgba(255, 177, 177, 0.94);
+  border: 1px solid rgba(255, 106, 106, 0.35);
 }
 
 @keyframes pulse {

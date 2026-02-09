@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: music_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d music_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: music_app
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+      CORS_ORIGINS: http://localhost:4000
+      SERVE_CLIENT: "true"
+    command: sh -c "npm run db:migrate && npm run db:seed && npm run server"
+    ports:
+      - "4000:4000"
+
+volumes:
+  postgres_data:

@@ -187,44 +187,35 @@ export default function ArtistPage() {
                 <h2 className={styles.sectionTitle}>Новый релиз</h2>
               </div>
               {data.latestRelease ? (
-                <button
-                  type="button"
-                  className={styles.latestReleaseCard}
-                  onClick={() => navigate(`/release/${data.latestRelease.id}`)}
-                >
-                  <span className={styles.latestReleaseCover} style={{ background: data.latestRelease.cover }} />
-                  <p className={styles.latestReleaseType}>{data.latestRelease.type.toUpperCase()}</p>
-                  <h3 className={styles.latestReleaseTitle}>{data.latestRelease.title}</h3>
-                  <p className={styles.latestReleaseMeta}>
-                    {data.latestRelease.year} • {data.latestRelease.tracks.length} треков
-                  </p>
+                <article className={styles.latestReleaseCard}>
+                  <button
+                    type="button"
+                    className={styles.latestReleaseMainButton}
+                    onClick={() => navigate(`/release/${data.latestRelease.id}`)}
+                  >
+                    <span className={styles.latestReleaseCover} style={{ background: data.latestRelease.cover }} />
+                    <p className={styles.latestReleaseType}>{data.latestRelease.type.toUpperCase()}</p>
+                    <h3 className={styles.latestReleaseTitle}>{data.latestRelease.title}</h3>
+                    <p className={styles.latestReleaseMeta}>
+                      {data.latestRelease.year} • {data.latestRelease.tracks.length} треков
+                    </p>
+                  </button>
                   <span className={styles.latestReleaseActions}>
-                    <span
+                    <button
+                      type="button"
                       className={styles.latestReleaseButton}
-                      role="button"
-                      tabIndex={0}
                       aria-label="Слушать релиз"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        playQueue(data.latestRelease.trackIds, 0);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          playQueue(data.latestRelease.trackIds, 0);
-                        }
-                      }}
+                      onClick={() => playQueue(data.latestRelease.trackIds, 0)}
                     >
                       <FiPlay />
                       Слушать
-                    </span>
+                    </button>
                     <span className={styles.latestReleaseOpen}>
                       <FiExternalLink />
                       Открыть
                     </span>
                   </span>
-                </button>
+                </article>
               ) : (
                 <p className={styles.emptyText}>У автора пока нет новых релизов.</p>
               )}
@@ -239,64 +230,43 @@ export default function ArtistPage() {
             {data.popularAlbums.length ? (
               <div className={styles.albumScroller}>
                 {data.popularAlbums.map((album) => (
-                  <button
-                    key={album.id}
-                    type="button"
-                    className={styles.albumCard}
-                    onClick={() => navigate(`/release/${album.id}`)}
-                  >
-                    <span className={styles.albumCover} style={{ background: album.cover }} />
-                    <span className={styles.albumTitle}>{album.title}</span>
-                    <span className={styles.albumMeta}>
-                      {album.year}
-                      <span className={styles.albumDot}>•</span>
-                      {album.tracks.length} треков
-                    </span>
+                  <article key={album.id} className={styles.albumCard}>
+                    <button
+                      type="button"
+                      className={styles.albumMainButton}
+                      onClick={() => navigate(`/release/${album.id}`)}
+                    >
+                      <span className={styles.albumCover} style={{ background: album.cover }} />
+                      <span className={styles.albumTitle}>{album.title}</span>
+                      <span className={styles.albumMeta}>
+                        {album.year}
+                        <span className={styles.albumDot}>•</span>
+                        {album.tracks.length} треков
+                      </span>
+                    </button>
                     <span className={styles.albumActions}>
-                      <span
+                      <button
+                        type="button"
                         className={styles.albumPlayButton}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          playQueue(album.trackIds, 0);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            playQueue(album.trackIds, 0);
-                          }
-                        }}
+                        onClick={() => playQueue(album.trackIds, 0)}
                       >
                         <FiPlay />
                         Слушать
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className={styles.albumPlayButton}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.stopPropagation();
+                        onClick={() => {
                           if (album.trackIds[0]) {
                             addTrackNext(album.trackIds[0]);
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (album.trackIds[0]) {
-                              addTrackNext(album.trackIds[0]);
-                            }
                           }
                         }}
                       >
                         <FiPlus />
                         Далее
-                      </span>
+                      </button>
                     </span>
-                  </button>
+                  </article>
                 ))}
               </div>
             ) : (

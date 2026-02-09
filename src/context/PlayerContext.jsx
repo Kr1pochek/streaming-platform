@@ -1,5 +1,6 @@
-﻿import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import { fetchCatalogMap } from "../api/musicApi.js";
+﻿import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { fetchCatalogMap, fetchPlayerState, updatePlayerState } from "../api/musicApi.js";
+import useAuth from "../hooks/useAuth.js";
 import { formatDuration } from "../utils/formatters.js";
 import PlayerContext from "./playerContext.js";
 
@@ -205,6 +206,15 @@ function playerReducer(state, action) {
         historyIds: uniqueTrackIds(state.historyIds).slice(0, 24),
         progressSec: nextQueue.length ? state.progressSec : 0,
         catalogVersion: state.catalogVersion + 1,
+      };
+    }
+
+    case "hydrate_remote_state": {
+      return {
+        ...state,
+        likedIds: uniqueTrackIds(action.likedIds ?? []),
+        followedArtistIds: uniqueArtistIds(action.followedArtistIds ?? []),
+        historyIds: uniqueTrackIds(action.historyIds ?? []).slice(0, 24),
       };
     }
 
@@ -643,6 +653,14 @@ function playerReducer(state, action) {
       };
     }
 
+    case "notify": {
+      const message = String(action.message ?? "").trim();
+      if (!message) {
+        return state;
+      }
+      return enqueueToast(state, message);
+    }
+
     case "clear_history": {
       return { ...state, historyIds: [] };
     }
@@ -667,7 +685,9 @@ function resolveTrackSource(track) {
 }
 
 export function PlayerProvider({ children }) {
+  const { isAuthenticated, status: authStatus } = useAuth();
   const [state, dispatch] = useReducer(playerReducer, undefined, buildInitialState);
+  const [remoteStateReady, setRemoteStateReady] = useState(false);
 
   const audioRef = useRef(null);
   const loadedTrackIdRef = useRef(null);
@@ -694,7 +714,10 @@ export function PlayerProvider({ children }) {
           fallbackQueueIds: nextTracks.slice(0, 7).map((track) => track.id),
         });
       } catch {
-        // noop
+        dispatch({
+          type: "notify",
+          message: "Не удалось загрузить каталог. Проверь подключение к API.",
+        });
       }
     };
 
@@ -704,6 +727,86 @@ export function PlayerProvider({ children }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrateRemoteState = async () => {
+      if (authStatus === "loading") {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        setRemoteStateReady(false);
+        return;
+      }
+
+      if (state.catalogVersion <= 0) {
+        return;
+      }
+
+      setRemoteStateReady(false);
+
+      try {
+        const remoteState = await fetchPlayerState();
+        if (cancelled) return;
+        dispatch({
+          type: "hydrate_remote_state",
+          likedIds: remoteState?.likedTrackIds ?? [],
+          followedArtistIds: remoteState?.followedArtistIds ?? [],
+          historyIds: remoteState?.historyTrackIds ?? [],
+        });
+        setRemoteStateReady(true);
+      } catch {
+        if (cancelled) return;
+        dispatch({
+          type: "notify",
+          message: "Не удалось синхронизировать музыкальные предпочтения с сервером.",
+        });
+      }
+    };
+
+    void hydrateRemoteState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, authStatus, state.catalogVersion]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !remoteStateReady) {
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = setTimeout(async () => {
+      try {
+        await updatePlayerState({
+          likedTrackIds: state.likedIds,
+          followedArtistIds: state.followedArtistIds,
+          historyTrackIds: state.historyIds,
+        });
+      } catch {
+        if (!cancelled) {
+          dispatch({
+            type: "notify",
+            message: "Не удалось сохранить предпочтения на сервере.",
+          });
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [
+    isAuthenticated,
+    remoteStateReady,
+    state.likedIds,
+    state.followedArtistIds,
+    state.historyIds,
+  ]);
 
   const ensureAudioElement = useCallback(() => {
     if (typeof window === "undefined") {
@@ -932,9 +1035,12 @@ export function PlayerProvider({ children }) {
       toggleArtistFollow: (artistId) => dispatch({ type: "toggle_follow_artist", artistId }),
       clearHistory: () => dispatch({ type: "clear_history" }),
       dismissToast: (toastId) => dispatch({ type: "dismiss_toast", toastId }),
+      notify: (message) => dispatch({ type: "notify", message }),
     }),
     [state, currentTrackId, currentTrack, clampedProgress, progressPercent, currentDuration]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
+
+

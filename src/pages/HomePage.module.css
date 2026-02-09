@@ -110,8 +110,8 @@
 .nowOpenButton:focus-visible,
 .nowArtistButton:focus-visible,
 .actionCard:focus-visible,
-.showcaseCard:focus-visible,
-.trackRow:focus-visible {
+.showcaseMainButton:focus-visible,
+.trackMainButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }
@@ -342,13 +342,17 @@
 }
 
 .showcaseCard {
+  position: relative;
+  overflow: hidden;
+}
+
+.showcaseMainButton {
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
   padding: 0;
-  position: relative;
-  overflow: hidden;
+  width: 100%;
   cursor: pointer;
 }
 
@@ -394,7 +398,7 @@
 }
 
 .showcaseCard:hover .cardActions,
-.showcaseCard:focus-visible .cardActions {
+.showcaseCard:focus-within .cardActions {
   opacity: 1;
   transform: translateY(0);
 }
@@ -428,17 +432,23 @@
   gap: 14px;
 }
 
+.trackGrid > * {
+  min-width: 0;
+}
+
 .trackList {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .trackRow {
   width: 100%;
   min-height: 52px;
+  min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
@@ -447,10 +457,8 @@
   grid-template-columns: 34px 1fr 28px auto;
   align-items: center;
   gap: 10px;
-  cursor: pointer;
-  color: inherit;
-  text-align: left;
   transition: border-color 0.18s ease, background 0.18s ease;
+  box-sizing: border-box;
 }
 
 .trackRow:hover {
@@ -461,6 +469,22 @@
 .trackRowActive {
   border-color: rgba(245, 204, 70, 0.52);
   background: rgba(245, 204, 70, 0.11);
+}
+
+.trackMainButton {
+  grid-column: 1 / 3;
+  min-height: 52px;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  cursor: pointer;
 }
 
 .trackIcon {
@@ -553,11 +577,14 @@
 .queueButton {
   width: 28px;
   height: 28px;
+  border: none;
+  background: transparent;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.66);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
 }
 
 .queueButton svg {
