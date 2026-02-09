@@ -1,5 +1,6 @@
 import { Fragment, useMemo } from "react";
 import { resolveArtistLine } from "../utils/artistRouting.js";
+import usePlayer from "../hooks/usePlayer.js";
 
 export default function ArtistInlineLinks({
   artistLine,
@@ -9,7 +10,8 @@ export default function ArtistInlineLinks({
   onOpenArtist,
   stopPropagation = false,
 }) {
-  const artistParts = useMemo(() => resolveArtistLine(artistLine), [artistLine]);
+  const { artists = [] } = usePlayer();
+  const artistParts = useMemo(() => resolveArtistLine(artistLine, artists), [artistLine, artists]);
 
   if (!artistParts.length) {
     return null;

@@ -1,21 +1,22 @@
 ﻿import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import { artists, historySeeds, initialLikedIds, initialQueue, tracks } from "../data/musicData.js";
+import { fetchCatalogMap } from "../api/musicApi.js";
 import { formatDuration } from "../utils/formatters.js";
 import PlayerContext from "./playerContext.js";
 
 const repeatModes = ["off", "all", "one"];
-const trackMap = Object.fromEntries(tracks.map((track) => [track.id, track]));
-const artistMap = Object.fromEntries(artists.map((artist) => [artist.id, artist]));
+let runtimeTracks = [];
+let runtimeArtists = [];
+let trackMap = Object.create(null);
+let artistMap = Object.create(null);
 const STORAGE_KEY = "music.player.state.v1";
-const LEGACY_SEEDED_HISTORY = [...historySeeds];
 
 const defaultState = {
-  queue: initialQueue,
+  queue: [],
   currentIndex: 0,
   isPlaying: false,
   volume: 70,
   progressSec: 0,
-  likedIds: initialLikedIds,
+  likedIds: [],
   followedArtistIds: [],
   historyIds: [],
   shuffleEnabled: false,
@@ -23,6 +24,7 @@ const defaultState = {
   seekVersion: 0,
   toastSeq: 0,
   toastItems: [],
+  catalogVersion: 0,
 };
 
 function clamp(value, min, max) {
@@ -39,6 +41,20 @@ function uniqueTrackIds(trackIds = []) {
     }
   }
   return validIds;
+}
+
+function uniqueStringIds(values = []) {
+  const seen = new Set();
+  const ids = [];
+  for (const value of values) {
+    const id = String(value ?? "").trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 function uniqueArtistIds(artistIds = []) {
@@ -61,14 +77,6 @@ function enqueueToast(state, message) {
     toastSeq: toastId,
     toastItems,
   };
-}
-
-function isLegacySeedHistory(historyIds = []) {
-  if (historyIds.length !== LEGACY_SEEDED_HISTORY.length) {
-    return false;
-  }
-
-  return historyIds.every((trackId, index) => trackId === LEGACY_SEEDED_HISTORY[index]);
 }
 
 function addHistory(historyIds, trackId) {
@@ -125,15 +133,14 @@ function normalizePersistedState(raw) {
   const hasFollowedArtistIds = Array.isArray(raw.followedArtistIds);
   const hasHistoryIds = Array.isArray(raw.historyIds);
 
-  const queue = hasQueue ? uniqueTrackIds(raw.queue) : defaultState.queue;
-  const likedIds = hasLikedIds ? uniqueTrackIds(raw.likedIds) : defaultState.likedIds;
+  const queue = hasQueue ? uniqueStringIds(raw.queue) : defaultState.queue;
+  const likedIds = hasLikedIds ? uniqueStringIds(raw.likedIds) : defaultState.likedIds;
   const followedArtistIds = hasFollowedArtistIds
-    ? uniqueArtistIds(raw.followedArtistIds)
+    ? uniqueStringIds(raw.followedArtistIds)
     : defaultState.followedArtistIds;
   const historyIds = hasHistoryIds
-    ? uniqueTrackIds(raw.historyIds).slice(0, 24)
+    ? uniqueStringIds(raw.historyIds).slice(0, 24)
     : defaultState.historyIds;
-  const normalizedHistoryIds = isLegacySeedHistory(historyIds) ? [] : historyIds;
 
   return {
     queue,
@@ -145,7 +152,7 @@ function normalizePersistedState(raw) {
     volume: clamp(Number.isFinite(raw.volume) ? Number(raw.volume) : defaultState.volume, 0, 100),
     likedIds,
     followedArtistIds,
-    historyIds: normalizedHistoryIds,
+    historyIds,
     shuffleEnabled: Boolean(raw.shuffleEnabled),
     repeatMode: repeatModes.includes(raw.repeatMode) ? raw.repeatMode : defaultState.repeatMode,
   };
@@ -181,6 +188,24 @@ function playerReducer(state, action) {
         return state;
       }
       return { ...state, isPlaying: !state.isPlaying };
+    }
+
+    case "catalog_hydrated": {
+      const currentQueue = uniqueTrackIds(state.queue);
+      const fallbackQueueIds = uniqueTrackIds(action.fallbackQueueIds ?? []);
+      const nextQueue = currentQueue.length ? currentQueue : fallbackQueueIds;
+      const nextCurrentIndex = clamp(state.currentIndex, 0, Math.max(nextQueue.length - 1, 0));
+
+      return {
+        ...state,
+        queue: nextQueue,
+        currentIndex: nextCurrentIndex,
+        likedIds: uniqueTrackIds(state.likedIds),
+        followedArtistIds: uniqueArtistIds(state.followedArtistIds),
+        historyIds: uniqueTrackIds(state.historyIds).slice(0, 24),
+        progressSec: nextQueue.length ? state.progressSec : 0,
+        catalogVersion: state.catalogVersion + 1,
+      };
     }
 
     case "play_track": {
@@ -627,69 +652,58 @@ function playerReducer(state, action) {
   }
 }
 
-function hashTrackId(trackId = "") {
-  let hash = 0;
-  for (let index = 0; index < trackId.length; index += 1) {
-    hash = (hash << 5) - hash + trackId.charCodeAt(index);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 function volumeToElement(volume) {
   return clamp(volume, 0, 100) / 100;
 }
 
-function writeAscii(view, offset, value) {
-  for (let index = 0; index < value.length; index += 1) {
-    view.setUint8(offset + index, value.charCodeAt(index));
-  }
-}
-
-function createSyntheticTrackUrl(trackId, durationSec) {
-  const safeDuration = clamp(durationSec, 1, 900);
-  const sampleRate = 8000;
-  const samplesCount = Math.max(1, Math.floor(sampleRate * safeDuration));
-  const bytesPerSample = 2;
-  const dataSize = samplesCount * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-
-  writeAscii(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeAscii(view, 8, "WAVE");
-  writeAscii(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPerSample, true);
-  view.setUint16(32, bytesPerSample, true);
-  view.setUint16(34, 16, true);
-  writeAscii(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-
-  const baseFrequency = 160 + (hashTrackId(trackId) % 220);
-  for (let sampleIndex = 0; sampleIndex < samplesCount; sampleIndex += 1) {
-    const timeSec = sampleIndex / sampleRate;
-    const envelope = 0.55 + 0.45 * Math.sin(2 * Math.PI * 0.11 * timeSec);
-    const mainTone = Math.sin(2 * Math.PI * baseFrequency * timeSec);
-    const harmonic = Math.sin(2 * Math.PI * baseFrequency * 1.5 * timeSec) * 0.16;
-    const signal = (mainTone * envelope + harmonic) * 0.12;
-    view.setInt16(44 + sampleIndex * 2, Math.max(-1, Math.min(1, signal)) * 32767, true);
-  }
-
-  const blob = new Blob([buffer], { type: "audio/wav" });
-  return URL.createObjectURL(blob);
+function resolveTrackSource(track) {
+  const trackId = String(track?.id ?? "").trim();
+  const remoteUrl = typeof track?.audioUrl === "string" ? track.audioUrl.trim() : "";
+  const durationSec = Number(track?.durationSec ?? 0);
+  return {
+    key: `remote:${trackId}:${remoteUrl}:${durationSec}`,
+    url: remoteUrl,
+  };
 }
 
 export function PlayerProvider({ children }) {
   const [state, dispatch] = useReducer(playerReducer, undefined, buildInitialState);
 
   const audioRef = useRef(null);
-  const objectUrlRef = useRef("");
   const loadedTrackIdRef = useRef(null);
+  const loadedSourceKeyRef = useRef("");
   const seekVersionRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCatalog = async () => {
+      try {
+        const data = await fetchCatalogMap();
+        if (cancelled) return;
+
+        const nextTracks = Array.isArray(data?.tracks) ? data.tracks : [];
+        const nextArtists = Array.isArray(data?.artists) ? data.artists : [];
+        runtimeTracks = nextTracks;
+        runtimeArtists = nextArtists;
+        trackMap = Object.fromEntries(nextTracks.map((track) => [track.id, track]));
+        artistMap = Object.fromEntries(nextArtists.map((artist) => [artist.id, artist]));
+
+        dispatch({
+          type: "catalog_hydrated",
+          fallbackQueueIds: nextTracks.slice(0, 7).map((track) => track.id),
+        });
+      } catch {
+        // noop
+      }
+    };
+
+    void loadCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const ensureAudioElement = useCallback(() => {
     if (typeof window === "undefined") {
@@ -705,23 +719,30 @@ export function PlayerProvider({ children }) {
     return audioRef.current;
   }, []);
 
-  const replaceAudioSource = useCallback((trackId, durationSec) => {
+  const replaceAudioSource = useCallback((track) => {
     const audio = ensureAudioElement();
-    if (!audio || loadedTrackIdRef.current === trackId) {
+    if (!audio || !track?.id) {
+      return audio;
+    }
+
+    const sourceDescriptor = resolveTrackSource(track);
+    if (
+      loadedTrackIdRef.current === track.id &&
+      loadedSourceKeyRef.current === sourceDescriptor.key
+    ) {
       return audio;
     }
 
     audio.pause();
-
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = "";
+    loadedTrackIdRef.current = track.id;
+    loadedSourceKeyRef.current = sourceDescriptor.key;
+    if (!sourceDescriptor.url) {
+      audio.removeAttribute("src");
+      audio.load();
+      return audio;
     }
 
-    const sourceUrl = createSyntheticTrackUrl(trackId, durationSec);
-    objectUrlRef.current = sourceUrl;
-    loadedTrackIdRef.current = trackId;
-    audio.src = sourceUrl;
+    audio.src = sourceDescriptor.url;
     audio.load();
 
     return audio;
@@ -770,17 +791,19 @@ export function PlayerProvider({ children }) {
     if (!currentTrack || !currentTrackId) {
       audio.pause();
       loadedTrackIdRef.current = null;
+      loadedSourceKeyRef.current = "";
       seekVersionRef.current = 0;
-
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = "";
-      }
+      audio.removeAttribute("src");
+      audio.load();
       return;
     }
 
-    if (loadedTrackIdRef.current !== currentTrackId) {
-      replaceAudioSource(currentTrackId, currentTrack.durationSec);
+    const sourceDescriptor = resolveTrackSource(currentTrack);
+    if (
+      loadedTrackIdRef.current !== currentTrackId ||
+      loadedSourceKeyRef.current !== sourceDescriptor.key
+    ) {
+      replaceAudioSource(currentTrack);
     }
 
     const desiredTime = clamp(state.progressSec, 0, currentTrack.durationSec);
@@ -825,11 +848,8 @@ export function PlayerProvider({ children }) {
         audio.pause();
         audioRef.current = null;
       }
-
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = "";
-      }
+      loadedTrackIdRef.current = null;
+      loadedSourceKeyRef.current = "";
     },
     []
   );
@@ -868,7 +888,8 @@ export function PlayerProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      tracks,
+      tracks: runtimeTracks,
+      artists: runtimeArtists,
       trackMap,
       queue: state.queue,
       queueTracks: state.queue.map((id) => trackMap[id]).filter(Boolean),

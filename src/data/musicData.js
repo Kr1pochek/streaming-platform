@@ -1,8 +1,9 @@
 ﻿export const tracks = [
   {
     id: "city-rain",
-    title: "City Rain",
-    artist: "synthlove",
+    audioUrl: "/api/media/tracks/city-rain.mp3",
+    title: "ЧУГУН",
+    artist: "1337, СИМОЧКА",
     durationSec: 222,
     explicit: false,
     cover: "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)",
@@ -10,8 +11,9 @@
   },
   {
     id: "poison-halo",
-    title: "Poison Halo",
-    artist: "Ari Vox",
+    audioUrl: "/api/media/tracks/poison-halo.mp3",
+    title: "вода",
+    artist: "1337, Locura",
     durationSec: 161,
     explicit: false,
     cover: "linear-gradient(135deg, #35559c 0%, #86a3e9 42%, #1c2746 100%)",
@@ -19,8 +21,9 @@
   },
   {
     id: "sleep-mode",
-    title: "SLEEP MODE",
-    artist: "sombr",
+    audioUrl: "/api/media/tracks/sleep-mode.mp3",
+    title: "воздух",
+    artist: "1337, Locura",
     durationSec: 190,
     explicit: true,
     cover: "linear-gradient(135deg, #9b9998 0%, #c5c2bb 35%, #212226 100%)",
@@ -28,8 +31,9 @@
   },
   {
     id: "cloud-district",
-    title: "cloud district",
-    artist: "morphinevibe",
+    audioUrl: "/api/media/tracks/cloud-district.mp3",
+    title: "CODE1",
+    artist: "deadmanstok, fifhficjuro",
     durationSec: 176,
     explicit: false,
     cover: "linear-gradient(135deg, #8f83c9 0%, #c9c1ee 36%, #3a315a 100%)",
@@ -37,7 +41,8 @@
   },
   {
     id: "close-to-fire",
-    title: "Close To Fire",
+    audioUrl: "/api/media/tracks/close-to-fire.mp3",
+    title: "I DONT",
     artist: "Joji",
     durationSec: 202,
     explicit: false,
@@ -46,7 +51,8 @@
   },
   {
     id: "cobalt",
-    title: "COBALT",
+    audioUrl: "/api/media/tracks/cobalt.mp3",
+    title: "Дискеты",
     artist: "J. Cole",
     durationSec: 154,
     explicit: true,
@@ -55,7 +61,8 @@
   },
   {
     id: "after-glow",
-    title: "after glow",
+    audioUrl: "/api/media/tracks/after-glow.mp3",
+    title: "Born From a Wish",
     artist: "tuborosho",
     durationSec: 188,
     explicit: false,
@@ -64,7 +71,8 @@
   },
   {
     id: "hotel-california",
-    title: "Hotel California",
+    audioUrl: "/api/media/tracks/hotel-california.mp3",
+    title: "DANCESIDE",
     artist: "Joji",
     durationSec: 129,
     explicit: true,
@@ -73,8 +81,9 @@
   },
   {
     id: "two-six",
-    title: "Two Six",
-    artist: "J. Cole",
+    audioUrl: "/api/media/tracks/two-six.mp3",
+    title: "Chance",
+    artist: "17jgm8THiQmza9TQs0UajM",
     durationSec: 196,
     explicit: true,
     cover: "linear-gradient(135deg, #e99f7d 0%, #d67f61 45%, #6f83a9 100%)",
@@ -82,8 +91,9 @@
   },
   {
     id: "y-si-peleamos",
-    title: "Y si peleamos",
-    artist: "Easykid, Kali Uchis",
+    audioUrl: "/api/media/tracks/y-si-peleamos.mp3",
+    title: "FRAGILE",
+    artist: "5MOcdMulPi5vpiKNDDUJoi",
     durationSec: 192,
     explicit: false,
     cover: "linear-gradient(135deg, #504c53 0%, #6e686f 45%, #252428 100%)",
@@ -91,8 +101,9 @@
   },
   {
     id: "cry",
-    title: "Cry",
-    artist: "Charlie Puth, Kenny G",
+    audioUrl: "/api/media/tracks/cry.mp3",
+    title: "Hatestreakk",
+    artist: "7wZlQiaVkYg7kiadfqFNpX",
     durationSec: 187,
     explicit: false,
     cover: "linear-gradient(135deg, #cb3f45 0%, #d6635d 45%, #4e2824 100%)",
@@ -100,8 +111,9 @@
   },
   {
     id: "homewrecker",
-    title: "Homewrecker",
-    artist: "sombr",
+    audioUrl: "/api/media/tracks/homewrecker.mp3",
+    title: "sv moscow",
+    artist: "королевский XVII",
     durationSec: 209,
     explicit: false,
     cover: "linear-gradient(135deg, #9b9998 0%, #c5c2bb 35%, #212226 100%)",
@@ -109,7 +121,8 @@
   },
   {
     id: "cook",
-    title: "COOK",
+    audioUrl: "/api/media/tracks/cook.mp3",
+    title: "ПО ПРИЧИНЕ УВАЖИТЕЛЬНОЙ",
     artist: "Sofi Tukker, J Balvin",
     durationSec: 170,
     explicit: false,
@@ -118,7 +131,8 @@
   },
   {
     id: "die-for-me",
-    title: "Die For Me",
+    audioUrl: "/api/media/tracks/die-for-me.mp3",
+    title: "Anonymous Ember ☢️ХУЙ ТЕРМИНАТОР☢️ telegram @painhubmedia",
     artist: "ZAYN",
     durationSec: 180,
     explicit: true,
@@ -127,8 +141,9 @@
   },
   {
     id: "time-after-time",
-    title: "Time After Time",
-    artist: "EJAE",
+    audioUrl: "/api/media/tracks/time-after-time.mp3",
+    title: "SO SWAG",
+    artist: "dekma, dmtboy",
     durationSec: 168,
     explicit: false,
     cover: "linear-gradient(135deg, #deb0a2 0%, #f0cbb6 40%, #7e6153 100%)",
@@ -413,3 +428,4 @@ export const initialQueue = [
 export const initialLikedIds = ["city-rain", "close-to-fire", "cobalt", "homewrecker"];
 
 export const vibeTags = ["Late Night", "Focus", "Trap Soul", "Guitar", "Ambient", "Pop"];
+
