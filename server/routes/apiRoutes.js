@@ -42,6 +42,9 @@ const authRateLimiter = createRateLimiter({
   max: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 20),
   keyResolver: (req) => `auth:${req.ip}`,
 });
+const MAX_PLAYLIST_TITLE_LENGTH = 80;
+const MAX_PLAYLIST_DESCRIPTION_LENGTH = 280;
+const MAX_PLAYLIST_COVER_LENGTH = 2_000_000;
 
 function parseLimit(value, fallback = 12) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -65,6 +68,37 @@ function requestUserId(req) {
 
 function requestUser(req) {
   return req.auth?.user ?? null;
+}
+
+function hasOwnField(payload, field) {
+  return Object.prototype.hasOwnProperty.call(payload ?? {}, field);
+}
+
+function parsePlaylistTitle(value) {
+  const title = normalizeTitle(value);
+  if (!title) {
+    throw new HttpError(400, "Playlist title is required.");
+  }
+  if (title.length > MAX_PLAYLIST_TITLE_LENGTH) {
+    throw new HttpError(400, `Playlist title must be ${MAX_PLAYLIST_TITLE_LENGTH} characters or fewer.`);
+  }
+  return title;
+}
+
+function parsePlaylistDescription(value) {
+  const description = normalizeTitle(value);
+  if (description.length > MAX_PLAYLIST_DESCRIPTION_LENGTH) {
+    throw new HttpError(400, `Playlist description must be ${MAX_PLAYLIST_DESCRIPTION_LENGTH} characters or fewer.`);
+  }
+  return description;
+}
+
+function parsePlaylistCover(value) {
+  const cover = normalizeTitle(value);
+  if (cover.length > MAX_PLAYLIST_COVER_LENGTH) {
+    throw new HttpError(400, "Playlist cover payload is too large.");
+  }
+  return cover;
 }
 
 function canReadPlaylist(playlist, userId) {
@@ -95,14 +129,14 @@ async function ensureOwnedCustomPlaylist(client, playlistId, userId) {
   );
 
   if (!rowCount) {
-    throw new HttpError(404, "Плейлист не найден.");
+    throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
   }
 }
 
 async function ensureTrackExists(client, trackId) {
   const { rowCount } = await client.query("select id from tracks where id = $1 limit 1;", [trackId]);
   if (!rowCount) {
-    throw new HttpError(404, "Трек не найден.");
+    throw new HttpError(404, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
   }
 }
 
@@ -123,7 +157,7 @@ export function createApiRouter() {
       const displayName = normalizeTitle(req.body?.displayName);
 
       if (!username || !password) {
-        throw new HttpError(400, "Логин и пароль обязательны.");
+        throw new HttpError(400, "Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.");
       }
 
       const user = await createUserAccount({ username, password, displayName });
@@ -147,12 +181,12 @@ export function createApiRouter() {
       const username = normalizeTitle(req.body?.username);
       const password = String(req.body?.password ?? "");
       if (!username || !password) {
-        throw new HttpError(400, "Логин и пароль обязательны.");
+        throw new HttpError(400, "Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.");
       }
 
       const user = await verifyUserCredentials({ username, password });
       if (!user) {
-        throw new HttpError(401, "Неверный логин или пароль.");
+        throw new HttpError(401, "РќРµРІРµСЂРЅС‹Р№ Р»РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ.");
       }
 
       const session = await createSession(user.id);
@@ -214,10 +248,9 @@ export function createApiRouter() {
     "/user-playlists",
     requireAuth,
     asyncHandler(async (req, res) => {
-      const title = normalizeTitle(req.body?.title);
-      if (!title) {
-        throw new HttpError(400, "Название плейлиста не может быть пустым.");
-      }
+      const title = parsePlaylistTitle(req.body?.title);
+      const description = parsePlaylistDescription(req.body?.description);
+      const coverInput = parsePlaylistCover(req.body?.cover);
 
       const id = createUserPlaylistId();
       const createdAt = Date.now();
@@ -225,8 +258,8 @@ export function createApiRouter() {
       const playlist = {
         id,
         title,
-        subtitle: CUSTOM_PLAYLIST_SUBTITLE,
-        cover: coverForPlaylist(id),
+        subtitle: description || CUSTOM_PLAYLIST_SUBTITLE,
+        cover: coverInput || coverForPlaylist(id),
         trackIds: [],
         createdAt,
         userId,
@@ -252,33 +285,56 @@ export function createApiRouter() {
     asyncHandler(async (req, res) => {
       const playlistId = req.params.playlistId;
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "Можно переименовать только пользовательский плейлист.");
+        throw new HttpError(400, "РњРѕР¶РЅРѕ РёР·РјРµРЅСЏС‚СЊ С‚РѕР»СЊРєРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
       }
 
-      const title = normalizeTitle(req.body?.title);
-      if (!title) {
-        throw new HttpError(400, "Название плейлиста не может быть пустым.");
+      const payload = req.body ?? {};
+      const hasTitle = hasOwnField(payload, "title");
+      const hasDescription = hasOwnField(payload, "description");
+      const hasCover = hasOwnField(payload, "cover");
+
+      if (!hasTitle && !hasDescription && !hasCover) {
+        throw new HttpError(400, "РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ.");
       }
+
+      const nextTitle = hasTitle ? parsePlaylistTitle(payload.title) : null;
+      const parsedDescription = hasDescription ? parsePlaylistDescription(payload.description) : "";
+      const nextSubtitle = hasDescription ? parsedDescription || CUSTOM_PLAYLIST_SUBTITLE : null;
+      const parsedCover = hasCover ? parsePlaylistCover(payload.cover) : "";
+      const nextCover = hasCover ? parsedCover || coverForPlaylist(playlistId) : null;
 
       const { rowCount } = await pool.query(
         `
         update playlists
-        set title = $2
+        set
+          title = case when $2::boolean then $3 else title end,
+          subtitle = case when $4::boolean then $5 else subtitle end,
+          cover = case when $6::boolean then $7 else cover end
         where id = $1
-          and (is_custom = true or id like $3)
-          and user_id = $4;
+          and (is_custom = true or id like $8)
+          and user_id = $9;
       `,
-        [playlistId, title, `${USER_PLAYLIST_ID_PREFIX}%`, req.auth.userId]
+        [
+          playlistId,
+          hasTitle,
+          nextTitle,
+          hasDescription,
+          nextSubtitle,
+          hasCover,
+          nextCover,
+          `${USER_PLAYLIST_ID_PREFIX}%`,
+          req.auth.userId,
+        ]
       );
 
       if (!rowCount) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       res.json(playlist);
@@ -291,7 +347,7 @@ export function createApiRouter() {
     asyncHandler(async (req, res) => {
       const playlistId = req.params.playlistId;
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "Можно удалить только пользовательский плейлист.");
+        throw new HttpError(400, "РњРѕР¶РЅРѕ СѓРґР°Р»РёС‚СЊ С‚РѕР»СЊРєРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
       }
 
       const { rowCount } = await pool.query(
@@ -305,7 +361,7 @@ export function createApiRouter() {
       );
 
       if (!rowCount) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       invalidateCatalogCache();
@@ -321,10 +377,10 @@ export function createApiRouter() {
       const trackId = normalizeTitle(req.body?.trackId);
 
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "Трек можно добавлять только в пользовательский плейлист.");
+        throw new HttpError(400, "РўСЂРµРє РјРѕР¶РЅРѕ РґРѕР±Р°РІР»СЏС‚СЊ С‚РѕР»СЊРєРѕ РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
       }
       if (!trackId) {
-        throw new HttpError(400, "Трек не найден.");
+        throw new HttpError(400, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       await withTransaction(async (client) => {
@@ -364,7 +420,7 @@ export function createApiRouter() {
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       res.json(playlist);
@@ -379,7 +435,7 @@ export function createApiRouter() {
       const trackId = req.params.trackId;
 
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "Трек можно удалять только из пользовательского плейлиста.");
+        throw new HttpError(400, "РўСЂРµРє РјРѕР¶РЅРѕ СѓРґР°Р»СЏС‚СЊ С‚РѕР»СЊРєРѕ РёР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРіРѕ РїР»РµР№Р»РёСЃС‚Р°.");
       }
 
       await withTransaction(async (client) => {
@@ -419,7 +475,7 @@ export function createApiRouter() {
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       res.json(playlist);
@@ -523,10 +579,22 @@ export function createApiRouter() {
     "/library-feed",
     asyncHandler(async (req, res) => {
       const { playlists, artists } = await fetchCatalog();
-      const visiblePlaylists = filterPlaylistsForUser(playlists, requestUserId(req));
+      const userId = requestUserId(req);
+      const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
+      const myPlaylists = userId
+        ? visiblePlaylists.filter((playlist) => isCustomPlaylist(playlist) && playlist.userId === userId)
+        : [];
+      let followedArtists = [];
+
+      if (userId) {
+        const userState = await fetchUserState(userId);
+        const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
+        followedArtists = artists.filter((artist) => followedArtistIdSet.has(artist.id));
+      }
+
       res.json({
-        playlists: visiblePlaylists,
-        artists,
+        playlists: myPlaylists,
+        artists: followedArtists,
       });
     })
   );
@@ -549,7 +617,7 @@ export function createApiRouter() {
 
       const playlist = playlists.find((item) => item.id === playlistId);
       if (!canReadPlaylist(playlist, userId)) {
-        throw new HttpError(404, "Плейлист не найден.");
+        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
@@ -577,7 +645,7 @@ export function createApiRouter() {
       const { artists, tracks, trackMap, playlists } = await fetchCatalog();
       const track = trackMap[trackId];
       if (!track) {
-        throw new HttpError(404, "Трек не найден.");
+        throw new HttpError(404, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       const userId = requestUserId(req);
@@ -618,7 +686,7 @@ export function createApiRouter() {
       const { artists, tracks, trackMap, playlists, releases } = await fetchCatalog();
       const artist = artists.find((item) => item.id === artistId);
       if (!artist) {
-        throw new HttpError(404, "Исполнитель не найден.");
+        throw new HttpError(404, "РСЃРїРѕР»РЅРёС‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       const artistTracks = tracks.filter((track) => trackHasArtist(track, artist.name));
@@ -678,7 +746,7 @@ export function createApiRouter() {
       const { artists, trackMap, playlists, releases } = await fetchCatalog();
       const release = releases.find((item) => item.id === releaseId);
       if (!release) {
-        throw new HttpError(404, "Релиз не найден.");
+        throw new HttpError(404, "Р РµР»РёР· РЅРµ РЅР°Р№РґРµРЅ.");
       }
 
       const artist = artists.find((item) => item.id === release.artistId) ?? null;
@@ -732,3 +800,5 @@ export function createApiRouter() {
 
   return router;
 }
+
+

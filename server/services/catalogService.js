@@ -11,7 +11,11 @@ import {
 } from "../../src/data/musicData.js";
 export const USER_PLAYLIST_ID_PREFIX = "upl-";
 export const DEFAULT_ERROR_MESSAGE = "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ. РџРѕРїСЂРѕР±СѓР№ РѕР±РЅРѕРІРёС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ.";
-export const CUSTOM_PLAYLIST_SUBTITLE = "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚";
+export const CUSTOM_PLAYLIST_SUBTITLE = "Custom playlist";
+const LEGACY_CUSTOM_PLAYLIST_SUBTITLES = new Set([
+  "Пользовательский плейлист",
+  "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚",
+]);
 const customPlaylistCovers = [
   "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)",
   "linear-gradient(135deg, #f28f6e 0%, #f8d0a5 44%, #7a3b2f 100%)",
@@ -55,6 +59,14 @@ export function normalizeArtistName(value = "") {
 
 export function normalizeTitle(value = "") {
   return String(value ?? "").trim();
+}
+
+export function normalizePlaylistSubtitle(value = "") {
+  const subtitle = normalizeTitle(value);
+  if (LEGACY_CUSTOM_PLAYLIST_SUBTITLES.has(subtitle)) {
+    return CUSTOM_PLAYLIST_SUBTITLE;
+  }
+  return subtitle;
 }
 
 export function splitArtistNames(value = "") {
@@ -540,7 +552,7 @@ export async function fetchPlaylists() {
   const playlists = rows.map((row) => ({
     id: row.id,
     title: row.title,
-    subtitle: row.subtitle,
+    subtitle: normalizePlaylistSubtitle(row.subtitle),
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),
@@ -774,7 +786,7 @@ export async function searchCatalogInDatabase({
   const playlists = rawPlaylists.slice(0, safeLimit).map((row) => ({
     id: row.id,
     title: row.title,
-    subtitle: row.subtitle,
+    subtitle: normalizePlaylistSubtitle(row.subtitle),
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),
@@ -886,7 +898,7 @@ export async function getPlaylistById(playlistId) {
   return {
     id: row.id,
     title: row.title,
-    subtitle: row.subtitle,
+    subtitle: normalizePlaylistSubtitle(row.subtitle),
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),

@@ -12,6 +12,7 @@ import {
   FiTrendingUp,
   FiZap,
 } from "react-icons/fi";
+import { BsFillPauseFill, BsFillPlayFill } from "react-icons/bs";
 import styles from "./HomePage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -84,7 +85,7 @@ export default function HomePage() {
 
             <div className={styles.heroActions}>
               <button type="button" className={styles.primaryButton} onClick={togglePlay}>
-                <FiPlay />
+                {isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
                 {isPlaying ? "Пауза" : "Слушать волну"}
               </button>
               <button type="button" className={styles.secondaryButton} onClick={() => navigate("/library")}>
@@ -176,7 +177,12 @@ export default function HomePage() {
               </div>
               <div className={styles.actionGrid}>
                 {data.quickActions.map((item) => {
-                  const Icon = actionIcons[item.id] ?? FiMusic;
+                  const Icon =
+                    item.id === "wave"
+                      ? isPlaying
+                        ? BsFillPauseFill
+                        : BsFillPlayFill
+                      : actionIcons[item.id] ?? FiMusic;
                   const onClick =
                     item.id === "liked"
                       ? () => navigate("/liked")

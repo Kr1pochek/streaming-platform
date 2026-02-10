@@ -4,16 +4,16 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiList,
-  FiPause,
-  FiPlay,
   FiRepeat,
   FiShuffle,
   FiSkipBack,
   FiSkipForward,
   FiTrash2,
   FiVolume2,
+  FiVolumeX,
   FiX,
 } from "react-icons/fi";
+import { BsFillPauseFill, BsFillPlayFill } from "react-icons/bs";
 import { LuHeart, LuHeartOff } from "react-icons/lu";
 import Sidebar from "./Sidebar.jsx";
 import styles from "./AppLayout.module.css";
@@ -55,6 +55,7 @@ export default function AppLayout() {
   const queuePanelRef = useRef(null);
   const queueToggleRef = useRef(null);
   const toastTimerMapRef = useRef(new Map());
+  const lastNonZeroVolumeRef = useRef(volume > 0 ? volume : 70);
 
   const canLikeCurrent = Boolean(currentTrack && !isCurrentTrackLiked);
   const canUnlikeCurrent = Boolean(currentTrack && isCurrentTrackLiked);
@@ -66,6 +67,31 @@ export default function AppLayout() {
       : repeatMode === "all"
         ? "Повтор очереди"
         : "Включить повтор";
+
+  useEffect(() => {
+    if (volume > 0) {
+      lastNonZeroVolumeRef.current = volume;
+    }
+  }, [volume]);
+
+  const handleVolumeChange = (nextVolume) => {
+    const safeVolume = Number(nextVolume);
+    if (Number.isFinite(safeVolume) && safeVolume > 0) {
+      lastNonZeroVolumeRef.current = safeVolume;
+    }
+    setVolume(safeVolume);
+  };
+
+  const handleToggleMute = () => {
+    if (volume > 0) {
+      lastNonZeroVolumeRef.current = volume;
+      setVolume(0);
+      return;
+    }
+
+    const restoredVolume = Number(lastNonZeroVolumeRef.current);
+    setVolume(Number.isFinite(restoredVolume) && restoredVolume > 0 ? restoredVolume : 70);
+  };
 
   useEffect(() => {
     if (!queueOpen) {
@@ -277,7 +303,7 @@ export default function AppLayout() {
                 aria-pressed={isPlaying}
                 onClick={togglePlay}
               >
-                {isPlaying ? <FiPause /> : <FiPlay />}
+                {isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
               </button>
               <button type="button" className={styles.iconButton} aria-label="Следующий трек" onClick={nextTrack}>
                 <FiSkipForward />
@@ -327,8 +353,14 @@ export default function AppLayout() {
             >
               <FiList />
             </button>
-            <button type="button" className={styles.iconButton} aria-label="Громкость">
-              <FiVolume2 />
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label={volume > 0 ? "Выключить звук" : "Включить звук"}
+              aria-pressed={volume === 0}
+              onClick={handleToggleMute}
+            >
+              {volume > 0 ? <FiVolume2 /> : <FiVolumeX />}
             </button>
             <input
               className={`${styles.range} ${styles.volume}`}
@@ -336,7 +368,7 @@ export default function AppLayout() {
               min="0"
               max="100"
               value={volume}
-              onChange={(event) => setVolume(Number(event.target.value))}
+              onChange={(event) => handleVolumeChange(event.target.value)}
             />
           </div>
         </footer>

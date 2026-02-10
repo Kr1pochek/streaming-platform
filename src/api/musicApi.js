@@ -77,24 +77,49 @@ async function request(path, options = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error("Изображение слишком большое. Выбери файл поменьше.");
+    }
     throw new Error(payload?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ. РџРѕРїСЂРѕР±СѓР№ РѕР±РЅРѕРІРёС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ.");
   }
 
   return payload;
 }
 
-export async function createUserPlaylist(title) {
+function normalizeUserPlaylistPayload(payloadOrTitle) {
+  if (typeof payloadOrTitle === "string") {
+    return { title: payloadOrTitle };
+  }
+
+  if (payloadOrTitle && typeof payloadOrTitle === "object") {
+    return {
+      title: payloadOrTitle.title,
+      description: payloadOrTitle.description,
+      cover: payloadOrTitle.cover,
+    };
+  }
+
+  return {};
+}
+
+export async function createUserPlaylist(payloadOrTitle) {
+  const payload = normalizeUserPlaylistPayload(payloadOrTitle);
   return request("/user-playlists", {
     method: "POST",
-    body: { title },
+    body: payload,
+  });
+}
+
+export async function updateUserPlaylist(playlistId, payloadOrTitle) {
+  const payload = normalizeUserPlaylistPayload(payloadOrTitle);
+  return request(`/user-playlists/${encodeURIComponent(playlistId)}`, {
+    method: "PATCH",
+    body: payload,
   });
 }
 
 export async function renameUserPlaylist(playlistId, title) {
-  return request(`/user-playlists/${encodeURIComponent(playlistId)}`, {
-    method: "PATCH",
-    body: { title },
-  });
+  return updateUserPlaylist(playlistId, { title });
 }
 
 export async function deleteUserPlaylist(playlistId) {
