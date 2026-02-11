@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
-import { createRateLimiter } from "./middleware/rateLimit.js";
+import { createRateLimiter, resolveRequestIp } from "./middleware/rateLimit.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { createApiRouter } from "./routes/apiRoutes.js";
@@ -39,12 +39,31 @@ function createCorsOptions() {
   };
 }
 
+export function parseTrustProxySetting(value = process.env.TRUST_PROXY) {
+  const configured = String(value ?? "").trim();
+  if (!configured) {
+    return false;
+  }
+
+  const normalized = configured.toLowerCase();
+  if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+    return false;
+  }
+  if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+    return true;
+  }
+  if (/^\d+$/.test(configured)) {
+    return Number.parseInt(configured, 10);
+  }
+  return configured;
+}
+
 export function createApp() {
   const app = express();
   const serveClientBuild = shouldServeClientBuild();
   const jsonLimit = String(process.env.API_JSON_LIMIT ?? "4mb");
 
-  app.set("trust proxy", true);
+  app.set("trust proxy", parseTrustProxySetting());
   app.use(requestLogger);
   app.use(cors(createCorsOptions()));
   app.use(express.json({ limit: jsonLimit }));
@@ -53,7 +72,9 @@ export function createApp() {
     createRateLimiter({
       windowMs: 60_000,
       max: Number(process.env.API_RATE_LIMIT_MAX ?? 180),
-      keyResolver: (req) => `api:${req.ip}`,
+      maxEntries: Number(process.env.API_RATE_LIMIT_MAX_ENTRIES ?? 20_000),
+      cleanupIntervalMs: Number(process.env.API_RATE_LIMIT_CLEANUP_MS ?? 30_000),
+      keyResolver: (req) => `api:${resolveRequestIp(req)}`,
     })
   );
   app.use("/api/media", express.static(mediaDirectory));
@@ -67,7 +88,7 @@ export function createApp() {
   }
 
   app.use((_req, _res, next) => {
-    next(new HttpError(404, "Ресурс не найден."));
+    next(new HttpError(404, "Resource not found."));
   });
   app.use(errorHandler);
   return app;

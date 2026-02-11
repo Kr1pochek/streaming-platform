@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { tracks } from "../src/data/musicData.js";
+import { tracks } from "../shared/musicData.js";
 
 const allowedExtensions = new Set([".wav", ".mp3", ".ogg", ".m4a", ".flac"]);
 const extensionPriority = [".wav", ".mp3", ".ogg", ".m4a", ".flac"];
@@ -242,7 +242,7 @@ function main() {
   const rootDirectory = process.cwd();
   const sourceDirectory = path.resolve(rootDirectory, args.from);
   const destinationDirectory = path.resolve(rootDirectory, "public/audio/tracks");
-  const dataFilePath = path.resolve(rootDirectory, "src/data/musicData.js");
+  const dataFilePath = path.resolve(rootDirectory, "shared/musicData.js");
 
   if (!fs.existsSync(sourceDirectory) || !fs.statSync(sourceDirectory).isDirectory()) {
     console.error(`Source directory not found: ${sourceDirectory}`);

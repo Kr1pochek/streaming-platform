@@ -41,7 +41,7 @@ export async function optionalAuth(req, _res, next) {
 
 export function requireAuth(req, _res, next) {
   if (!req.auth?.userId) {
-    next(new HttpError(401, "Нужна авторизация."));
+    next(new HttpError(401, "Authentication required."));
     return;
   }
   next();

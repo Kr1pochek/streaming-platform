@@ -336,6 +336,7 @@ export default function AppLayout() {
                 min="0"
                 max="100"
                 value={progressPercent}
+                style={{ "--range-progress": `${progressPercent}%` }}
                 onChange={(event) => setProgressPercent(Number(event.target.value))}
               />
               <span className={styles.time}>{durationLabel}</span>

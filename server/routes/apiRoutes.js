@@ -1,14 +1,17 @@
+import fs from "node:fs";
+import path from "node:path";
 import express from "express";
+import multer from "multer";
 import {
   initialQueue,
   quickActions,
   searchCollections,
   showcases,
   vibeTags,
-} from "../../src/data/musicData.js";
+} from "../../shared/musicData.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
-import { createRateLimiter } from "../middleware/rateLimit.js";
+import { createRateLimiter, resolveRequestIp } from "../middleware/rateLimit.js";
 import {
   createSession,
   createUserAccount,
@@ -25,26 +28,59 @@ import {
   fetchCatalog,
   getPlaylistById,
   getPrimaryArtistForTrack,
+  hlsManifestUrlForTrack,
+  hasHlsManifestForTrack,
   invalidateCatalogCache,
   isCustomPlaylist,
   isCustomPlaylistId,
   normalizeTitle,
   pool,
+  resolveMediaFilePath,
+  streamRoutePrefix,
   searchCatalogInDatabase,
   trackHasArtist,
   withTransaction,
 } from "../services/catalogService.js";
+import {
+  createSignedStreamUrl,
+  getPlaybackUrlTtlMs,
+  validateSignedPlaybackRequest,
+} from "../services/playbackService.js";
 import { getSmartRecommendations } from "../services/recommendationService.js";
 import { fetchUserState, updateUserState } from "../services/userStateService.js";
+import { ingestUploadedTrack } from "../services/trackUploadService.js";
 
 const authRateLimiter = createRateLimiter({
   windowMs: 60_000,
   max: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 20),
-  keyResolver: (req) => `auth:${req.ip}`,
+  maxEntries: Number(process.env.AUTH_RATE_LIMIT_MAX_ENTRIES ?? 5_000),
+  cleanupIntervalMs: Number(process.env.AUTH_RATE_LIMIT_CLEANUP_MS ?? 30_000),
+  keyResolver: (req) => `auth:${resolveRequestIp(req)}`,
 });
 const MAX_PLAYLIST_TITLE_LENGTH = 80;
 const MAX_PLAYLIST_DESCRIPTION_LENGTH = 280;
 const MAX_PLAYLIST_COVER_LENGTH = 2_000_000;
+const DEFAULT_STREAM_CHUNK_SIZE = 1024 * 1024;
+const MAX_STREAM_CHUNK_SIZE = 8 * 1024 * 1024;
+const mimeTypeByExtension = new Map([
+  [".mp3", "audio/mpeg"],
+  [".wav", "audio/wav"],
+  [".ogg", "audio/ogg"],
+  [".m4a", "audio/mp4"],
+  [".flac", "audio/flac"],
+]);
+const TRACK_UPLOAD_MAX_BYTES = Number(process.env.TRACK_UPLOAD_MAX_BYTES ?? 80 * 1024 * 1024);
+const trackUploadTempDirectory = path.resolve(
+  process.cwd(),
+  String(process.env.TRACK_UPLOAD_TEMP_DIR ?? "tmp/uploads")
+);
+fs.mkdirSync(trackUploadTempDirectory, { recursive: true });
+const trackUploadMiddleware = multer({
+  dest: trackUploadTempDirectory,
+  limits: {
+    fileSize: TRACK_UPLOAD_MAX_BYTES,
+  },
+});
 
 function parseLimit(value, fallback = 12) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -72,6 +108,97 @@ function requestUser(req) {
 
 function hasOwnField(payload, field) {
   return Object.prototype.hasOwnProperty.call(payload ?? {}, field);
+}
+
+function parseChunkSize() {
+  const raw = Number.parseInt(String(process.env.STREAM_CHUNK_SIZE ?? DEFAULT_STREAM_CHUNK_SIZE), 10);
+  if (!Number.isFinite(raw)) {
+    return DEFAULT_STREAM_CHUNK_SIZE;
+  }
+  return Math.min(Math.max(raw, 64 * 1024), MAX_STREAM_CHUNK_SIZE);
+}
+
+function contentTypeForFile(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  return mimeTypeByExtension.get(extension) ?? "application/octet-stream";
+}
+
+function streamFileRange(req, res, filePath, fileSize, readStreamFactory = fs.createReadStream) {
+  const rangeHeader = String(req.headers.range ?? "").trim();
+  const contentType = contentTypeForFile(filePath);
+  const chunkSize = parseChunkSize();
+
+  if (!rangeHeader || !rangeHeader.startsWith("bytes=")) {
+    const fallbackEnd = Math.min(fileSize - 1, chunkSize - 1);
+    const responseLength = fallbackEnd + 1;
+    res.status(206);
+    res.set({
+      "Content-Type": contentType,
+      "Accept-Ranges": "bytes",
+      "Content-Length": responseLength,
+      "Content-Range": `bytes 0-${fallbackEnd}/${fileSize}`,
+      "Cache-Control": "no-store",
+    });
+    readStreamFactory(filePath, { start: 0, end: fallbackEnd }).pipe(res);
+    return;
+  }
+
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader);
+  if (!match) {
+    res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+    return;
+  }
+
+  const [, startText, endText] = match;
+  let start = 0;
+  let end = fileSize - 1;
+
+  if (!startText && !endText) {
+    res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+    return;
+  }
+
+  if (!startText && endText) {
+    const suffixLength = Number.parseInt(endText, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+      res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+      return;
+    }
+    start = Math.max(fileSize - suffixLength, 0);
+  } else {
+    start = Number.parseInt(startText, 10);
+    if (!Number.isFinite(start) || start < 0) {
+      res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+      return;
+    }
+  }
+
+  if (endText) {
+    const parsedEnd = Number.parseInt(endText, 10);
+    if (!Number.isFinite(parsedEnd) || parsedEnd < 0) {
+      res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+      return;
+    }
+    end = Math.min(parsedEnd, fileSize - 1);
+  } else {
+    end = Math.min(start + chunkSize - 1, fileSize - 1);
+  }
+
+  if (start >= fileSize || end < start) {
+    res.status(416).set("Content-Range", `bytes */${fileSize}`).end();
+    return;
+  }
+
+  const responseLength = end - start + 1;
+  res.status(206);
+  res.set({
+    "Content-Type": contentType,
+    "Accept-Ranges": "bytes",
+    "Content-Length": responseLength,
+    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+    "Cache-Control": "no-store",
+  });
+  readStreamFactory(filePath, { start, end }).pipe(res);
 }
 
 function parsePlaylistTitle(value) {
@@ -129,18 +256,24 @@ async function ensureOwnedCustomPlaylist(client, playlistId, userId) {
   );
 
   if (!rowCount) {
-    throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+    throw new HttpError(404, "Playlist not found.");
   }
 }
 
 async function ensureTrackExists(client, trackId) {
   const { rowCount } = await client.query("select id from tracks where id = $1 limit 1;", [trackId]);
   if (!rowCount) {
-    throw new HttpError(404, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
+    throw new HttpError(404, "Track not found.");
   }
 }
 
-export function createApiRouter() {
+export function createApiRouter({
+  catalogFetcher = fetchCatalog,
+  mediaPathResolver = resolveMediaFilePath,
+  statFile = fs.statSync,
+  readStreamFactory = fs.createReadStream,
+  nowProvider = () => Date.now(),
+} = {}) {
   const router = express.Router();
   router.use(optionalAuth);
 
@@ -157,7 +290,7 @@ export function createApiRouter() {
       const displayName = normalizeTitle(req.body?.displayName);
 
       if (!username || !password) {
-        throw new HttpError(400, "Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.");
+        throw new HttpError(400, "Username and password are required.");
       }
 
       const user = await createUserAccount({ username, password, displayName });
@@ -181,12 +314,12 @@ export function createApiRouter() {
       const username = normalizeTitle(req.body?.username);
       const password = String(req.body?.password ?? "");
       if (!username || !password) {
-        throw new HttpError(400, "Р›РѕРіРёРЅ Рё РїР°СЂРѕР»СЊ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹.");
+        throw new HttpError(400, "Username and password are required.");
       }
 
       const user = await verifyUserCredentials({ username, password });
       if (!user) {
-        throw new HttpError(401, "РќРµРІРµСЂРЅС‹Р№ Р»РѕРіРёРЅ РёР»Рё РїР°СЂРѕР»СЊ.");
+        throw new HttpError(401, "Invalid username or password.");
       }
 
       const session = await createSession(user.id);
@@ -245,6 +378,46 @@ export function createApiRouter() {
   );
 
   router.post(
+    "/tracks/upload",
+    requireAuth,
+    trackUploadMiddleware.single("audio"),
+    asyncHandler(async (req, res) => {
+      const uploadedFile = req.file;
+      if (!uploadedFile) {
+        throw new HttpError(400, "Audio file is required.");
+      }
+
+      try {
+        const uploadResult = await ingestUploadedTrack({
+          uploadFilePath: uploadedFile.path,
+          originalFileName: uploadedFile.originalname,
+          mimetype: uploadedFile.mimetype,
+          trackId: req.body?.trackId,
+          title: req.body?.title,
+          artist: req.body?.artist,
+          durationSec: req.body?.durationSec,
+          explicit: req.body?.explicit,
+          cover: req.body?.cover,
+          tags: req.body?.tags,
+        });
+
+        const { trackMap } = await catalogFetcher();
+        const track = trackMap[uploadResult.id] ?? null;
+        if (!track) {
+          throw new HttpError(500, "Track was uploaded but is not available in catalog.");
+        }
+
+        res.status(201).json({
+          track,
+          hlsGenerated: uploadResult.hlsGenerated,
+        });
+      } finally {
+        fs.rmSync(uploadedFile.path, { force: true });
+      }
+    })
+  );
+
+  router.post(
     "/user-playlists",
     requireAuth,
     asyncHandler(async (req, res) => {
@@ -285,7 +458,7 @@ export function createApiRouter() {
     asyncHandler(async (req, res) => {
       const playlistId = req.params.playlistId;
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "РњРѕР¶РЅРѕ РёР·РјРµРЅСЏС‚СЊ С‚РѕР»СЊРєРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
+        throw new HttpError(400, "Only custom playlists can be edited.");
       }
 
       const payload = req.body ?? {};
@@ -294,7 +467,7 @@ export function createApiRouter() {
       const hasCover = hasOwnField(payload, "cover");
 
       if (!hasTitle && !hasDescription && !hasCover) {
-        throw new HttpError(400, "РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ.");
+        throw new HttpError(400, "No fields to update.");
       }
 
       const nextTitle = hasTitle ? parsePlaylistTitle(payload.title) : null;
@@ -328,13 +501,13 @@ export function createApiRouter() {
       );
 
       if (!rowCount) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       res.json(playlist);
@@ -347,7 +520,7 @@ export function createApiRouter() {
     asyncHandler(async (req, res) => {
       const playlistId = req.params.playlistId;
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "РњРѕР¶РЅРѕ СѓРґР°Р»РёС‚СЊ С‚РѕР»СЊРєРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
+        throw new HttpError(400, "Only custom playlists can be deleted.");
       }
 
       const { rowCount } = await pool.query(
@@ -361,7 +534,7 @@ export function createApiRouter() {
       );
 
       if (!rowCount) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       invalidateCatalogCache();
@@ -377,10 +550,10 @@ export function createApiRouter() {
       const trackId = normalizeTitle(req.body?.trackId);
 
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "РўСЂРµРє РјРѕР¶РЅРѕ РґРѕР±Р°РІР»СЏС‚СЊ С‚РѕР»СЊРєРѕ РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚.");
+        throw new HttpError(400, "Tracks can only be added to custom playlists.");
       }
       if (!trackId) {
-        throw new HttpError(400, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(400, "Track not found.");
       }
 
       await withTransaction(async (client) => {
@@ -420,7 +593,7 @@ export function createApiRouter() {
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       res.json(playlist);
@@ -435,7 +608,7 @@ export function createApiRouter() {
       const trackId = req.params.trackId;
 
       if (!isCustomPlaylistId(playlistId)) {
-        throw new HttpError(400, "РўСЂРµРє РјРѕР¶РЅРѕ СѓРґР°Р»СЏС‚СЊ С‚РѕР»СЊРєРѕ РёР· РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРіРѕ РїР»РµР№Р»РёСЃС‚Р°.");
+        throw new HttpError(400, "Tracks can only be removed from custom playlists.");
       }
 
       await withTransaction(async (client) => {
@@ -475,7 +648,7 @@ export function createApiRouter() {
       invalidateCatalogCache();
       const playlist = await getPlaylistById(playlistId);
       if (!canReadPlaylist(playlist, req.auth.userId)) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       res.json(playlist);
@@ -617,7 +790,7 @@ export function createApiRouter() {
 
       const playlist = playlists.find((item) => item.id === playlistId);
       if (!canReadPlaylist(playlist, userId)) {
-        throw new HttpError(404, "РџР»РµР№Р»РёСЃС‚ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Playlist not found.");
       }
 
       const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
@@ -639,13 +812,98 @@ export function createApiRouter() {
   );
 
   router.get(
+    "/playback/:trackId",
+    asyncHandler(async (req, res) => {
+      const trackId = normalizeTitle(req.params.trackId);
+      if (!trackId) {
+        throw new HttpError(404, "Track not found.");
+      }
+
+      const { trackMap } = await catalogFetcher();
+      const track = trackMap[trackId];
+      if (!track) {
+        throw new HttpError(404, "Track not found.");
+      }
+
+      const sourceAudioUrl = normalizeTitle(track.rawAudioUrl ?? track.audioUrl);
+      if (!sourceAudioUrl) {
+        throw new HttpError(404, "Track source is not available.");
+      }
+
+      const nowMs = nowProvider();
+      const isLocalSource = Boolean(mediaPathResolver(sourceAudioUrl));
+      const streamDescriptor = isLocalSource
+        ? createSignedStreamUrl(trackId, {
+            basePath: streamRoutePrefix.slice(0, -1),
+            nowMs,
+            ttlMs: getPlaybackUrlTtlMs(),
+          })
+        : { url: sourceAudioUrl, expiresAt: null, signed: false };
+
+      const hlsUrl = hasHlsManifestForTrack(trackId) ? hlsManifestUrlForTrack(trackId) : null;
+      res.json({
+        trackId,
+        streamUrl: streamDescriptor.url,
+        expiresAt: streamDescriptor.expiresAt,
+        signed: streamDescriptor.signed,
+        hlsUrl,
+      });
+    })
+  );
+
+  router.get(
+    "/stream/:trackId",
+    asyncHandler(async (req, res) => {
+      const trackId = normalizeTitle(req.params.trackId);
+      if (!trackId) {
+        throw new HttpError(404, "Track not found.");
+      }
+
+      const playbackValidation = validateSignedPlaybackRequest({
+        trackId,
+        signature: req.query.sig,
+        expiresAt: req.query.exp,
+        nowMs: nowProvider(),
+      });
+      if (!playbackValidation.ok) {
+        throw new HttpError(playbackValidation.status ?? 403, playbackValidation.message ?? "Forbidden.");
+      }
+
+      const { trackMap } = await catalogFetcher();
+      const track = trackMap[trackId];
+      if (!track) {
+        throw new HttpError(404, "Track not found.");
+      }
+
+      const sourceAudioUrl = normalizeTitle(track.rawAudioUrl ?? track.audioUrl);
+      const localMediaPath = mediaPathResolver(sourceAudioUrl);
+      if (!localMediaPath) {
+        throw new HttpError(400, "Track source is not available for local streaming.");
+      }
+
+      let fileStats;
+      try {
+        fileStats = statFile(localMediaPath);
+      } catch {
+        throw new HttpError(404, "Audio file is missing.");
+      }
+
+      if (!fileStats.isFile()) {
+        throw new HttpError(404, "Audio file is missing.");
+      }
+
+      streamFileRange(req, res, localMediaPath, fileStats.size, readStreamFactory);
+    })
+  );
+
+  router.get(
     "/tracks/:trackId",
     asyncHandler(async (req, res) => {
       const { trackId } = req.params;
       const { artists, tracks, trackMap, playlists } = await fetchCatalog();
       const track = trackMap[trackId];
       if (!track) {
-        throw new HttpError(404, "РўСЂРµРє РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Track not found.");
       }
 
       const userId = requestUserId(req);
@@ -686,7 +944,7 @@ export function createApiRouter() {
       const { artists, tracks, trackMap, playlists, releases } = await fetchCatalog();
       const artist = artists.find((item) => item.id === artistId);
       if (!artist) {
-        throw new HttpError(404, "РСЃРїРѕР»РЅРёС‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Artist not found.");
       }
 
       const artistTracks = tracks.filter((track) => trackHasArtist(track, artist.name));
@@ -746,7 +1004,7 @@ export function createApiRouter() {
       const { artists, trackMap, playlists, releases } = await fetchCatalog();
       const release = releases.find((item) => item.id === releaseId);
       if (!release) {
-        throw new HttpError(404, "Р РµР»РёР· РЅРµ РЅР°Р№РґРµРЅ.");
+        throw new HttpError(404, "Release not found.");
       }
 
       const artist = artists.find((item) => item.id === release.artistId) ?? null;

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+ï»¿const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
 const AUTH_TOKEN_STORAGE_KEY = "music.auth.token.v1";
 let authToken = "";
 
@@ -72,15 +72,15 @@ async function request(path, options = {}) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new Error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð´ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒÑÑ Ðº API-ÑÐµÑ€Ð²ÐµÑ€Ñƒ.");
+    throw new Error("Could not connect to API server.");
   }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 413) {
-      throw new Error("Èçîáðàæåíèå ñëèøêîì áîëüøîå. Âûáåðè ôàéë ïîìåíüøå.");
+      throw new Error("Image is too large. Choose a smaller file.");
     }
-    throw new Error(payload?.message || "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð´Ð°Ð½Ð½Ñ‹Ðµ. ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹ Ð¾Ð±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑÑ‚Ñ€Ð°Ð½Ð¸Ñ†Ñƒ.");
+    throw new Error(payload?.message || "Failed to load data. Please refresh the page.");
   }
 
   return payload;
@@ -176,6 +176,10 @@ export async function fetchTrackPage(trackId) {
   return request(`/tracks/${encodeURIComponent(trackId)}`);
 }
 
+export async function fetchTrackPlayback(trackId) {
+  return request(`/playback/${encodeURIComponent(trackId)}`);
+}
+
 export async function fetchArtistPage(artistId) {
   return request(`/artists/${encodeURIComponent(artistId)}`);
 }
@@ -231,4 +235,60 @@ export async function updatePlayerState(payload) {
     method: "PUT",
     body: payload,
   });
+}
+
+export async function uploadTrack(payload = {}) {
+  const formData = new FormData();
+  const canCheckFile = typeof File !== "undefined";
+  const canCheckBlob = typeof Blob !== "undefined";
+  const isFile = canCheckFile && payload.audio instanceof File;
+  const isBlob = canCheckBlob && payload.audio instanceof Blob;
+  if (isFile || isBlob) {
+    const fileName = isFile ? payload.audio.name : "track.mp3";
+    formData.append("audio", payload.audio, fileName);
+  }
+
+  const optionalFields = [
+    ["trackId", payload.trackId],
+    ["title", payload.title],
+    ["artist", payload.artist],
+    ["durationSec", payload.durationSec],
+    ["explicit", payload.explicit],
+    ["cover", payload.cover],
+    ["tags", payload.tags],
+  ];
+  for (const [key, value] of optionalFields) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      formData.append(key, value.join(","));
+      continue;
+    }
+    formData.append(key, String(value));
+  }
+
+  let response;
+  try {
+    const headers = {};
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    response = await fetch(buildUrl("/tracks/upload"), {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+  } catch {
+    throw new Error("Could not connect to API server.");
+  }
+
+  const responsePayload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error("Audio file is too large.");
+    }
+    throw new Error(responsePayload?.message || "Failed to upload track.");
+  }
+  return responsePayload;
 }

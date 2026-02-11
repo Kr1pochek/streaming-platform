@@ -9,6 +9,8 @@
     "dev:server": "node --env-file-if-exists=.env server/index.js",
     "server": "node --env-file-if-exists=.env server/index.js",
     "audio:import": "node scripts/import-track-audio.mjs",
+    "stream:hls": "node scripts/stream/generate-hls.mjs",
+    "media:migrate:s3": "node --env-file-if-exists=.env scripts/stream/migrate-audio-to-s3.mjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/db/migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env scripts/db/seed.mjs",
     "db:setup": "npm run db:migrate && npm run db:seed",
@@ -18,8 +20,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.987.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "hls.js": "^1.6.15",
+    "multer": "^2.0.2",
     "pg": "^8.18.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

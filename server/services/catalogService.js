@@ -8,13 +8,18 @@ import {
   artists as seedArtists,
   playlists as seedPlaylists,
   tracks as seedTracks,
-} from "../../src/data/musicData.js";
+} from "../../shared/musicData.js";
+import {
+  createSignedStreamUrl,
+  getEmbeddedPlaybackUrlTtlMs,
+  shouldEmbedSignedPlaybackUrl,
+} from "./playbackService.js";
 export const USER_PLAYLIST_ID_PREFIX = "upl-";
-export const DEFAULT_ERROR_MESSAGE = "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РґР°РЅРЅС‹Рµ. РџРѕРїСЂРѕР±СѓР№ РѕР±РЅРѕРІРёС‚СЊ СЃС‚СЂР°РЅРёС†Сѓ.";
+export const DEFAULT_ERROR_MESSAGE = "Failed to load data. Please refresh the page.";
 export const CUSTOM_PLAYLIST_SUBTITLE = "Custom playlist";
 const LEGACY_CUSTOM_PLAYLIST_SUBTITLES = new Set([
   "Пользовательский плейлист",
-  "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚",
+  "Custom playlist",
 ]);
 const customPlaylistCovers = [
   "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)",
@@ -26,6 +31,10 @@ const customPlaylistCovers = [
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const mediaDirectory = path.resolve(currentDirectory, "../../public/audio");
 export const mediaRoutePrefix = "/api/media/";
+export const streamRoutePrefix = "/api/stream/";
+export const hlsDirectory = path.resolve(mediaDirectory, "hls");
+export const hlsRoutePrefix = `${mediaRoutePrefix}hls/`;
+const hlsManifestCandidates = ["master.m3u8", "index.m3u8"];
 
 const trackOrderMap = new Map(seedTracks.map((item, index) => [item.id, index]));
 const playlistOrderMap = new Map(seedPlaylists.map((item, index) => [item.id, index]));
@@ -129,6 +138,57 @@ export function resolveMediaFilePath(audioUrl) {
   const isInsideMediaRoot =
     resolvedMediaPath === mediaRoot || resolvedMediaPath.startsWith(`${mediaRoot}${path.sep}`);
   return isInsideMediaRoot ? resolvedMediaPath : null;
+}
+
+export function hlsManifestFilePathForTrack(trackId) {
+  const normalizedTrackId = String(trackId ?? "").trim();
+  if (!normalizedTrackId) {
+    return null;
+  }
+  for (const manifestName of hlsManifestCandidates) {
+    const manifestPath = path.resolve(hlsDirectory, normalizedTrackId, manifestName);
+    if (fs.existsSync(manifestPath)) {
+      return manifestPath;
+    }
+  }
+  return path.resolve(hlsDirectory, normalizedTrackId, hlsManifestCandidates[0]);
+}
+
+export function hasHlsManifestForTrack(trackId) {
+  const manifestPath = hlsManifestFilePathForTrack(trackId);
+  if (!manifestPath) {
+    return false;
+  }
+  return fs.existsSync(manifestPath);
+}
+
+export function hlsManifestUrlForTrack(trackId) {
+  const normalizedTrackId = String(trackId ?? "").trim();
+  if (!normalizedTrackId) {
+    return "";
+  }
+  const manifestPath = hlsManifestFilePathForTrack(normalizedTrackId);
+  const manifestName = manifestPath ? path.basename(manifestPath) : hlsManifestCandidates[0];
+  return `${hlsRoutePrefix}${encodeURIComponent(normalizedTrackId)}/${encodeURIComponent(manifestName)}`;
+}
+
+export function playbackUrlForTrack(trackId, audioUrl) {
+  const normalizedTrackId = String(trackId ?? "").trim();
+  const normalizedAudioUrl = String(audioUrl ?? "").trim();
+  if (!normalizedTrackId || !normalizedAudioUrl) {
+    return normalizedAudioUrl;
+  }
+
+  if (resolveMediaFilePath(normalizedAudioUrl)) {
+    if (!shouldEmbedSignedPlaybackUrl()) {
+      return `${streamRoutePrefix}${encodeURIComponent(normalizedTrackId)}`;
+    }
+    return createSignedStreamUrl(normalizedTrackId, {
+      basePath: streamRoutePrefix.slice(0, -1),
+      ttlMs: getEmbeddedPlaybackUrlTtlMs(),
+    }).url;
+  }
+  return normalizedAudioUrl;
 }
 
 export function trackHasArtist(track, artistName) {
@@ -521,7 +581,10 @@ export async function fetchTracks() {
     durationSec: Number(row.durationSec),
     explicit: Boolean(row.explicit),
     cover: row.cover,
-    audioUrl: row.audioUrl,
+    rawAudioUrl: row.audioUrl,
+    isLocalAudio: Boolean(resolveMediaFilePath(row.audioUrl)),
+    audioUrl: playbackUrlForTrack(row.id, row.audioUrl),
+    hlsUrl: hasHlsManifestForTrack(row.id) ? hlsManifestUrlForTrack(row.id) : null,
     tags: Array.isArray(row.tags) ? row.tags : [],
   }));
 
@@ -779,7 +842,10 @@ export async function searchCatalogInDatabase({
     durationSec: Number(row.durationSec ?? 0),
     explicit: Boolean(row.explicit),
     cover: row.cover,
-    audioUrl: row.audioUrl,
+    rawAudioUrl: row.audioUrl,
+    isLocalAudio: Boolean(resolveMediaFilePath(row.audioUrl)),
+    audioUrl: playbackUrlForTrack(row.id, row.audioUrl),
+    hlsUrl: hasHlsManifestForTrack(row.id) ? hlsManifestUrlForTrack(row.id) : null,
     tags: Array.isArray(row.tags) ? row.tags : [],
   }));
 

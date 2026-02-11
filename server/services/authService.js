@@ -6,6 +6,7 @@ const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 128;
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 32;
+const USERNAME_UNIQUE_INDEX_NAME = "idx_users_username_lower";
 
 function nowMs() {
   return Date.now();
@@ -43,13 +44,13 @@ export function validateUsername(username = "") {
   if (value.length < MIN_USERNAME_LENGTH || value.length > MAX_USERNAME_LENGTH) {
     return {
       valid: false,
-      message: `Логин должен быть длиной от ${MIN_USERNAME_LENGTH} до ${MAX_USERNAME_LENGTH} символов.`,
+      message: `Username must be between ${MIN_USERNAME_LENGTH} and ${MAX_USERNAME_LENGTH} characters.`,
     };
   }
   if (!usernamePattern.test(value)) {
     return {
       valid: false,
-      message: "Логин может содержать только латинские буквы, цифры, точку, дефис и нижнее подчеркивание.",
+      message: "Username can include only latin letters, digits, dot, hyphen, and underscore.",
     };
   }
   return { valid: true, value };
@@ -60,10 +61,45 @@ export function validatePassword(password = "") {
   if (value.length < MIN_PASSWORD_LENGTH || value.length > MAX_PASSWORD_LENGTH) {
     return {
       valid: false,
-      message: `Пароль должен быть длиной от ${MIN_PASSWORD_LENGTH} до ${MAX_PASSWORD_LENGTH} символов.`,
+      message: `Password must be between ${MIN_PASSWORD_LENGTH} and ${MAX_PASSWORD_LENGTH} characters.`,
     };
   }
   return { valid: true, value };
+}
+
+export function isUsernameUniqueViolation(error) {
+  const code = String(error?.code ?? "");
+  const constraint = String(error?.constraint ?? "").toLowerCase();
+  const detail = String(error?.detail ?? "").toLowerCase();
+  const message = String(error?.message ?? "").toLowerCase();
+
+  if (code === "23505" && constraint === USERNAME_UNIQUE_INDEX_NAME) {
+    return true;
+  }
+  if (code === "23505" && constraint.includes("username")) {
+    return true;
+  }
+  return detail.includes("username") || message.includes(USERNAME_UNIQUE_INDEX_NAME);
+}
+
+export function resolveSeedUserConfig(env = process.env) {
+  const rawUsername = String(env.SEED_USERNAME ?? "").trim();
+  const rawPassword = String(env.SEED_PASSWORD ?? "");
+  const rawDisplayName = String(env.SEED_DISPLAY_NAME ?? "");
+
+  if (!rawUsername && !rawPassword) {
+    return null;
+  }
+  if (!rawUsername || !rawPassword) {
+    throw new Error("SEED_USERNAME and SEED_PASSWORD must be provided together.");
+  }
+
+  const username = sanitizeUsername(rawUsername);
+  return {
+    username,
+    password: rawPassword,
+    displayName: sanitizeDisplayName(rawDisplayName, username),
+  };
 }
 
 export async function createUserAccount({ username, password, displayName }) {
@@ -109,8 +145,8 @@ export async function createUserAccount({ username, password, displayName }) {
 
     return toPublicUser(rows[0]);
   } catch (error) {
-    if (String(error?.message ?? "").toLowerCase().includes("idx_users_username_lower")) {
-      const conflictError = new Error("Пользователь с таким логином уже существует.");
+    if (isUsernameUniqueViolation(error)) {
+      const conflictError = new Error("User with this username already exists.");
       conflictError.status = 409;
       throw conflictError;
     }
@@ -235,9 +271,10 @@ export async function pruneExpiredSessions() {
 }
 
 export async function ensureSeedUser() {
-  const seedUsername = sanitizeUsername(process.env.SEED_USERNAME ?? "roman");
-  const seedPassword = String(process.env.SEED_PASSWORD ?? "roman123");
-  const seedDisplayName = sanitizeDisplayName(process.env.SEED_DISPLAY_NAME ?? "Роман", seedUsername);
+  const seedConfig = resolveSeedUserConfig(process.env);
+  if (!seedConfig) {
+    return null;
+  }
 
   const { rows } = await pool.query(
     `
@@ -246,16 +283,12 @@ export async function ensureSeedUser() {
     where lower(username) = lower($1)
     limit 1;
   `,
-    [seedUsername]
+    [seedConfig.username]
   );
 
   if (rows[0]) {
     return toPublicUser(rows[0]);
   }
 
-  return createUserAccount({
-    username: seedUsername,
-    password: seedPassword,
-    displayName: seedDisplayName,
-  });
+  return createUserAccount(seedConfig);
 }

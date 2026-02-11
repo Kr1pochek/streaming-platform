@@ -32,7 +32,11 @@ async function main() {
   await printSummary();
   const validatedTracksCount = await validateCatalogAudioFiles();
   console.log(`audio validation passed for ${validatedTracksCount} tracks`);
-  console.log(`seed user: ${seedUser.username}`);
+  if (seedUser) {
+    console.log(`seed user: ${seedUser.username}`);
+  } else {
+    console.log("seed user: skipped (SEED_USERNAME/SEED_PASSWORD are not set)");
+  }
 }
 
 main()

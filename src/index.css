@@ -1,4 +1,4 @@
-/* База под приложение (без “карточки по центру” как в Vite-шаблоне) */
+п»ї/* Base app styles without Vite template center card layout */
 html,
 body,
 #root {
@@ -14,17 +14,18 @@ body {
   overflow: hidden;
 }
 
-/* чтобы инпуты/кнопки наследовали шрифт */
+/* Keep form controls aligned with app typography */
 button,
 input {
   font-family: inherit;
 }
 
-/* ссылки: нейтральные по умолчанию */
+/* Neutral links by default */
 a {
   color: inherit;
   text-decoration: none;
 }
+
 a:hover {
   text-decoration: underline;
 }

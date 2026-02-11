@@ -1,5 +1,10 @@
-﻿import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { fetchCatalogMap, fetchPlayerState, updatePlayerState } from "../api/musicApi.js";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  fetchCatalogMap,
+  fetchPlayerState,
+  fetchTrackPlayback,
+  updatePlayerState,
+} from "../api/musicApi.js";
 import useAuth from "../hooks/useAuth.js";
 import { formatDuration } from "../utils/formatters.js";
 import PlayerContext from "./playerContext.js";
@@ -10,6 +15,7 @@ let runtimeArtists = [];
 let trackMap = Object.create(null);
 let artistMap = Object.create(null);
 const STORAGE_KEY = "music.player.state.v1";
+let hlsLoaderPromise = null;
 
 const defaultState = {
   queue: [],
@@ -674,14 +680,45 @@ function volumeToElement(volume) {
   return clamp(volume, 0, 100) / 100;
 }
 
-function resolveTrackSource(track) {
+function resolveTrackSource(track, playbackDescriptor = null) {
   const trackId = String(track?.id ?? "").trim();
-  const remoteUrl = typeof track?.audioUrl === "string" ? track.audioUrl.trim() : "";
+  const descriptorUrl = typeof playbackDescriptor?.streamUrl === "string"
+    ? playbackDescriptor.streamUrl.trim()
+    : "";
+  const descriptorHlsUrl = typeof playbackDescriptor?.hlsUrl === "string"
+    ? playbackDescriptor.hlsUrl.trim()
+    : "";
+  const trackHlsUrl = typeof track?.hlsUrl === "string" ? track.hlsUrl.trim() : "";
+  const remoteUrl = descriptorUrl || (typeof track?.audioUrl === "string" ? track.audioUrl.trim() : "");
+  const hlsUrl = descriptorHlsUrl || trackHlsUrl;
   const durationSec = Number(track?.durationSec ?? 0);
   return {
-    key: `remote:${trackId}:${remoteUrl}:${durationSec}`,
+    key: `remote:${trackId}:${remoteUrl}:${hlsUrl}:${durationSec}`,
+    hlsUrl,
     url: remoteUrl,
   };
+}
+
+function shouldRefreshPlayback(track) {
+  if (!track?.id) {
+    return false;
+  }
+  if (track.isLocalAudio) {
+    return true;
+  }
+  const rawAudioUrl = String(track.rawAudioUrl ?? "").trim();
+  if (rawAudioUrl.startsWith("/api/media/")) {
+    return true;
+  }
+  const playbackUrl = String(track.audioUrl ?? "").trim();
+  return playbackUrl.startsWith("/api/stream/");
+}
+
+function loadHlsLibrary() {
+  if (!hlsLoaderPromise) {
+    hlsLoaderPromise = import("hls.js").then((module) => module.default ?? module);
+  }
+  return hlsLoaderPromise;
 }
 
 export function PlayerProvider({ children }) {
@@ -690,9 +727,18 @@ export function PlayerProvider({ children }) {
   const [remoteStateReady, setRemoteStateReady] = useState(false);
 
   const audioRef = useRef(null);
+  const hlsRef = useRef(null);
+  const playbackCacheRef = useRef(new Map());
   const loadedTrackIdRef = useRef(null);
   const loadedSourceKeyRef = useRef("");
   const seekVersionRef = useRef(0);
+
+  const disposeHls = useCallback(() => {
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -759,9 +805,10 @@ export function PlayerProvider({ children }) {
         setRemoteStateReady(true);
       } catch {
         if (cancelled) return;
+        setRemoteStateReady(true);
         dispatch({
           type: "notify",
-          message: "Не удалось синхронизировать музыкальные предпочтения с сервером.",
+          message: "Could not load preferences from server. Local state will be used.",
         });
       }
     };
@@ -828,7 +875,10 @@ export function PlayerProvider({ children }) {
       return audio;
     }
 
-    const sourceDescriptor = resolveTrackSource(track);
+    const sourceDescriptor = resolveTrackSource(
+      track,
+      playbackCacheRef.current.get(track.id) ?? null
+    );
     if (
       loadedTrackIdRef.current === track.id &&
       loadedSourceKeyRef.current === sourceDescriptor.key
@@ -837,25 +887,122 @@ export function PlayerProvider({ children }) {
     }
 
     audio.pause();
+    disposeHls();
     loadedTrackIdRef.current = track.id;
     loadedSourceKeyRef.current = sourceDescriptor.key;
-    if (!sourceDescriptor.url) {
+    if (!sourceDescriptor.url && !sourceDescriptor.hlsUrl) {
       audio.removeAttribute("src");
       audio.load();
       return audio;
     }
 
-    audio.src = sourceDescriptor.url;
+    if (sourceDescriptor.hlsUrl) {
+      const canUseNativeHls = audio.canPlayType("application/vnd.apple.mpegurl") !== "";
+      if (canUseNativeHls) {
+        audio.src = sourceDescriptor.hlsUrl;
+        audio.load();
+        return audio;
+      }
+
+      loadHlsLibrary()
+        .then((HlsLibrary) => {
+          const sourceStillCurrent =
+            loadedTrackIdRef.current === track.id &&
+            loadedSourceKeyRef.current === sourceDescriptor.key;
+          if (!sourceStillCurrent || !HlsLibrary.isSupported()) {
+            if (sourceDescriptor.url && sourceStillCurrent) {
+              audio.src = sourceDescriptor.url;
+              audio.load();
+            }
+            return;
+          }
+
+          const hls = new HlsLibrary({
+            enableWorker: true,
+            backBufferLength: 90,
+          });
+          hlsRef.current = hls;
+          hls.attachMedia(audio);
+          hls.on(HlsLibrary.Events.MEDIA_ATTACHED, () => {
+            hls.loadSource(sourceDescriptor.hlsUrl);
+          });
+          hls.on(HlsLibrary.Events.ERROR, (_event, data) => {
+            if (!data?.fatal) {
+              return;
+            }
+            disposeHls();
+            if (sourceDescriptor.url) {
+              audio.src = sourceDescriptor.url;
+              audio.load();
+            }
+          });
+        })
+        .catch(() => {
+          if (sourceDescriptor.url) {
+            audio.src = sourceDescriptor.url;
+            audio.load();
+          }
+        });
+      return audio;
+    }
+
+    audio.src = sourceDescriptor.url || sourceDescriptor.hlsUrl;
     audio.load();
 
     return audio;
-  }, [ensureAudioElement]);
+  }, [disposeHls, ensureAudioElement]);
 
   const currentTrackId = state.queue[state.currentIndex];
   const currentTrack = trackMap[currentTrackId] ?? null;
   const currentDuration = currentTrack?.durationSec ?? 0;
   const clampedProgress = clamp(state.progressSec, 0, currentDuration || state.progressSec);
   const progressPercent = currentDuration ? Math.round((clampedProgress / currentDuration) * 100) : 0;
+
+  useEffect(() => {
+    if (!currentTrackId || !currentTrack || !shouldRefreshPlayback(currentTrack)) {
+      return;
+    }
+
+    const cachedDescriptor = playbackCacheRef.current.get(currentTrackId);
+    const cachedExpiration = Number(cachedDescriptor?.expiresAt ?? 0);
+    if (
+      cachedDescriptor?.streamUrl &&
+      (!cachedExpiration || cachedExpiration - Date.now() > 30_000)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshPlayback = async () => {
+      try {
+        const descriptor = await fetchTrackPlayback(currentTrackId);
+        if (cancelled || !descriptor?.streamUrl) {
+          return;
+        }
+        playbackCacheRef.current.set(currentTrackId, descriptor);
+        if (loadedTrackIdRef.current === currentTrackId) {
+          const audio = replaceAudioSource(currentTrack);
+          if (audio && state.isPlaying && audio.paused) {
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+              playPromise.catch(() => {
+                // noop
+              });
+            }
+          }
+        }
+      } catch {
+        // Keep fallback URL from catalog if playback metadata request fails.
+      }
+    };
+
+    void refreshPlayback();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrackId, currentTrack, replaceAudioSource, state.isPlaying]);
 
   useEffect(() => {
     const audio = ensureAudioElement();
@@ -893,6 +1040,7 @@ export function PlayerProvider({ children }) {
 
     if (!currentTrack || !currentTrackId) {
       audio.pause();
+      disposeHls();
       loadedTrackIdRef.current = null;
       loadedSourceKeyRef.current = "";
       seekVersionRef.current = 0;
@@ -901,7 +1049,10 @@ export function PlayerProvider({ children }) {
       return;
     }
 
-    const sourceDescriptor = resolveTrackSource(currentTrack);
+    const sourceDescriptor = resolveTrackSource(
+      currentTrack,
+      playbackCacheRef.current.get(currentTrack.id) ?? null
+    );
     if (
       loadedTrackIdRef.current !== currentTrackId ||
       loadedSourceKeyRef.current !== sourceDescriptor.key
@@ -935,6 +1086,7 @@ export function PlayerProvider({ children }) {
       audio.pause();
     }
   }, [
+    disposeHls,
     ensureAudioElement,
     replaceAudioSource,
     currentTrack,
@@ -951,10 +1103,11 @@ export function PlayerProvider({ children }) {
         audio.pause();
         audioRef.current = null;
       }
+      disposeHls();
       loadedTrackIdRef.current = null;
       loadedSourceKeyRef.current = "";
     },
-    []
+    [disposeHls]
   );
 
   useEffect(() => {

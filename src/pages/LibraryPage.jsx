@@ -20,7 +20,7 @@ const INITIAL_MY_PLAYLISTS_LIMIT = 6;
 const DEFAULT_PLAYLIST_DESCRIPTION = "Custom playlist";
 const LEGACY_DEFAULT_PLAYLIST_DESCRIPTIONS = new Set([
   "Пользовательский плейлист",
-  "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёР№ РїР»РµР№Р»РёСЃС‚",
+  "Custom playlist",
 ]);
 const DEFAULT_PLAYLIST_COVER = "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)";
 const MAX_PLAYLIST_IMAGE_FILE_SIZE = 5 * 1024 * 1024;

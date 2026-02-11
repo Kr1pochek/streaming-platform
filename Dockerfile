@@ -17,7 +17,7 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 COPY --from=build /app/server ./server
-COPY --from=build /app/src ./src
+COPY --from=build /app/shared ./shared
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/.env.example ./.env.example
 
