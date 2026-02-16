@@ -986,6 +986,7 @@ export async function assertCatalogSchemaReady() {
     "users",
     "user_sessions",
     "user_states",
+    "password_reset_tokens",
   ];
 
   const { rows } = await pool.query(

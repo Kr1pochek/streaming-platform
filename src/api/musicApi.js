@@ -1,5 +1,7 @@
-﻿const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
 const AUTH_TOKEN_STORAGE_KEY = "music.auth.token.v1";
+const RETRYABLE_METHODS = new Set(["GET"]);
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 let authToken = "";
 
 if (typeof window !== "undefined") {
@@ -53,37 +55,97 @@ function buildUrl(path, query = null) {
   return queryString ? `${url}?${queryString}` : url;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function resolveApiErrorMessage(status, payload, fallbackMessage) {
+  const payloadMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
+  if (payloadMessage) {
+    return payloadMessage;
+  }
+
+  if (status === 401) {
+    return "Требуется авторизация. Войди в аккаунт и повтори действие.";
+  }
+  if (status === 403) {
+    return "Недостаточно прав для этого действия.";
+  }
+  if (status === 404) {
+    return "Ресурс не найден.";
+  }
+  if (status === 409) {
+    return "Конфликт данных. Обнови страницу и попробуй снова.";
+  }
+  if (status === 413) {
+    return "Файл слишком большой.";
+  }
+  if (status === 429) {
+    return "Слишком много запросов. Попробуй через минуту.";
+  }
+  if (status >= 500) {
+    return "Сервер временно недоступен. Попробуй немного позже.";
+  }
+  return fallbackMessage;
+}
+
 async function request(path, options = {}) {
-  const { method = "GET", body, query, headers = {} } = options;
+  const { method = "GET", body, query, headers = {}, retryCount } = options;
+  const normalizedMethod = String(method ?? "GET").toUpperCase();
+  const canRetry = RETRYABLE_METHODS.has(normalizedMethod);
+  const retries = Number.isInteger(retryCount)
+    ? Math.min(Math.max(retryCount, 0), 3)
+    : canRetry
+      ? 1
+      : 0;
+  const maxAttempts = 1 + retries;
 
-  let response;
-  try {
-    const requestHeaders = {
-      "Content-Type": "application/json",
-      ...headers,
-    };
-    if (authToken) {
-      requestHeaders.Authorization = `Bearer ${authToken}`;
+  for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
+    let response;
+    try {
+      const requestHeaders = {
+        "Content-Type": "application/json",
+        ...headers,
+      };
+      if (authToken) {
+        requestHeaders.Authorization = `Bearer ${authToken}`;
+      }
+
+      response = await fetch(buildUrl(path, query), {
+        method: normalizedMethod,
+        headers: requestHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch {
+      if (attemptIndex < maxAttempts - 1) {
+        await delay(260 * (attemptIndex + 1));
+        continue;
+      }
+      throw new Error("Не удалось подключиться к серверу. Проверь интернет и повтори попытку.");
     }
 
-    response = await fetch(buildUrl(path, query), {
-      method,
-      headers: requestHeaders,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    throw new Error("Could not connect to API server.");
-  }
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 413) {
-      throw new Error("Image is too large. Choose a smaller file.");
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) {
+      return payload;
     }
-    throw new Error(payload?.message || "Failed to load data. Please refresh the page.");
+
+    const shouldRetry =
+      attemptIndex < maxAttempts - 1 &&
+      canRetry &&
+      RETRYABLE_STATUSES.has(response.status);
+    if (shouldRetry) {
+      await delay(260 * (attemptIndex + 1));
+      continue;
+    }
+
+    throw new Error(
+      resolveApiErrorMessage(response.status, payload, "Не удалось загрузить данные. Обнови страницу и попробуй снова.")
+    );
   }
 
-  return payload;
+  throw new Error("Не удалось загрузить данные. Обнови страницу и попробуй снова.");
 }
 
 function normalizeUserPlaylistPayload(payloadOrTitle) {
@@ -138,6 +200,13 @@ export async function addTrackToUserPlaylist(playlistId, trackId) {
 export async function removeTrackFromUserPlaylist(playlistId, trackId) {
   return request(`/user-playlists/${encodeURIComponent(playlistId)}/tracks/${encodeURIComponent(trackId)}`, {
     method: "DELETE",
+  });
+}
+
+export async function reorderUserPlaylistTracks(playlistId, trackIds = []) {
+  return request(`/user-playlists/${encodeURIComponent(playlistId)}/tracks/reorder`, {
+    method: "PUT",
+    body: { trackIds },
   });
 }
 
@@ -226,6 +295,34 @@ export async function fetchCurrentUser() {
   return request("/auth/me");
 }
 
+export async function updateAuthProfile(payload) {
+  return request("/auth/profile", {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function changeAuthPassword(payload) {
+  return request("/auth/password/change", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function requestPasswordReset(payload) {
+  return request("/auth/password/reset/request", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function confirmPasswordReset(payload) {
+  return request("/auth/password/reset/confirm", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function fetchPlayerState() {
   return request("/me/player-state");
 }
@@ -280,15 +377,14 @@ export async function uploadTrack(payload = {}) {
       body: formData,
     });
   } catch {
-    throw new Error("Could not connect to API server.");
+    throw new Error("Не удалось подключиться к серверу. Проверь интернет и повтори попытку.");
   }
 
   const responsePayload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 413) {
-      throw new Error("Audio file is too large.");
-    }
-    throw new Error(responsePayload?.message || "Failed to upload track.");
+    throw new Error(
+      resolveApiErrorMessage(response.status, responsePayload, "Не удалось загрузить трек. Попробуй снова.")
+    );
   }
   return responsePayload;
 }

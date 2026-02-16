@@ -46,6 +46,56 @@ test("GET /api/me/player-state requires authentication", async (t) => {
   assert.equal(typeof payload.message, "string");
 });
 
+test("PATCH /api/auth/profile requires authentication", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/auth/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "Demo" }),
+  });
+  assert.equal(response.status, 401);
+});
+
+test("POST /api/auth/password/change requires authentication", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/auth/password/change`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword: "123456", newPassword: "abcdef" }),
+  });
+  assert.equal(response.status, 401);
+});
+
+test("PUT /api/user-playlists/:playlistId/tracks/reorder requires authentication", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/user-playlists/upl-test/tracks/reorder`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trackIds: [] }),
+  });
+  assert.equal(response.status, 401);
+});
+
+test("POST /api/auth/password/reset/request accepts anonymous request", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/auth/password/reset/request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "" }),
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.success, true);
+});
+
 test("GET /api/search without query returns empty payload with pagination", async (t) => {
   const server = await startServer();
   t.after(server.stop);

@@ -6,6 +6,10 @@ const MIN_PASSWORD_LENGTH = 6;
 const MAX_PASSWORD_LENGTH = 128;
 const MIN_USERNAME_LENGTH = 3;
 const MAX_USERNAME_LENGTH = 32;
+const MAX_DISPLAY_NAME_LENGTH = 48;
+const PASSWORD_RESET_TOKEN_TTL_MS = Number(
+  process.env.PASSWORD_RESET_TOKEN_TTL_MS ?? 1000 * 60 * 20
+);
 const USERNAME_UNIQUE_INDEX_NAME = "idx_users_username_lower";
 
 function nowMs() {
@@ -67,6 +71,17 @@ export function validatePassword(password = "") {
   return { valid: true, value };
 }
 
+export function validateDisplayName(displayName = "", fallback = "") {
+  const value = sanitizeDisplayName(displayName, fallback);
+  if (value.length > MAX_DISPLAY_NAME_LENGTH) {
+    return {
+      valid: false,
+      message: `Display name must be ${MAX_DISPLAY_NAME_LENGTH} characters or fewer.`,
+    };
+  }
+  return { valid: true, value };
+}
+
 export function isUsernameUniqueViolation(error) {
   const code = String(error?.code ?? "");
   const constraint = String(error?.constraint ?? "").toLowerCase();
@@ -118,7 +133,14 @@ export async function createUserAccount({ username, password, displayName }) {
   }
 
   const normalizedUsername = usernameValidation.value;
-  const normalizedDisplayName = sanitizeDisplayName(displayName, normalizedUsername);
+  const displayNameValidation = validateDisplayName(displayName, normalizedUsername);
+  if (!displayNameValidation.valid) {
+    const error = new Error(displayNameValidation.message);
+    error.status = 400;
+    throw error;
+  }
+
+  const normalizedDisplayName = displayNameValidation.value;
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(passwordValidation.value, salt);
   const userId = `usr-${crypto.randomUUID()}`;
@@ -187,6 +209,230 @@ export async function verifyUserCredentials({ username, password }) {
   }
 
   return toPublicUser(user);
+}
+
+export async function updateUserProfile({ userId, displayName }) {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    const error = new Error("User is not authenticated.");
+    error.status = 401;
+    throw error;
+  }
+
+  const { rows: existingRows } = await pool.query(
+    `
+    select username
+    from users
+    where id = $1
+    limit 1;
+  `,
+    [normalizedUserId]
+  );
+  const existingUser = existingRows[0];
+  if (!existingUser) {
+    const error = new Error("User not found.");
+    error.status = 404;
+    throw error;
+  }
+
+  const displayNameValidation = validateDisplayName(displayName, existingUser.username);
+  if (!displayNameValidation.valid) {
+    const error = new Error(displayNameValidation.message);
+    error.status = 400;
+    throw error;
+  }
+
+  const { rows } = await pool.query(
+    `
+    update users
+    set display_name = $2
+    where id = $1
+    returning id, username, display_name, created_at;
+  `,
+    [normalizedUserId, displayNameValidation.value]
+  );
+
+  return toPublicUser(rows[0]);
+}
+
+export async function changeUserPassword({ userId, currentPassword, newPassword }) {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    const error = new Error("User is not authenticated.");
+    error.status = 401;
+    throw error;
+  }
+
+  const currentPasswordValue = String(currentPassword ?? "");
+  if (!currentPasswordValue) {
+    const error = new Error("Current password is required.");
+    error.status = 400;
+    throw error;
+  }
+
+  const newPasswordValidation = validatePassword(newPassword);
+  if (!newPasswordValidation.valid) {
+    const error = new Error(newPasswordValidation.message);
+    error.status = 400;
+    throw error;
+  }
+
+  const { rows } = await pool.query(
+    `
+    select id, password_hash, password_salt
+    from users
+    where id = $1
+    limit 1;
+  `,
+    [normalizedUserId]
+  );
+  const user = rows[0];
+  if (!user) {
+    const error = new Error("User not found.");
+    error.status = 404;
+    throw error;
+  }
+
+  const expectedBuffer = Buffer.from(user.password_hash, "hex");
+  const actualBuffer = Buffer.from(hashPassword(currentPasswordValue, user.password_salt), "hex");
+  if (
+    expectedBuffer.length !== actualBuffer.length ||
+    !crypto.timingSafeEqual(expectedBuffer, actualBuffer)
+  ) {
+    const error = new Error("Current password is incorrect.");
+    error.status = 401;
+    throw error;
+  }
+
+  const nextSalt = crypto.randomBytes(16).toString("hex");
+  const nextPasswordHash = hashPassword(newPasswordValidation.value, nextSalt);
+  await pool.query(
+    `
+    update users
+    set password_hash = $2,
+        password_salt = $3
+    where id = $1;
+  `,
+    [normalizedUserId, nextPasswordHash, nextSalt]
+  );
+
+  return { success: true };
+}
+
+export async function requestPasswordResetToken({ username }) {
+  const normalizedUsername = sanitizeUsername(username);
+  if (!normalizedUsername) {
+    return { accepted: true };
+  }
+
+  const { rows } = await pool.query(
+    `
+    select id
+    from users
+    where lower(username) = lower($1)
+    limit 1;
+  `,
+    [normalizedUsername]
+  );
+  const user = rows[0];
+  if (!user?.id) {
+    return { accepted: true };
+  }
+
+  const token = crypto.randomBytes(36).toString("base64url");
+  const tokenHash = hashToken(token);
+  const resetTokenId = `prt-${crypto.randomUUID()}`;
+  const createdAt = nowMs();
+  const expiresAt = createdAt + PASSWORD_RESET_TOKEN_TTL_MS;
+
+  await pool.query(
+    `
+    delete from password_reset_tokens
+    where user_id = $1
+       or expires_at <= $2
+       or used_at is not null;
+  `,
+    [user.id, createdAt]
+  );
+
+  await pool.query(
+    `
+    insert into password_reset_tokens (id, user_id, token_hash, created_at, expires_at)
+    values ($1, $2, $3, $4, $5);
+  `,
+    [resetTokenId, user.id, tokenHash, createdAt, expiresAt]
+  );
+
+  return {
+    accepted: true,
+    token,
+    expiresAt,
+  };
+}
+
+export async function resetPasswordWithToken({ username, token, newPassword }) {
+  const normalizedUsername = sanitizeUsername(username);
+  const normalizedToken = String(token ?? "").trim();
+  if (!normalizedUsername || !normalizedToken) {
+    const error = new Error("Username and reset token are required.");
+    error.status = 400;
+    throw error;
+  }
+
+  const newPasswordValidation = validatePassword(newPassword);
+  if (!newPasswordValidation.valid) {
+    const error = new Error(newPasswordValidation.message);
+    error.status = 400;
+    throw error;
+  }
+
+  const tokenHash = hashToken(normalizedToken);
+  const now = nowMs();
+  const { rows } = await pool.query(
+    `
+    select
+      prt.id as "resetTokenId",
+      prt.user_id as "userId"
+    from password_reset_tokens prt
+    join users u on u.id = prt.user_id
+    where prt.token_hash = $1
+      and lower(u.username) = lower($2)
+      and prt.used_at is null
+      and prt.expires_at > $3
+    limit 1;
+  `,
+    [tokenHash, normalizedUsername, now]
+  );
+
+  const resetRow = rows[0];
+  if (!resetRow?.userId) {
+    const error = new Error("Reset token is invalid or expired.");
+    error.status = 400;
+    throw error;
+  }
+
+  const nextSalt = crypto.randomBytes(16).toString("hex");
+  const nextPasswordHash = hashPassword(newPasswordValidation.value, nextSalt);
+  await pool.query(
+    `
+    update users
+    set password_hash = $2,
+        password_salt = $3
+    where id = $1;
+  `,
+    [resetRow.userId, nextPasswordHash, nextSalt]
+  );
+  await pool.query(
+    `
+    update password_reset_tokens
+    set used_at = $2
+    where id = $1;
+  `,
+    [resetRow.resetTokenId, now]
+  );
+
+  await revokeUserSessions(resetRow.userId);
+  return { success: true };
 }
 
 export async function createSession(userId) {

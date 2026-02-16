@@ -28,6 +28,11 @@ const defaultState = {
   historyIds: [],
   shuffleEnabled: false,
   repeatMode: "off",
+  streamQualityAvailable: false,
+  streamQualityCanControl: false,
+  streamQualitySelected: "auto",
+  streamQualityMode: "off",
+  streamQualityLevel: "",
   seekVersion: 0,
   toastSeq: 0,
   toastItems: [],
@@ -216,8 +221,30 @@ function playerReducer(state, action) {
     }
 
     case "hydrate_remote_state": {
+      const remoteQueue = uniqueTrackIds(action.queueTrackIds ?? []);
+      const hasRemoteQueue = remoteQueue.length > 0;
+      const nextQueue = hasRemoteQueue ? remoteQueue : state.queue;
+      const nextCurrentIndex = hasRemoteQueue
+        ? clamp(Number(action.queueCurrentIndex ?? 0), 0, Math.max(nextQueue.length - 1, 0))
+        : state.currentIndex;
+      const nextTrackId = nextQueue[nextCurrentIndex];
+      const nextTrackDuration = Number(trackMap[nextTrackId]?.durationSec ?? 0);
+      const rawRemoteProgress = Number(action.queueProgressSec ?? 0);
+      const nextProgress = hasRemoteQueue
+        ? clamp(
+            Number.isFinite(rawRemoteProgress) ? rawRemoteProgress : 0,
+            0,
+            Math.max(nextTrackDuration, 0) || 60 * 60 * 24
+          )
+        : state.progressSec;
+
       return {
         ...state,
+        queue: nextQueue,
+        currentIndex: nextCurrentIndex,
+        progressSec: nextProgress,
+        isPlaying: false,
+        seekVersion: hasRemoteQueue ? state.seekVersion + 1 : state.seekVersion,
         likedIds: uniqueTrackIds(action.likedIds ?? []),
         followedArtistIds: uniqueArtistIds(action.followedArtistIds ?? []),
         historyIds: uniqueTrackIds(action.historyIds ?? []).slice(0, 24),
@@ -409,6 +436,37 @@ function playerReducer(state, action) {
       const currentModeIndex = repeatModes.indexOf(state.repeatMode);
       const nextMode = repeatModes[(currentModeIndex + 1) % repeatModes.length];
       return { ...state, repeatMode: nextMode };
+    }
+
+    case "sync_stream_quality": {
+      const available =
+        typeof action.available === "boolean" ? action.available : state.streamQualityAvailable;
+      const canControl =
+        typeof action.canControl === "boolean"
+          ? action.canControl
+          : state.streamQualityCanControl;
+      const selected = normalizeStreamQualitySelection(
+        action.selected ?? state.streamQualitySelected
+      );
+      const mode = String(action.mode ?? state.streamQualityMode ?? "off");
+      const level = String(action.level ?? state.streamQualityLevel ?? "");
+      if (
+        state.streamQualityAvailable === available &&
+        state.streamQualityCanControl === canControl &&
+        state.streamQualitySelected === selected &&
+        state.streamQualityMode === mode &&
+        state.streamQualityLevel === level
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        streamQualityAvailable: available,
+        streamQualityCanControl: canControl,
+        streamQualitySelected: selected,
+        streamQualityMode: mode,
+        streamQualityLevel: level,
+      };
     }
 
     case "remove_from_queue": {
@@ -721,6 +779,128 @@ function loadHlsLibrary() {
   return hlsLoaderPromise;
 }
 
+function normalizeQualityLevelName(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+  return "";
+}
+
+function qualityLevelFromBitrate(level) {
+  const bitrate = Number(level?.bitrate ?? level?.attrs?.BANDWIDTH ?? 0);
+  if (!Number.isFinite(bitrate) || bitrate <= 0) {
+    return "";
+  }
+  if (bitrate >= 180_000) {
+    return "high";
+  }
+  if (bitrate >= 110_000) {
+    return "medium";
+  }
+  return "low";
+}
+
+function resolveQualityLevelFromHls(hls, levelIndex) {
+  if (!Array.isArray(hls?.levels)) {
+    return "";
+  }
+  if (!Number.isInteger(levelIndex) || levelIndex < 0 || levelIndex >= hls.levels.length) {
+    return "";
+  }
+  const level = hls.levels[levelIndex];
+  const namedLevel = normalizeQualityLevelName(level?.name ?? level?.attrs?.NAME);
+  if (namedLevel) {
+    return namedLevel;
+  }
+  return qualityLevelFromBitrate(level);
+}
+
+function normalizeStreamQualitySelection(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "auto" || normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+  return "auto";
+}
+
+function resolveActiveLevelIndex(hls, explicitLevelIndex = null) {
+  if (Number.isInteger(explicitLevelIndex) && explicitLevelIndex >= 0) {
+    return explicitLevelIndex;
+  }
+  if (Number.isInteger(hls?.currentLevel) && hls.currentLevel >= 0) {
+    return hls.currentLevel;
+  }
+  if (Number.isInteger(hls?.nextLevel) && hls.nextLevel >= 0) {
+    return hls.nextLevel;
+  }
+  if (Number.isInteger(hls?.loadLevel) && hls.loadLevel >= 0) {
+    return hls.loadLevel;
+  }
+  return -1;
+}
+
+function findHlsLevelIndexBySelection(hls, selection) {
+  const normalizedSelection = normalizeStreamQualitySelection(selection);
+  const levels = Array.isArray(hls?.levels) ? hls.levels : [];
+  if (!levels.length || normalizedSelection === "auto") {
+    return -1;
+  }
+
+  const exactIndex = levels.findIndex(
+    (level) =>
+      normalizeQualityLevelName(level?.name ?? level?.attrs?.NAME) === normalizedSelection
+  );
+  if (exactIndex >= 0) {
+    return exactIndex;
+  }
+
+  const levelsWithBitrate = levels
+    .map((level, index) => ({
+      index,
+      bitrate: Number(level?.bitrate ?? level?.attrs?.BANDWIDTH ?? 0),
+    }))
+    .filter((item) => Number.isFinite(item.bitrate) && item.bitrate > 0)
+    .sort((first, second) => first.bitrate - second.bitrate);
+
+  if (!levelsWithBitrate.length) {
+    return -1;
+  }
+
+  if (normalizedSelection === "low") {
+    return levelsWithBitrate[0].index;
+  }
+  if (normalizedSelection === "high") {
+    return levelsWithBitrate[levelsWithBitrate.length - 1].index;
+  }
+
+  const mediumTargetBitrate = 128_000;
+  const closestMedium = levelsWithBitrate.reduce((best, candidate) => {
+    if (!best) {
+      return candidate;
+    }
+    const bestDistance = Math.abs(best.bitrate - mediumTargetBitrate);
+    const candidateDistance = Math.abs(candidate.bitrate - mediumTargetBitrate);
+    return candidateDistance < bestDistance ? candidate : best;
+  }, null);
+  return closestMedium ? closestMedium.index : -1;
+}
+
+function applySelectionToHls(hls, selection) {
+  const normalizedSelection = normalizeStreamQualitySelection(selection);
+  if (!hls) {
+    return;
+  }
+  if (normalizedSelection === "auto") {
+    hls.currentLevel = -1;
+    return;
+  }
+  const selectedLevelIndex = findHlsLevelIndexBySelection(hls, normalizedSelection);
+  if (selectedLevelIndex >= 0) {
+    hls.currentLevel = selectedLevelIndex;
+  }
+}
+
 export function PlayerProvider({ children }) {
   const { isAuthenticated, status: authStatus } = useAuth();
   const [state, dispatch] = useReducer(playerReducer, undefined, buildInitialState);
@@ -728,17 +908,50 @@ export function PlayerProvider({ children }) {
 
   const audioRef = useRef(null);
   const hlsRef = useRef(null);
+  const syncHlsQualityRef = useRef(null);
+  const streamQualitySelectionRef = useRef(defaultState.streamQualitySelected);
   const playbackCacheRef = useRef(new Map());
   const loadedTrackIdRef = useRef(null);
   const loadedSourceKeyRef = useRef("");
   const seekVersionRef = useRef(0);
+
+  const updateStreamQuality = useCallback((nextState) => {
+    dispatch({
+      type: "sync_stream_quality",
+      ...(nextState ?? {}),
+    });
+  }, []);
 
   const disposeHls = useCallback(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    syncHlsQualityRef.current = null;
   }, []);
+
+  const setStreamQualitySelection = useCallback(
+    (selection) => {
+      const normalizedSelection = normalizeStreamQualitySelection(selection);
+      streamQualitySelectionRef.current = normalizedSelection;
+      const hls = hlsRef.current;
+      if (hls) {
+        applySelectionToHls(hls, normalizedSelection);
+        if (typeof syncHlsQualityRef.current === "function") {
+          syncHlsQualityRef.current();
+        }
+      } else {
+        updateStreamQuality({
+          selected: normalizedSelection,
+        });
+      }
+    },
+    [updateStreamQuality]
+  );
+
+  useEffect(() => {
+    streamQualitySelectionRef.current = normalizeStreamQualitySelection(state.streamQualitySelected);
+  }, [state.streamQualitySelected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -801,6 +1014,10 @@ export function PlayerProvider({ children }) {
           likedIds: remoteState?.likedTrackIds ?? [],
           followedArtistIds: remoteState?.followedArtistIds ?? [],
           historyIds: remoteState?.historyTrackIds ?? [],
+          queueTrackIds: remoteState?.queueTrackIds ?? [],
+          queueCurrentIndex: remoteState?.queueCurrentIndex ?? 0,
+          queueProgressSec: remoteState?.queueProgressSec ?? 0,
+          queueIsPlaying: remoteState?.queueIsPlaying ?? false,
         });
         setRemoteStateReady(true);
       } catch {
@@ -808,7 +1025,7 @@ export function PlayerProvider({ children }) {
         setRemoteStateReady(true);
         dispatch({
           type: "notify",
-          message: "Could not load preferences from server. Local state will be used.",
+          message: "Не удалось загрузить предпочтения с сервера. Используем локальное состояние.",
         });
       }
     };
@@ -832,6 +1049,10 @@ export function PlayerProvider({ children }) {
           likedTrackIds: state.likedIds,
           followedArtistIds: state.followedArtistIds,
           historyTrackIds: state.historyIds,
+          queueTrackIds: state.queue,
+          queueCurrentIndex: state.currentIndex,
+          queueProgressSec: state.progressSec,
+          queueIsPlaying: state.isPlaying,
         });
       } catch {
         if (!cancelled) {
@@ -853,6 +1074,10 @@ export function PlayerProvider({ children }) {
     state.likedIds,
     state.followedArtistIds,
     state.historyIds,
+    state.queue,
+    state.currentIndex,
+    state.progressSec,
+    state.isPlaying,
   ]);
 
   const ensureAudioElement = useCallback(() => {
@@ -888,9 +1113,27 @@ export function PlayerProvider({ children }) {
 
     audio.pause();
     disposeHls();
+    updateStreamQuality({
+      available: Boolean(sourceDescriptor.hlsUrl),
+      canControl: false,
+      selected: streamQualitySelectionRef.current,
+      mode:
+        sourceDescriptor.hlsUrl && streamQualitySelectionRef.current !== "auto"
+          ? "manual"
+          : sourceDescriptor.hlsUrl
+            ? "auto"
+            : "off",
+      level: "",
+    });
     loadedTrackIdRef.current = track.id;
     loadedSourceKeyRef.current = sourceDescriptor.key;
     if (!sourceDescriptor.url && !sourceDescriptor.hlsUrl) {
+      updateStreamQuality({
+        available: false,
+        canControl: false,
+        mode: "off",
+        level: "",
+      });
       audio.removeAttribute("src");
       audio.load();
       return audio;
@@ -898,46 +1141,125 @@ export function PlayerProvider({ children }) {
 
     if (sourceDescriptor.hlsUrl) {
       const canUseNativeHls = audio.canPlayType("application/vnd.apple.mpegurl") !== "";
-      if (canUseNativeHls) {
-        audio.src = sourceDescriptor.hlsUrl;
-        audio.load();
-        return audio;
-      }
 
       loadHlsLibrary()
         .then((HlsLibrary) => {
           const sourceStillCurrent =
             loadedTrackIdRef.current === track.id &&
             loadedSourceKeyRef.current === sourceDescriptor.key;
-          if (!sourceStillCurrent || !HlsLibrary.isSupported()) {
-            if (sourceDescriptor.url && sourceStillCurrent) {
-              audio.src = sourceDescriptor.url;
-              audio.load();
-            }
+          if (!sourceStillCurrent) {
             return;
           }
 
-          const hls = new HlsLibrary({
-            enableWorker: true,
-            backBufferLength: 90,
+          const canUseHlsJs = Boolean(HlsLibrary && typeof HlsLibrary.isSupported === "function" && HlsLibrary.isSupported());
+          if (canUseHlsJs) {
+            const hls = new HlsLibrary({
+              enableWorker: true,
+              backBufferLength: 90,
+            });
+            const syncHlsQuality = (explicitLevelIndex = null) => {
+              if (
+                loadedTrackIdRef.current !== track.id ||
+                loadedSourceKeyRef.current !== sourceDescriptor.key
+              ) {
+                return;
+              }
+              const selected = normalizeStreamQualitySelection(
+                streamQualitySelectionRef.current
+              );
+              const activeLevelIndex = resolveActiveLevelIndex(hls, explicitLevelIndex);
+              const resolvedLevel = resolveQualityLevelFromHls(hls, activeLevelIndex);
+              updateStreamQuality({
+                available: true,
+                canControl: true,
+                selected,
+                mode: hls.autoLevelEnabled ? "auto" : "manual",
+                level: resolvedLevel || (selected !== "auto" ? selected : ""),
+              });
+            };
+            hlsRef.current = hls;
+            syncHlsQualityRef.current = () => {
+              syncHlsQuality();
+            };
+            hls.attachMedia(audio);
+            hls.on(HlsLibrary.Events.MANIFEST_PARSED, () => {
+              applySelectionToHls(hls, streamQualitySelectionRef.current);
+              syncHlsQuality();
+            });
+            hls.on(HlsLibrary.Events.LEVEL_SWITCHED, syncHlsQuality);
+            hls.on(HlsLibrary.Events.LEVELS_UPDATED, syncHlsQuality);
+            hls.on(HlsLibrary.Events.LEVEL_LOADED, (_event, data) => {
+              const levelIndex = Number.isInteger(data?.level) ? data.level : -1;
+              syncHlsQuality(levelIndex);
+            });
+            hls.on(HlsLibrary.Events.FRAG_CHANGED, (_event, data) => {
+              const levelIndex = Number.isInteger(data?.frag?.level) ? data.frag.level : -1;
+              syncHlsQuality(levelIndex);
+            });
+            hls.on(HlsLibrary.Events.MEDIA_ATTACHED, () => {
+              hls.loadSource(sourceDescriptor.hlsUrl);
+            });
+            hls.on(HlsLibrary.Events.ERROR, (_event, data) => {
+              if (!data?.fatal) {
+                return;
+              }
+              disposeHls();
+              updateStreamQuality({
+                available: false,
+                canControl: false,
+                mode: "off",
+                level: "",
+              });
+              if (sourceDescriptor.url) {
+                audio.src = sourceDescriptor.url;
+                audio.load();
+              }
+            });
+            return;
+          }
+
+          if (canUseNativeHls) {
+            updateStreamQuality({
+              available: true,
+              canControl: false,
+              mode: "auto",
+              level: "",
+            });
+            audio.src = sourceDescriptor.hlsUrl;
+            audio.load();
+            return;
+          }
+
+          updateStreamQuality({
+            available: false,
+            canControl: false,
+            mode: "off",
+            level: "",
           });
-          hlsRef.current = hls;
-          hls.attachMedia(audio);
-          hls.on(HlsLibrary.Events.MEDIA_ATTACHED, () => {
-            hls.loadSource(sourceDescriptor.hlsUrl);
-          });
-          hls.on(HlsLibrary.Events.ERROR, (_event, data) => {
-            if (!data?.fatal) {
-              return;
-            }
-            disposeHls();
-            if (sourceDescriptor.url) {
-              audio.src = sourceDescriptor.url;
-              audio.load();
-            }
-          });
+          if (sourceDescriptor.url) {
+            audio.src = sourceDescriptor.url;
+            audio.load();
+          }
         })
         .catch(() => {
+          if (canUseNativeHls) {
+            updateStreamQuality({
+              available: true,
+              canControl: false,
+              mode: "auto",
+              level: "",
+            });
+            audio.src = sourceDescriptor.hlsUrl;
+            audio.load();
+            return;
+          }
+
+          updateStreamQuality({
+            available: false,
+            canControl: false,
+            mode: "off",
+            level: "",
+          });
           if (sourceDescriptor.url) {
             audio.src = sourceDescriptor.url;
             audio.load();
@@ -947,10 +1269,16 @@ export function PlayerProvider({ children }) {
     }
 
     audio.src = sourceDescriptor.url || sourceDescriptor.hlsUrl;
+    updateStreamQuality({
+      available: false,
+      canControl: false,
+      mode: "off",
+      level: "",
+    });
     audio.load();
 
     return audio;
-  }, [disposeHls, ensureAudioElement]);
+  }, [disposeHls, ensureAudioElement, updateStreamQuality]);
 
   const currentTrackId = state.queue[state.currentIndex];
   const currentTrack = trackMap[currentTrackId] ?? null;
@@ -1160,6 +1488,13 @@ export function PlayerProvider({ children }) {
       progressPercent,
       progressLabel: formatDuration(clampedProgress),
       durationLabel: formatDuration(currentDuration),
+      streamQuality: {
+        available: state.streamQualityAvailable,
+        canControl: state.streamQualityCanControl,
+        selected: state.streamQualitySelected,
+        mode: state.streamQualityMode,
+        level: state.streamQualityLevel,
+      },
       likedIds: state.likedIds,
       followedArtistIds: state.followedArtistIds,
       historyIds: state.historyIds,
@@ -1189,8 +1524,17 @@ export function PlayerProvider({ children }) {
       clearHistory: () => dispatch({ type: "clear_history" }),
       dismissToast: (toastId) => dispatch({ type: "dismiss_toast", toastId }),
       notify: (message) => dispatch({ type: "notify", message }),
+      setStreamQuality: (selection) => setStreamQualitySelection(selection),
     }),
-    [state, currentTrackId, currentTrack, clampedProgress, progressPercent, currentDuration]
+    [
+      state,
+      currentTrackId,
+      currentTrack,
+      clampedProgress,
+      progressPercent,
+      currentDuration,
+      setStreamQualitySelection,
+    ]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

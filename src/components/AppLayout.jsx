@@ -28,6 +28,7 @@ export default function AppLayout() {
     queueTracks,
     isPlaying,
     volume,
+    streamQuality,
     progressPercent,
     progressLabel,
     durationLabel,
@@ -47,6 +48,7 @@ export default function AppLayout() {
     clearQueue,
     likeTrack,
     unlikeTrack,
+    setStreamQuality,
     toastItems,
     dismissToast,
   } = usePlayer();
@@ -60,6 +62,15 @@ export default function AppLayout() {
   const canLikeCurrent = Boolean(currentTrack && !isCurrentTrackLiked);
   const canUnlikeCurrent = Boolean(currentTrack && isCurrentTrackLiked);
   const repeatEnabled = repeatMode !== "off";
+  const streamQualitySelected = streamQuality?.selected || "auto";
+  const fallbackQualityLevelLabel =
+    streamQualitySelected === "auto" ? "AUTO" : streamQualitySelected.toUpperCase();
+  const streamQualityModeLabel =
+    streamQuality?.mode === "manual" ? "MANUAL" : streamQuality?.mode === "auto" ? "AUTO" : "";
+  const streamQualityLevelLabel = streamQuality?.level
+    ? streamQuality.level.toUpperCase()
+    : fallbackQualityLevelLabel;
+  const canControlStreamQuality = Boolean(streamQuality?.available && streamQuality?.canControl);
 
   const repeatLabel =
     repeatMode === "one"
@@ -344,6 +355,28 @@ export default function AppLayout() {
           </div>
 
           <div className={styles.playerRight}>
+            {currentTrack && streamQuality?.available ? (
+              <div className={styles.streamQualityWrap}>
+                <label className={styles.streamQualityControl} aria-label="Режим качества">
+                  <span className={styles.streamQualityControlLabel}>Q</span>
+                  <select
+                    className={styles.streamQualitySelect}
+                    value={streamQualitySelected}
+                    onChange={(event) => setStreamQuality(event.target.value)}
+                    disabled={!canControlStreamQuality}
+                  >
+                    <option value="auto">AUTO</option>
+                    <option value="high">HIGH</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="low">LOW</option>
+                  </select>
+                </label>
+                <div className={styles.streamQualityBadge} aria-label="Текущее качество потока">
+                  <span className={styles.streamQualityMode}>{streamQualityModeLabel}</span>
+                  <span className={styles.streamQualityLevel}>{streamQualityLevelLabel}</span>
+                </div>
+              </div>
+            ) : null}
             <button
               type="button"
               ref={queueToggleRef}

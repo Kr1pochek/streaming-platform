@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   FiArrowRight,
+  FiBell,
   FiChevronRight,
   FiHeadphones,
   FiHeart,
@@ -61,13 +62,18 @@ export default function HomePage() {
     return "Добрый вечер";
   }, []);
   const greetingName = user?.displayName ?? user?.username ?? "гость";
+  const releaseNotifications = Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : [];
 
   const freshTracks = useMemo(
     () => (data?.freshTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
     [data?.freshTrackIds, trackMap]
   );
 
-  const sectionsEmpty = status === "success" && !data?.showcases?.length && !freshTracks.length;
+  const sectionsEmpty =
+    status === "success" &&
+    !data?.showcases?.length &&
+    !freshTracks.length &&
+    !releaseNotifications.length;
 
   return (
     <PageShell>
@@ -170,6 +176,63 @@ export default function HomePage() {
 
         {status === "success" && !sectionsEmpty ? (
           <>
+            {user?.id ? (
+              <section className={styles.section}>
+                <div className={styles.sectionTitleRow}>
+                  <h2 className={styles.sectionHeading}>Новые релизы по подпискам</h2>
+                  <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+                </div>
+                {releaseNotifications.length ? (
+                  <div className={styles.notificationGrid}>
+                    {releaseNotifications.map((item) => (
+                      <article key={item.id} className={styles.notificationCard}>
+                        <button
+                          className={styles.notificationMainButton}
+                          type="button"
+                          onClick={() => navigate(`/release/${item.releaseId}`)}
+                        >
+                          <span className={styles.notificationCover} style={{ background: item.cover }} />
+                          <span className={styles.notificationMeta}>
+                            <span className={styles.notificationTitle}>{item.title}</span>
+                            <span className={styles.notificationSubtitle}>
+                              {item.artistName} • {String(item.type ?? "").toUpperCase()} • {item.year}
+                            </span>
+                          </span>
+                        </button>
+                        <span className={styles.notificationActions}>
+                          {item.trackIds?.[0] ? (
+                            <button
+                              type="button"
+                              className={styles.notificationActionButton}
+                              aria-label="Слушать релиз"
+                              onClick={() => playTrack(item.trackIds[0])}
+                            >
+                              <FiPlay />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={styles.notificationActionButton}
+                            aria-label="Открыть исполнителя"
+                            onClick={() => navigate(`/artist/${item.artistId}`)}
+                          >
+                            <FiBell />
+                          </button>
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <ResourceState
+                    title="Пока нет новых релизов"
+                    description="Подпишись на артистов, чтобы получать обновления прямо на главной."
+                    actionLabel="Перейти в поиск"
+                    onAction={() => navigate("/search")}
+                  />
+                )}
+              </section>
+            ) : null}
+
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.sectionHeading}>Быстрый старт</h2>

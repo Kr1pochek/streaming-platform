@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiChevronRight, FiClock, FiExternalLink, FiHeart, FiLogOut, FiPlus, FiUsers } from "react-icons/fi";
 import styles from "./ProfilePage.module.css";
@@ -11,6 +11,7 @@ import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
+import { confirmPasswordReset, requestPasswordReset } from "../api/musicApi.js";
 
 function getTopGenres(tracks) {
   const scoreMap = new Map();
@@ -27,7 +28,16 @@ function getTopGenres(tracks) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { status: authStatus, user, isAuthenticated, signIn, signUp, signOut } = useAuth();
+  const {
+    status: authStatus,
+    user,
+    isAuthenticated,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    changePassword,
+  } = useAuth();
   const {
     artists,
     trackMap,
@@ -39,6 +49,7 @@ export default function ProfilePage() {
     toggleLikeTrack,
     toggleArtistFollow,
     addTrackNext,
+    notify,
   } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
@@ -50,6 +61,31 @@ export default function ProfilePage() {
   });
   const [authError, setAuthError] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetUsername, setResetUsername] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetInfo, setResetInfo] = useState("");
+  const [devResetToken, setDevResetToken] = useState("");
+
+  const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  useEffect(() => {
+    setProfileDisplayName(user?.displayName ?? user?.username ?? "");
+  }, [user?.displayName, user?.username]);
 
   const likedTracks = useMemo(() => likedIds.map((id) => trackMap[id]).filter(Boolean), [likedIds, trackMap]);
   const historyTracks = useMemo(() => historyIds.map((id) => trackMap[id]).filter(Boolean), [historyIds, trackMap]);
@@ -98,6 +134,132 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRequestResetToken = async () => {
+    if (resetSubmitting) {
+      return;
+    }
+
+    const username = resetUsername.trim();
+    if (!username) {
+      setResetError("Укажи логин.");
+      return;
+    }
+
+    setResetSubmitting(true);
+    setResetError("");
+    setResetInfo("");
+    setDevResetToken("");
+    try {
+      const response = await requestPasswordReset({ username });
+      const nextToken = String(response?.resetToken ?? "").trim();
+      setResetInfo("Если аккаунт существует, токен восстановление создан.");
+      if (nextToken) {
+        setDevResetToken(nextToken);
+        setResetToken(nextToken);
+      }
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : "Не удалось запросить сброс пароля.");
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    if (resetSubmitting) {
+      return;
+    }
+
+    const username = resetUsername.trim();
+    const token = resetToken.trim();
+    if (!username || !token || !resetPassword) {
+      setResetError("Заполни логин, токен и новый пароль.");
+      return;
+    }
+
+    setResetSubmitting(true);
+    setResetError("");
+    setResetInfo("");
+    try {
+      await confirmPasswordReset({
+        username,
+        token,
+        newPassword: resetPassword,
+      });
+      notify("Пароль изменен. Теперь войди с новым паролем.");
+      setShowResetForm(false);
+      setAuthMode("login");
+      setCredentials((prev) => ({ ...prev, username, password: "", displayName: "" }));
+      setResetUsername("");
+      setResetToken("");
+      setResetPassword("");
+      setDevResetToken("");
+      setResetInfo("");
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : "Не удалось обновить пароль.");
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
+  const handleUpdateProfile = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated || profileSubmitting) {
+      return;
+    }
+
+    const displayName = profileDisplayName.trim();
+    if (!displayName) {
+      setProfileError("Имя профиля не может быть пустым.");
+      return;
+    }
+
+    setProfileSubmitting(true);
+    setProfileError("");
+    try {
+      await updateProfile({ displayName });
+      notify("Профиль обновлен.");
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Не удалось обновить профиль.");
+    } finally {
+      setProfileSubmitting(false);
+    }
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated || passwordSubmitting) {
+      return;
+    }
+
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordError("Заполни все поля пароля.");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("Новый пароль и подтверждение не совпадают.");
+      return;
+    }
+
+    setPasswordSubmitting(true);
+    setPasswordError("");
+    try {
+      await changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      notify("Пароль обновлен.");
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Не удалось изменить пароль.");
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  };
+
   const changeCredentials = (field, value) => {
     setCredentials((prev) => ({ ...prev, [field]: value }));
   };
@@ -117,67 +279,159 @@ export default function ProfilePage() {
           <div className={styles.sectionTitleRow}>
             <h2 className={styles.sectionTitle}>Авторизация</h2>
           </div>
-          <form className={styles.authForm} onSubmit={handleAuthSubmit}>
-            <p className={styles.subtitle}>
-              {authMode === "register"
-                ? "Создай аккаунт, чтобы синхронизировать лайки, подписки и историю."
-                : "Войди, чтобы продолжить с теми же лайками и подписками на любом устройстве."}
-            </p>
-            <label className={styles.authLabel}>
-              Логин
-              <input
-                className={styles.authInput}
-                value={credentials.username}
-                onChange={(event) => changeCredentials("username", event.target.value)}
-                minLength={3}
-                maxLength={32}
-                required
-              />
-            </label>
-            <label className={styles.authLabel}>
-              Пароль
-              <input
-                className={styles.authInput}
-                type="password"
-                value={credentials.password}
-                onChange={(event) => changeCredentials("password", event.target.value)}
-                minLength={6}
-                maxLength={128}
-                required
-              />
-            </label>
-            {authMode === "register" ? (
+
+          {!showResetForm ? (
+            <form className={styles.authForm} onSubmit={handleAuthSubmit}>
+              <p className={styles.subtitle}>
+                {authMode === "register"
+                  ? "Создай аккаунт, чтобы синхронизировать лайки, подписки и историю."
+                  : "Войди, чтобы продолжить прослушивание с теми же лайками и плейлистами."}
+              </p>
+
               <label className={styles.authLabel}>
-                Отображаемое имя
+                Логин
                 <input
                   className={styles.authInput}
-                  value={credentials.displayName}
-                  onChange={(event) => changeCredentials("displayName", event.target.value)}
-                  maxLength={48}
+                  value={credentials.username}
+                  onChange={(event) => changeCredentials("username", event.target.value)}
+                  minLength={3}
+                  maxLength={32}
+                  required
                 />
               </label>
-            ) : null}
-            {authError ? <p className={styles.authError}>{authError}</p> : null}
-            <div className={styles.authActions}>
-              <button type="submit" className={styles.authPrimaryButton} disabled={authSubmitting}>
-                {authSubmitting
-                  ? "Подключаем..."
-                  : authMode === "register"
-                    ? "Создать аккаунт"
-                    : "Войти"}
-              </button>
-              <button
-                type="button"
-                className={styles.authSecondaryButton}
-                onClick={() => {
-                  setAuthMode((prev) => (prev === "register" ? "login" : "register"));
-                  setAuthError("");
-                }}
-              >
-                {authMode === "register" ? "У меня уже есть аккаунт" : "Создать новый аккаунт"}
-              </button>
+
+              <label className={styles.authLabel}>
+                Пароль
+                <input
+                  className={styles.authInput}
+                  type="password"
+                  value={credentials.password}
+                  onChange={(event) => changeCredentials("password", event.target.value)}
+                  minLength={6}
+                  maxLength={128}
+                  required
+                />
+              </label>
+
+              {authMode === "register" ? (
+                <label className={styles.authLabel}>
+                  Отображаемое имя
+                  <input
+                    className={styles.authInput}
+                    value={credentials.displayName}
+                    onChange={(event) => changeCredentials("displayName", event.target.value)}
+                    maxLength={48}
+                  />
+                </label>
+              ) : null}
+
+              {authError ? <p className={styles.authError}>{authError}</p> : null}
+              <div className={styles.authActions}>
+                <button type="submit" className={styles.authPrimaryButton} disabled={authSubmitting}>
+                  {authSubmitting ? "Подключаем..." : authMode === "register" ? "Создать аккаунт" : "Войти"}
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.authSecondaryButton}
+                  onClick={() => {
+                    setAuthMode((prev) => (prev === "register" ? "login" : "register"));
+                    setAuthError("");
+                  }}
+                >
+                  {authMode === "register" ? "У меня уже есть аккаунт" : "Создать новый аккаунт"}
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.authSecondaryButton}
+                  onClick={() => {
+                    setShowResetForm(true);
+                    setResetError("");
+                    setResetInfo("");
+                    setDevResetToken("");
+                  }}
+                >
+                  Забыли пароль?
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className={styles.authForm}>
+              <p className={styles.subtitle}>
+                Запроси токен восстановления, затем введи его и новый пароль.
+              </p>
+
+              <label className={styles.authLabel}>
+                Логин
+                <input
+                  className={styles.authInput}
+                  value={resetUsername}
+                  onChange={(event) => setResetUsername(event.target.value)}
+                  minLength={3}
+                  maxLength={32}
+                />
+              </label>
+
+              <label className={styles.authLabel}>
+                Токен восстановления
+                <input
+                  className={styles.authInput}
+                  value={resetToken}
+                  onChange={(event) => setResetToken(event.target.value)}
+                />
+              </label>
+
+              <label className={styles.authLabel}>
+                Новый пароль
+                <input
+                  className={styles.authInput}
+                  type="password"
+                  value={resetPassword}
+                  onChange={(event) => setResetPassword(event.target.value)}
+                  minLength={6}
+                  maxLength={128}
+                />
+              </label>
+
+              {devResetToken ? <p className={styles.authError}>Dev token: {devResetToken}</p> : null}
+              {resetInfo ? <p className={styles.subtitle}>{resetInfo}</p> : null}
+              {resetError ? <p className={styles.authError}>{resetError}</p> : null}
+
+              <div className={styles.authActions}>
+                <button
+                  type="button"
+                  className={styles.authPrimaryButton}
+                  disabled={resetSubmitting}
+                  onClick={handleRequestResetToken}
+                >
+                  {resetSubmitting ? "Запрашиваем..." : "Получить токен"}
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.authPrimaryButton}
+                  disabled={resetSubmitting}
+                  onClick={handleConfirmReset}
+                >
+                  {resetSubmitting ? "Сохраняем..." : "Сменить пароль"}
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.authSecondaryButton}
+                  onClick={() => {
+                    setShowResetForm(false);
+                    setResetError("");
+                    setResetInfo("");
+                    setDevResetToken("");
+                  }}
+                >
+                  Назад ко входу
+                </button>
+              </div>
             </div>
-          </form>
+          )}
         </section>
       </PageShell>
     );
@@ -211,6 +465,77 @@ export default function ProfilePage() {
           </button>
         </div>
       </header>
+
+      <section className={styles.section}>
+        <div className={styles.sectionTitleRow}>
+          <h2 className={styles.sectionTitle}>Настройки аккаунта</h2>
+          <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+        </div>
+
+        <form className={styles.authForm} onSubmit={handleUpdateProfile}>
+          <label className={styles.authLabel}>
+            Отображаемое имя
+            <input
+              className={styles.authInput}
+              value={profileDisplayName}
+              onChange={(event) => setProfileDisplayName(event.target.value)}
+              maxLength={48}
+            />
+          </label>
+          {profileError ? <p className={styles.authError}>{profileError}</p> : null}
+          <div className={styles.authActions}>
+            <button type="submit" className={styles.authPrimaryButton} disabled={profileSubmitting}>
+              {profileSubmitting ? "Сохраняем..." : "Сохранить профиль"}
+            </button>
+          </div>
+        </form>
+
+        <form className={styles.authForm} onSubmit={handleChangePassword}>
+          <label className={styles.authLabel}>
+            Текущий пароль
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(event) =>
+                setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+              }
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          <label className={styles.authLabel}>
+            Новый пароль
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          <label className={styles.authLabel}>
+            Подтверждение нового пароля
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(event) =>
+                setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+              }
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          {passwordError ? <p className={styles.authError}>{passwordError}</p> : null}
+          <div className={styles.authActions}>
+            <button type="submit" className={styles.authPrimaryButton} disabled={passwordSubmitting}>
+              {passwordSubmitting ? "Сохраняем..." : "Изменить пароль"}
+            </button>
+          </div>
+        </form>
+      </section>
 
       <section className={styles.section}>
         <div className={styles.sectionTitleRow}>
@@ -259,7 +584,7 @@ export default function ProfilePage() {
           <div className={styles.subscriptionsEmpty}>
             <ResourceState
               title="Пока нет подписок"
-              description="Открой страницу исполнителя и нажми “Подписаться”, чтобы собрать личную ленту."
+              description="Открой страницу исполнителя и нажми «Подписаться»."
               actionLabel="Перейти в поиск"
               onAction={() => navigate("/search")}
             />
@@ -328,7 +653,7 @@ export default function ProfilePage() {
         ) : (
           <ResourceState
             title="История пуста"
-            description="Запусти пару треков из поиска или плейлистов, и здесь появится активность."
+            description="Запусти несколько треков из поиска или плейлистов."
             actionLabel="Открыть поиск"
             onAction={() => navigate("/search")}
           />

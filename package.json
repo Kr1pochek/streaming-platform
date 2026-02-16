@@ -10,6 +10,7 @@
     "server": "node --env-file-if-exists=.env server/index.js",
     "audio:import": "node scripts/import-track-audio.mjs",
     "stream:hls": "node scripts/stream/generate-hls.mjs",
+    "stream:verify": "node scripts/stream/verify-hls.mjs",
     "media:migrate:s3": "node --env-file-if-exists=.env scripts/stream/migrate-audio-to-s3.mjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/db/migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env scripts/db/seed.mjs",

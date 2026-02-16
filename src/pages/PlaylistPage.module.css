@@ -119,6 +119,12 @@
   font-weight: 850;
 }
 
+.reorderHint {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+}
+
 .trackList {
   margin: 14px 0 0;
   padding: 0;
@@ -137,6 +143,19 @@
   align-items: center;
   gap: 6px;
   padding: 0 8px;
+}
+
+.trackRowDraggable {
+  cursor: grab;
+}
+
+.trackRowDragging {
+  opacity: 0.65;
+}
+
+.trackRowDropTarget {
+  border-color: rgba(245, 204, 70, 0.62);
+  background: rgba(245, 204, 70, 0.12);
 }
 
 .trackRowActive {

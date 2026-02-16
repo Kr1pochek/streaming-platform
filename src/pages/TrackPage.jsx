@@ -1,6 +1,6 @@
-﻿import { useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiExternalLink, FiHeart, FiMusic, FiPlay, FiPlus } from "react-icons/fi";
+import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMusic, FiPlay, FiPlus } from "react-icons/fi";
 import { LuHeart } from "react-icons/lu";
 import styles from "./TrackPage.module.css";
 import PageShell from "../components/PageShell.jsx";
@@ -11,6 +11,7 @@ import {
   removeTrackFromUserPlaylist,
 } from "../api/musicApi.js";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
@@ -20,16 +21,38 @@ import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 export default function TrackPage() {
   const { trackId = "" } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const loadTrackPage = useCallback(() => fetchTrackPage(trackId), [trackId]);
   const { status, data, error, reload } = useAsyncResource(loadTrackPage);
 
-  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext } = usePlayer();
+  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext, notify } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const isLiked = useMemo(() => likedIds.includes(trackId), [likedIds, trackId]);
 
+  const handleShareTrack = async () => {
+    if (!data?.track?.id || typeof window === "undefined") {
+      return;
+    }
+    const absoluteUrl = `${window.location.origin}/track/${data.track.id}`;
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable");
+      }
+      await navigator.clipboard.writeText(absoluteUrl);
+      notify("Ссылка на трек скопирована.");
+    } catch {
+      window.prompt("Скопируй ссылку на трек:", absoluteUrl);
+    }
+  };
+
   const handleToggleTrackInPlaylist = async (playlist) => {
     if (!data?.track?.id) {
+      return;
+    }
+    if (!isAuthenticated) {
+      notify("Войди в аккаунт, чтобы управлять плейлистами.");
+      navigate("/profile");
       return;
     }
 
@@ -104,6 +127,10 @@ export default function TrackPage() {
                     Страница автора
                   </button>
                 ) : null}
+                <button type="button" className={styles.secondaryButton} onClick={handleShareTrack}>
+                  <FiLink2 />
+                  Поделиться
+                </button>
               </div>
             </div>
           </header>
@@ -164,7 +191,14 @@ export default function TrackPage() {
 
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Мои плейлисты</h2>
-            {data.playlistToggles.length ? (
+            {!isAuthenticated ? (
+              <ResourceState
+                title="Нужен аккаунт"
+                description="Войди, чтобы добавлять треки в свои плейлисты."
+                actionLabel="Открыть профиль"
+                onAction={() => navigate("/profile")}
+              />
+            ) : data.playlistToggles.length ? (
               <div className={styles.userPlaylistList}>
                 {data.playlistToggles.map((playlist) => (
                   <article key={playlist.id} className={styles.userPlaylistRow}>

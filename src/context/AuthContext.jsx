@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  changeAuthPassword,
   fetchCurrentUser,
   getAuthToken,
   loginAuth,
   logoutAuth,
   registerAuth,
+  updateAuthProfile,
 } from "../api/musicApi.js";
 import AuthContext from "./authContext.js";
 
@@ -105,6 +107,20 @@ export function AuthProvider({ children }) {
     setStatus("guest");
   }, []);
 
+  const updateProfile = useCallback(async (payload) => {
+    const response = await updateAuthProfile(payload);
+    const nextUser = response?.user ?? null;
+    if (nextUser?.id) {
+      setUser(nextUser);
+      setStatus("authenticated");
+    }
+    return response;
+  }, []);
+
+  const changePassword = useCallback(async (payload) => {
+    return changeAuthPassword(payload);
+  }, []);
+
   const value = useMemo(
     () => ({
       status,
@@ -114,8 +130,10 @@ export function AuthProvider({ children }) {
       signIn,
       signUp,
       signOut,
+      updateProfile,
+      changePassword,
     }),
-    [status, user, refreshCurrentUser, signIn, signUp, signOut]
+    [status, user, refreshCurrentUser, signIn, signUp, signOut, updateProfile, changePassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

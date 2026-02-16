@@ -13,10 +13,14 @@ import { optionalAuth, requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { createRateLimiter, resolveRequestIp } from "../middleware/rateLimit.js";
 import {
+  changeUserPassword,
   createSession,
   createUserAccount,
   pruneExpiredSessions,
+  requestPasswordResetToken,
+  resetPasswordWithToken,
   revokeSession,
+  updateUserProfile,
   verifyUserCredentials,
 } from "../services/authService.js";
 import {
@@ -96,6 +100,27 @@ function parseOffset(value, fallback = 0) {
     return fallback;
   }
   return Math.max(parsed, 0);
+}
+
+function parseBoolean(value, fallback = false) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
+function shouldExposePasswordResetToken() {
+  return parseBoolean(
+    process.env.PASSWORD_RESET_RETURN_TOKEN,
+    String(process.env.NODE_ENV ?? "").toLowerCase() !== "production"
+  );
 }
 
 function requestUserId(req) {
@@ -354,6 +379,66 @@ export function createApiRouter({
     })
   );
 
+  router.patch(
+    "/auth/profile",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const displayName = normalizeTitle(req.body?.displayName);
+      const user = await updateUserProfile({
+        userId: req.auth.userId,
+        displayName,
+      });
+      res.json({ user });
+    })
+  );
+
+  router.post(
+    "/auth/password/change",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const currentPassword = String(req.body?.currentPassword ?? "");
+      const newPassword = String(req.body?.newPassword ?? "");
+      await changeUserPassword({
+        userId: req.auth.userId,
+        currentPassword,
+        newPassword,
+      });
+      res.json({ success: true });
+    })
+  );
+
+  router.post(
+    "/auth/password/reset/request",
+    authRateLimiter,
+    asyncHandler(async (req, res) => {
+      const username = normalizeTitle(req.body?.username);
+      const result = await requestPasswordResetToken({ username });
+
+      if (!shouldExposePasswordResetToken()) {
+        res.json({ success: true });
+        return;
+      }
+
+      res.json({
+        success: true,
+        resetToken: result.token ?? "",
+        expiresAt: result.expiresAt ?? null,
+      });
+    })
+  );
+
+  router.post(
+    "/auth/password/reset/confirm",
+    authRateLimiter,
+    asyncHandler(async (req, res) => {
+      const username = normalizeTitle(req.body?.username);
+      const token = String(req.body?.token ?? "");
+      const newPassword = String(req.body?.newPassword ?? "");
+      await resetPasswordWithToken({ username, token, newPassword });
+      res.json({ success: true });
+    })
+  );
+
   router.get(
     "/me/player-state",
     requireAuth,
@@ -371,6 +456,10 @@ export function createApiRouter({
         likedTrackIds: Array.isArray(req.body?.likedTrackIds) ? req.body.likedTrackIds : [],
         followedArtistIds: Array.isArray(req.body?.followedArtistIds) ? req.body.followedArtistIds : [],
         historyTrackIds: Array.isArray(req.body?.historyTrackIds) ? req.body.historyTrackIds : [],
+        queueTrackIds: Array.isArray(req.body?.queueTrackIds) ? req.body.queueTrackIds : [],
+        queueCurrentIndex: req.body?.queueCurrentIndex,
+        queueProgressSec: req.body?.queueProgressSec,
+        queueIsPlaying: req.body?.queueIsPlaying,
       };
       const saved = await updateUserState(req.auth.userId, nextState);
       res.json(saved);
@@ -655,10 +744,76 @@ export function createApiRouter({
     })
   );
 
+  router.put(
+    "/user-playlists/:playlistId/tracks/reorder",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const playlistId = req.params.playlistId;
+      if (!isCustomPlaylistId(playlistId)) {
+        throw new HttpError(400, "Tracks can only be reordered in custom playlists.");
+      }
+
+      const inputTrackIds = Array.isArray(req.body?.trackIds) ? req.body.trackIds : null;
+      if (!inputTrackIds) {
+        throw new HttpError(400, "trackIds array is required.");
+      }
+
+      const normalizedTrackIds = inputTrackIds.map((trackId) => normalizeTitle(trackId)).filter(Boolean);
+      const uniqueTrackIds = Array.from(new Set(normalizedTrackIds));
+      if (uniqueTrackIds.length !== inputTrackIds.length) {
+        throw new HttpError(400, "trackIds must be a unique list.");
+      }
+
+      await withTransaction(async (client) => {
+        await ensureOwnedCustomPlaylist(client, playlistId, req.auth.userId);
+
+        const { rows: currentRows } = await client.query(
+          `
+          select track_id
+          from playlist_tracks
+          where playlist_id = $1
+          order by position;
+        `,
+          [playlistId]
+        );
+        const currentTrackIds = currentRows.map((row) => String(row.track_id ?? "").trim()).filter(Boolean);
+
+        if (currentTrackIds.length !== uniqueTrackIds.length) {
+          throw new HttpError(400, "trackIds must contain all playlist tracks exactly once.");
+        }
+
+        const currentTrackIdSet = new Set(currentTrackIds);
+        const sameTrackSet = uniqueTrackIds.every((trackId) => currentTrackIdSet.has(trackId));
+        if (!sameTrackSet) {
+          throw new HttpError(400, "trackIds must contain all playlist tracks exactly once.");
+        }
+
+        await client.query("delete from playlist_tracks where playlist_id = $1;", [playlistId]);
+        for (let index = 0; index < uniqueTrackIds.length; index += 1) {
+          await client.query(
+            `
+            insert into playlist_tracks (playlist_id, track_id, position)
+            values ($1, $2, $3);
+          `,
+            [playlistId, uniqueTrackIds[index], index + 1]
+          );
+        }
+      });
+
+      invalidateCatalogCache();
+      const playlist = await getPlaylistById(playlistId);
+      if (!canReadPlaylist(playlist, req.auth.userId)) {
+        throw new HttpError(404, "Playlist not found.");
+      }
+
+      res.json(playlist);
+    })
+  );
+
   router.get(
     "/home-feed",
-    asyncHandler(async (_req, res) => {
-      const { playlists, trackMap } = await fetchCatalog();
+    asyncHandler(async (req, res) => {
+      const { playlists, trackMap, artists, releases } = await fetchCatalog();
       const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
       const enrichedShowcases = showcases.map((item) => {
         const playlist = playlists.find((candidate) => candidate.id === item.playlistId);
@@ -667,12 +822,39 @@ export function createApiRouter({
           trackIds: playlist?.trackIds ?? [],
         };
       });
+      const userId = requestUserId(req);
+
+      let releaseNotifications = [];
+      if (userId) {
+        const userState = await fetchUserState(userId);
+        const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
+        const artistNameById = new Map((artists ?? []).map((artist) => [artist.id, artist.name]));
+        releaseNotifications = (releases ?? [])
+          .filter((release) => followedArtistIdSet.has(release.artistId))
+          .sort(
+            (first, second) =>
+              Number(second.year ?? 0) - Number(first.year ?? 0) || String(second.id).localeCompare(String(first.id))
+          )
+          .slice(0, 8)
+          .map((release) => ({
+            id: `notif-${release.id}`,
+            releaseId: release.id,
+            artistId: release.artistId,
+            artistName: artistNameById.get(release.artistId) ?? "",
+            title: release.title,
+            type: release.type,
+            year: Number(release.year ?? 0),
+            cover: release.cover,
+            trackIds: Array.isArray(release.trackIds) ? release.trackIds : [],
+          }));
+      }
 
       res.json({
         quickActions,
         showcases: enrichedShowcases,
         vibeTags,
         freshTrackIds,
+        releaseNotifications,
       });
     })
   );

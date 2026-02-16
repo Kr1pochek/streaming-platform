@@ -11,6 +11,7 @@ import {
   updateUserPlaylist,
 } from "../api/musicApi.js";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import SmartRecommendations from "../components/SmartRecommendations.jsx";
 import ModalDialog from "../components/ModalDialog.jsx";
@@ -98,6 +99,7 @@ function descriptionToFormValue(value) {
 
 export default function LibraryPage() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const loadLibraryFeed = useCallback(() => fetchLibraryFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadLibraryFeed);
 
@@ -155,7 +157,19 @@ export default function LibraryPage() {
   const recommendations = useMemo(() => Object.values(trackMap).slice(0, 4), [trackMap]);
   const isEmpty = status === "success" && !myPlaylists.length && !followedArtists.length;
 
+  const requireAuthenticated = () => {
+    if (isAuthenticated) {
+      return true;
+    }
+    notify("Войди в аккаунт, чтобы управлять плейлистами.");
+    navigate("/profile");
+    return false;
+  };
+
   const openCreateDialog = () => {
+    if (!requireAuthenticated()) {
+      return;
+    }
     setCreateForm({
       title: "Новый плейлист",
       description: "",
@@ -165,6 +179,9 @@ export default function LibraryPage() {
   };
 
   const openEditDialog = (playlist) => {
+    if (!requireAuthenticated()) {
+      return;
+    }
     setEditDialog({
       open: true,
       playlist,
@@ -175,6 +192,9 @@ export default function LibraryPage() {
   };
 
   const handleCreatePlaylist = async () => {
+    if (!requireAuthenticated()) {
+      return;
+    }
     const title = createForm.title.trim();
     if (!title) {
       notify("Название плейлиста не может быть пустым.");
@@ -197,6 +217,9 @@ export default function LibraryPage() {
   };
 
   const handleUpdatePlaylist = async () => {
+    if (!requireAuthenticated()) {
+      return;
+    }
     if (!editDialog.playlist) {
       return;
     }
@@ -222,6 +245,9 @@ export default function LibraryPage() {
   };
 
   const handleDeletePlaylist = async () => {
+    if (!requireAuthenticated()) {
+      return;
+    }
     if (!deleteDialogPlaylist) {
       return;
     }

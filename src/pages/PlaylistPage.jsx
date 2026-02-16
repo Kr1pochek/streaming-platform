@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FiArrowLeft,
   FiClock,
   FiExternalLink,
   FiHeart,
+  FiLink2,
   FiPlay,
   FiPlus,
   FiShuffle,
@@ -17,6 +18,7 @@ import useAsyncResource from "../hooks/useAsyncResource.js";
 import {
   deleteUserPlaylist,
   fetchPlaylistPage,
+  reorderUserPlaylistTracks,
   removeTrackFromUserPlaylist,
   renameUserPlaylist,
 } from "../api/musicApi.js";
@@ -37,6 +39,26 @@ function shuffleTrackIds(trackIds) {
   return ids;
 }
 
+function moveTrack(tracks, fromIndex, toIndex) {
+  const safeFrom = Number(fromIndex);
+  const safeTo = Number(toIndex);
+  if (
+    !Number.isInteger(safeFrom) ||
+    !Number.isInteger(safeTo) ||
+    safeFrom < 0 ||
+    safeTo < 0 ||
+    safeFrom >= tracks.length ||
+    safeTo >= tracks.length
+  ) {
+    return tracks;
+  }
+
+  const nextTracks = [...tracks];
+  const [movedTrack] = nextTracks.splice(safeFrom, 1);
+  nextTracks.splice(safeTo, 0, movedTrack);
+  return nextTracks;
+}
+
 export default function PlaylistPage() {
   const { playlistId = "" } = useParams();
   const navigate = useNavigate();
@@ -49,14 +71,30 @@ export default function PlaylistPage() {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderedTracks, setOrderedTracks] = useState([]);
+  const [dragFromIndex, setDragFromIndex] = useState(-1);
+  const [dragOverIndex, setDragOverIndex] = useState(-1);
+  const [reorderSaving, setReorderSaving] = useState(false);
+
+  useEffect(() => {
+    setOrderedTracks(Array.isArray(data?.tracks) ? data.tracks : []);
+  }, [data?.tracks]);
+
+  const playlistTrackIds = useMemo(() => orderedTracks.map((track) => track.id), [orderedTracks]);
+  const isCustomPlaylist = Boolean(data?.playlist?.isCustom);
 
   const totalDuration = useMemo(
-    () => (data?.tracks ?? []).reduce((sum, track) => sum + (track.durationSec ?? 0), 0),
-    [data?.tracks]
+    () => orderedTracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0),
+    [orderedTracks]
   );
 
+  const resetDragState = () => {
+    setDragFromIndex(-1);
+    setDragOverIndex(-1);
+  };
+
   const handleRenamePlaylist = async () => {
-    if (!data?.playlist?.isCustom) return;
+    if (!isCustomPlaylist) return;
     const nextTitle = renameValue.trim();
     if (!nextTitle) {
       notify("Название плейлиста не может быть пустым.");
@@ -69,33 +107,104 @@ export default function PlaylistPage() {
       setRenameValue("");
       await reload();
       notify("Плейлист переименован.");
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Не удалось переименовать плейлист.");
+    } catch (renameError) {
+      notify(renameError instanceof Error ? renameError.message : "Не удалось переименовать плейлист.");
     }
   };
 
   const handleDeletePlaylist = async () => {
-    if (!data?.playlist?.isCustom) return;
+    if (!isCustomPlaylist) return;
 
     try {
       await deleteUserPlaylist(data.playlist.id);
       setDeleteDialogOpen(false);
       notify("Плейлист удален.");
       navigate("/library");
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Не удалось удалить плейлист.");
+    } catch (deleteError) {
+      notify(deleteError instanceof Error ? deleteError.message : "Не удалось удалить плейлист.");
     }
   };
 
   const handleRemoveTrack = async (trackId) => {
-    if (!data?.playlist?.isCustom) return;
+    if (!isCustomPlaylist) return;
 
     try {
       await removeTrackFromUserPlaylist(data.playlist.id, trackId);
       await reload();
       notify("Трек удален из плейлиста.");
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Не удалось удалить трек из плейлиста.");
+    } catch (removeError) {
+      notify(removeError instanceof Error ? removeError.message : "Не удалось удалить трек из плейлиста.");
+    }
+  };
+
+  const handleTrackDragStart = (index) => {
+    if (!isCustomPlaylist || reorderSaving) {
+      return;
+    }
+    setDragFromIndex(index);
+    setDragOverIndex(index);
+  };
+
+  const handleTrackDragOver = (event, index) => {
+    if (!isCustomPlaylist || reorderSaving) {
+      return;
+    }
+    event.preventDefault();
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleTrackDrop = async (event, targetIndex) => {
+    if (!isCustomPlaylist || reorderSaving) {
+      return;
+    }
+    event.preventDefault();
+
+    if (
+      !Number.isInteger(dragFromIndex) ||
+      dragFromIndex < 0 ||
+      dragFromIndex >= orderedTracks.length
+    ) {
+      resetDragState();
+      return;
+    }
+
+    if (dragFromIndex === targetIndex) {
+      resetDragState();
+      return;
+    }
+
+    const nextTracks = moveTrack(orderedTracks, dragFromIndex, targetIndex);
+    setOrderedTracks(nextTracks);
+    resetDragState();
+
+    setReorderSaving(true);
+    try {
+      await reorderUserPlaylistTracks(data.playlist.id, nextTracks.map((track) => track.id));
+      await reload();
+      notify("Порядок треков обновлен.");
+    } catch (reorderError) {
+      notify(reorderError instanceof Error ? reorderError.message : "Не удалось изменить порядок треков.");
+      await reload();
+    } finally {
+      setReorderSaving(false);
+    }
+  };
+
+  const handleSharePlaylist = async () => {
+    if (!data?.playlist?.id || typeof window === "undefined") {
+      return;
+    }
+    const absoluteUrl = `${window.location.origin}/playlist/${data.playlist.id}`;
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API is unavailable");
+      }
+      await navigator.clipboard.writeText(absoluteUrl);
+      notify("Ссылка на плейлист скопирована.");
+    } catch {
+      window.prompt("Скопируй ссылку на плейлист:", absoluteUrl);
     }
   };
 
@@ -123,25 +232,21 @@ export default function PlaylistPage() {
               <h1 className={styles.heroTitle}>{data.playlist.title}</h1>
               <p className={styles.heroSubtitle}>{data.playlist.subtitle}</p>
               <div className={styles.heroStats}>
-                <span>{data.tracks.length} треков</span>
+                <span>{orderedTracks.length} треков</span>
                 <span>
                   <FiClock />
                   {formatDurationClock(totalDuration)}
                 </span>
               </div>
               <div className={styles.heroActions}>
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={() => playQueue(data.playlist.trackIds, 0)}
-                >
+                <button type="button" className={styles.primaryButton} onClick={() => playQueue(playlistTrackIds, 0)}>
                   <FiPlay />
                   Слушать
                 </button>
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  onClick={() => playQueue(shuffleTrackIds(data.playlist.trackIds), 0)}
+                  onClick={() => playQueue(shuffleTrackIds(playlistTrackIds), 0)}
                 >
                   <FiShuffle />
                   Перемешать
@@ -149,11 +254,15 @@ export default function PlaylistPage() {
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  onClick={() => addQueueNext(data.playlist.trackIds, "Плейлист")}
+                  onClick={() => addQueueNext(playlistTrackIds, "Плейлист")}
                 >
                   В очередь
                 </button>
-                {data.playlist.isCustom ? (
+                <button type="button" className={styles.secondaryButton} onClick={handleSharePlaylist}>
+                  <FiLink2 />
+                  Поделиться
+                </button>
+                {isCustomPlaylist ? (
                   <button
                     type="button"
                     className={styles.secondaryButton}
@@ -165,7 +274,7 @@ export default function PlaylistPage() {
                     Переименовать
                   </button>
                 ) : null}
-                {data.playlist.isCustom ? (
+                {isCustomPlaylist ? (
                   <button
                     type="button"
                     className={`${styles.secondaryButton} ${styles.dangerButton}`.trim()}
@@ -180,12 +289,30 @@ export default function PlaylistPage() {
 
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Треки</h2>
+            {isCustomPlaylist ? (
+              <p className={styles.reorderHint}>
+                Перетаскивай треки, чтобы менять порядок.
+                {reorderSaving ? " Сохраняем..." : ""}
+              </p>
+            ) : null}
             <ul className={styles.trackList}>
-              {data.tracks.map((track, index) => {
+              {orderedTracks.map((track, index) => {
                 const liked = likedIds.includes(track.id);
                 const isActive = currentTrackId === track.id;
                 return (
-                  <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
+                  <li
+                    key={track.id}
+                    className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""} ${
+                      isCustomPlaylist ? styles.trackRowDraggable : ""
+                    } ${dragFromIndex === index ? styles.trackRowDragging : ""} ${
+                      dragOverIndex === index && dragFromIndex !== index ? styles.trackRowDropTarget : ""
+                    }`.trim()}
+                    draggable={isCustomPlaylist}
+                    onDragStart={() => handleTrackDragStart(index)}
+                    onDragOver={(event) => handleTrackDragOver(event, index)}
+                    onDrop={(event) => void handleTrackDrop(event, index)}
+                    onDragEnd={resetDragState}
+                  >
                     <button
                       type="button"
                       className={styles.trackMain}
@@ -234,7 +361,7 @@ export default function PlaylistPage() {
                     >
                       <FiPlus />
                     </button>
-                    {data.playlist.isCustom ? (
+                    {isCustomPlaylist ? (
                       <button
                         type="button"
                         className={`${styles.iconButton} ${styles.removeTrackButton}`.trim()}
