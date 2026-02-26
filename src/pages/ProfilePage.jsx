@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiClock, FiExternalLink, FiHeart, FiLogOut, FiPlus, FiUsers } from "react-icons/fi";
+import {
+  FiChevronRight,
+  FiClock,
+  FiExternalLink,
+  FiHeart,
+  FiLogOut,
+  FiPlus,
+  FiSettings,
+  FiUpload,
+  FiUsers,
+} from "react-icons/fi";
 import styles from "./ProfilePage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import usePlayer from "../hooks/usePlayer.js";
@@ -11,19 +21,81 @@ import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
-import { confirmPasswordReset, requestPasswordReset } from "../api/musicApi.js";
+import { confirmPasswordReset, requestPasswordReset, uploadTrack } from "../api/musicApi.js";
+import ModalDialog from "../components/ModalDialog.jsx";
 
-function getTopGenres(tracks) {
+const UPLOADED_GENRES_STORAGE_PREFIX = "music.profile.uploadedGenres.v1";
+const DEFAULT_UPLOAD_TRACK_COVER = "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)";
+const MAX_TRACK_COVER_FILE_SIZE = 5 * 1024 * 1024;
+const TRACK_COVER_MAX_SIDE = 640;
+const TRACK_COVER_JPEG_QUALITY = 0.74;
+const MAX_TRACK_COVER_BACKGROUND_LENGTH = 900_000;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Не удалось прочитать изображение."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new window.Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Не удалось обработать изображение."));
+    image.src = dataUrl;
+  });
+}
+
+async function buildTrackCoverFromFile(file) {
+  if (!file?.type?.startsWith("image/")) {
+    throw new Error("Выбери файл изображения.");
+  }
+  if (file.size > MAX_TRACK_COVER_FILE_SIZE) {
+    throw new Error("Файл слишком большой. Максимум 5 МБ.");
+  }
+
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageElement(sourceDataUrl);
+  const maxSide = Math.max(image.width || 1, image.height || 1);
+  const scale = maxSide > TRACK_COVER_MAX_SIDE ? TRACK_COVER_MAX_SIDE / maxSide : 1;
+  const width = Math.max(1, Math.round((image.width || 1) * scale));
+  const height = Math.max(1, Math.round((image.height || 1) * scale));
+
+  const canvas = window.document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Не удалось подготовить изображение.");
+  }
+  context.drawImage(image, 0, 0, width, height);
+  const optimizedDataUrl = canvas.toDataURL("image/jpeg", TRACK_COVER_JPEG_QUALITY);
+  if (optimizedDataUrl.length > MAX_TRACK_COVER_BACKGROUND_LENGTH) {
+    throw new Error("Изображение слишком тяжелое. Попробуй файл меньшего размера.");
+  }
+
+  return `url("${optimizedDataUrl}") center / cover no-repeat`;
+}
+
+function getTopGenres(genres = []) {
   const scoreMap = new Map();
-  for (const track of tracks) {
-    for (const tag of track.tags ?? []) {
-      scoreMap.set(tag, (scoreMap.get(tag) ?? 0) + 1);
+  const displayByNormalized = new Map();
+  for (const item of genres) {
+    const display = String(item ?? "").trim();
+    if (!display) continue;
+    const normalized = display.toLowerCase();
+    if (!displayByNormalized.has(normalized)) {
+      displayByNormalized.set(normalized, display);
     }
+    scoreMap.set(normalized, (scoreMap.get(normalized) ?? 0) + 1);
   }
   return [...scoreMap.entries()]
-    .sort((first, second) => second[1] - first[1])
+    .sort((first, second) => second[1] - first[1] || first[0].localeCompare(second[0], "ru"))
     .slice(0, 8)
-    .map(([tag]) => tag);
+    .map(([normalized]) => displayByNormalized.get(normalized) ?? normalized);
 }
 
 export default function ProfilePage() {
@@ -50,6 +122,7 @@ export default function ProfilePage() {
     toggleArtistFollow,
     addTrackNext,
     notify,
+    refreshCatalog,
   } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
@@ -74,6 +147,7 @@ export default function ProfilePage() {
   const [profileDisplayName, setProfileDisplayName] = useState("");
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -82,14 +156,85 @@ export default function ProfilePage() {
   });
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const uploadAudioInputRef = useRef(null);
+  const uploadCoverInputRef = useRef(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadForm, setUploadForm] = useState({
+    audio: null,
+    title: "",
+    artist: "",
+    trackId: "",
+    durationSec: "",
+    explicit: false,
+    genre: "",
+    cover: "",
+    tags: "",
+  });
+  const [uploadSubmitting, setUploadSubmitting] = useState(false);
+  const [uploadCoverProcessing, setUploadCoverProcessing] = useState(false);
+  const [uploadCoverFileName, setUploadCoverFileName] = useState("");
+  const [uploadError, setUploadError] = useState("");
+  const [uploadedTrackId, setUploadedTrackId] = useState("");
+  const [uploadedGenres, setUploadedGenres] = useState([]);
 
   useEffect(() => {
     setProfileDisplayName(user?.displayName ?? user?.username ?? "");
   }, [user?.displayName, user?.username]);
 
-  const likedTracks = useMemo(() => likedIds.map((id) => trackMap[id]).filter(Boolean), [likedIds, trackMap]);
   const historyTracks = useMemo(() => historyIds.map((id) => trackMap[id]).filter(Boolean), [historyIds, trackMap]);
-  const favoriteGenres = useMemo(() => getTopGenres(likedTracks), [likedTracks]);
+  const uploadedGenresStorageKey = useMemo(() => {
+    const userId = String(user?.id ?? "").trim();
+    if (!userId) {
+      return "";
+    }
+    return `${UPLOADED_GENRES_STORAGE_PREFIX}.${userId}`;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!uploadedGenresStorageKey) {
+      setUploadedGenres([]);
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(uploadedGenresStorageKey);
+      if (!raw) {
+        setUploadedGenres([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setUploadedGenres([]);
+        return;
+      }
+      setUploadedGenres(
+        parsed
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 400)
+      );
+    } catch {
+      setUploadedGenres([]);
+    }
+  }, [uploadedGenresStorageKey]);
+
+  useEffect(() => {
+    if (!uploadedGenresStorageKey || typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(uploadedGenresStorageKey, JSON.stringify(uploadedGenres.slice(0, 400)));
+    } catch {
+      // noop
+    }
+  }, [uploadedGenresStorageKey, uploadedGenres]);
+
+  const favoriteGenres = useMemo(() => getTopGenres(uploadedGenres), [uploadedGenres]);
 
   const followedArtists = useMemo(() => {
     const followedSet = new Set(followedArtistIds);
@@ -152,7 +297,7 @@ export default function ProfilePage() {
     try {
       const response = await requestPasswordReset({ username });
       const nextToken = String(response?.resetToken ?? "").trim();
-      setResetInfo("Если аккаунт существует, токен восстановление создан.");
+      setResetInfo("Если аккаунт существует, токен восстановления создан.");
       if (nextToken) {
         setDevResetToken(nextToken);
         setResetToken(nextToken);
@@ -257,6 +402,170 @@ export default function ProfilePage() {
       setPasswordError(error instanceof Error ? error.message : "Не удалось изменить пароль.");
     } finally {
       setPasswordSubmitting(false);
+    }
+  };
+
+  const handleOpenAccountDialog = () => {
+    setProfileError("");
+    setPasswordError("");
+    setAccountDialogOpen(true);
+  };
+
+  const handleCloseAccountDialog = () => {
+    setProfileError("");
+    setPasswordError("");
+    setAccountDialogOpen(false);
+  };
+
+  const handleOpenUploadDialog = () => {
+    setUploadError("");
+    setUploadDialogOpen(true);
+  };
+
+  const handleCloseUploadDialog = () => {
+    if (uploadSubmitting || uploadCoverProcessing) {
+      return;
+    }
+    setUploadError("");
+    setUploadDialogOpen(false);
+  };
+
+  const handleUploadFieldChange = (field, value) => {
+    setUploadForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSelectUploadAudioFile = () => {
+    uploadAudioInputRef.current?.click();
+  };
+
+  const handleSelectUploadCoverFile = () => {
+    uploadCoverInputRef.current?.click();
+  };
+
+  const handleUploadAudioFileChange = (event) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    handleUploadFieldChange("audio", nextFile);
+  };
+
+  const handleUploadCoverFileChange = async (event) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      return;
+    }
+
+    setUploadError("");
+    setUploadCoverProcessing(true);
+    try {
+      const nextCover = await buildTrackCoverFromFile(nextFile);
+      handleUploadFieldChange("cover", nextCover);
+      setUploadCoverFileName(nextFile.name);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Не удалось обработать изображение.");
+      if (uploadCoverInputRef.current) {
+        uploadCoverInputRef.current.value = "";
+      }
+    } finally {
+      setUploadCoverProcessing(false);
+    }
+  };
+
+  const handleClearUploadCover = () => {
+    if (uploadSubmitting || uploadCoverProcessing) {
+      return;
+    }
+    handleUploadFieldChange("cover", "");
+    setUploadCoverFileName("");
+    if (uploadCoverInputRef.current) {
+      uploadCoverInputRef.current.value = "";
+    }
+  };
+
+  const handleUploadTrack = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated || uploadSubmitting) {
+      return;
+    }
+
+    const title = uploadForm.title.trim();
+    const artist = uploadForm.artist.trim();
+    const genre = uploadForm.genre.trim();
+
+    if (!uploadForm.audio) {
+      setUploadError("Выбери аудиофайл.");
+      return;
+    }
+    if (!title || !artist) {
+      setUploadError("Название и исполнитель обязательны.");
+      return;
+    }
+    if (!genre) {
+      setUploadError("Жанр обязателен.");
+      return;
+    }
+    if (uploadCoverProcessing) {
+      setUploadError("Дождись завершения обработки обложки.");
+      return;
+    }
+
+    setUploadSubmitting(true);
+    setUploadError("");
+    setUploadedTrackId("");
+
+    try {
+      const duration = Number.parseInt(String(uploadForm.durationSec ?? "").trim(), 10);
+      const normalizedGenre = genre.toLowerCase();
+      const customTags = String(uploadForm.tags ?? "")
+        .split(/[,\n]+/)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const tags = Array.from(new Set([normalizedGenre, ...customTags]));
+
+      const response = await uploadTrack({
+        audio: uploadForm.audio,
+        title,
+        artist,
+        trackId: uploadForm.trackId.trim() || undefined,
+        durationSec: Number.isFinite(duration) ? duration : undefined,
+        explicit: uploadForm.explicit,
+        cover: uploadForm.cover.trim() || undefined,
+        tags: tags.join(","),
+      });
+
+      const nextTrackId = String(response?.track?.id ?? "").trim();
+      setUploadedGenres((prev) => [genre, ...prev].slice(0, 400));
+      setUploadForm({
+        audio: null,
+        title: "",
+        artist: "",
+        trackId: "",
+        durationSec: "",
+        explicit: false,
+        genre: "",
+        cover: "",
+        tags: "",
+      });
+      if (uploadAudioInputRef.current) {
+        uploadAudioInputRef.current.value = "";
+      }
+      if (uploadCoverInputRef.current) {
+        uploadCoverInputRef.current.value = "";
+      }
+      setUploadCoverFileName("");
+
+      if (nextTrackId) {
+        setUploadedTrackId(nextTrackId);
+      }
+      notify("Трек успешно загружен.");
+      try {
+        await refreshCatalog({ silent: true });
+      } catch {
+        // keep successful upload result even if catalog refresh fails
+      }
+      setUploadDialogOpen(false);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Не удалось загрузить трек.");
+    } finally {
+      setUploadSubmitting(false);
     }
   };
 
@@ -446,96 +755,41 @@ export default function ProfilePage() {
             {user?.displayName ?? user?.username ?? "Пользователь"}: подписки, история и музыкальные предпочтения.
           </p>
         </div>
-        <div className={styles.statsRow}>
-          <article className={styles.statCard}>
-            <span className={styles.statLabel}>Подписок</span>
-            <strong className={styles.statValue}>{followedArtists.length}</strong>
-          </article>
-          <article className={styles.statCard}>
-            <span className={styles.statLabel}>История</span>
-            <strong className={styles.statValue}>{historyTracks.length}</strong>
-          </article>
-          <article className={styles.statCard}>
-            <span className={styles.statLabel}>Время прослушивания</span>
-            <strong className={styles.statValue}>{formatDurationClock(totalHistoryDuration)}</strong>
-          </article>
-          <button type="button" className={styles.logoutButton} onClick={signOut}>
-            <FiLogOut />
-            Выйти
-          </button>
+        <div className={styles.headerRight}>
+          <div className={styles.statsRow}>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>Подписок</span>
+              <strong className={styles.statValue}>{followedArtists.length}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>История</span>
+              <strong className={styles.statValue}>{historyTracks.length}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>Время прослушивания</span>
+              <strong className={styles.statValue}>{formatDurationClock(totalHistoryDuration)}</strong>
+            </article>
+          </div>
+          <div className={styles.controlRow}>
+            <button type="button" className={styles.actionButton} onClick={handleOpenAccountDialog}>
+              <FiSettings />
+              Настройки аккаунта
+            </button>
+            <button
+              type="button"
+              className={`${styles.actionButton} ${styles.uploadActionButton}`.trim()}
+              onClick={handleOpenUploadDialog}
+            >
+              <FiUpload />
+              Загрузить трек
+            </button>
+            <button type="button" className={styles.logoutButton} onClick={signOut}>
+              <FiLogOut />
+              Выйти
+            </button>
+          </div>
         </div>
       </header>
-
-      <section className={styles.section}>
-        <div className={styles.sectionTitleRow}>
-          <h2 className={styles.sectionTitle}>Настройки аккаунта</h2>
-          <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
-        </div>
-
-        <form className={styles.authForm} onSubmit={handleUpdateProfile}>
-          <label className={styles.authLabel}>
-            Отображаемое имя
-            <input
-              className={styles.authInput}
-              value={profileDisplayName}
-              onChange={(event) => setProfileDisplayName(event.target.value)}
-              maxLength={48}
-            />
-          </label>
-          {profileError ? <p className={styles.authError}>{profileError}</p> : null}
-          <div className={styles.authActions}>
-            <button type="submit" className={styles.authPrimaryButton} disabled={profileSubmitting}>
-              {profileSubmitting ? "Сохраняем..." : "Сохранить профиль"}
-            </button>
-          </div>
-        </form>
-
-        <form className={styles.authForm} onSubmit={handleChangePassword}>
-          <label className={styles.authLabel}>
-            Текущий пароль
-            <input
-              className={styles.authInput}
-              type="password"
-              value={passwordForm.currentPassword}
-              onChange={(event) =>
-                setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
-              }
-              minLength={6}
-              maxLength={128}
-            />
-          </label>
-          <label className={styles.authLabel}>
-            Новый пароль
-            <input
-              className={styles.authInput}
-              type="password"
-              value={passwordForm.newPassword}
-              onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
-              minLength={6}
-              maxLength={128}
-            />
-          </label>
-          <label className={styles.authLabel}>
-            Подтверждение нового пароля
-            <input
-              className={styles.authInput}
-              type="password"
-              value={passwordForm.confirmPassword}
-              onChange={(event) =>
-                setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
-              }
-              minLength={6}
-              maxLength={128}
-            />
-          </label>
-          {passwordError ? <p className={styles.authError}>{passwordError}</p> : null}
-          <div className={styles.authActions}>
-            <button type="submit" className={styles.authPrimaryButton} disabled={passwordSubmitting}>
-              {passwordSubmitting ? "Сохраняем..." : "Изменить пароль"}
-            </button>
-          </div>
-        </form>
-      </section>
 
       <section className={styles.section}>
         <div className={styles.sectionTitleRow}>
@@ -667,13 +921,13 @@ export default function ProfilePage() {
         {favoriteGenres.length ? (
           <div className={styles.genreRow}>
             {favoriteGenres.map((genre) => (
-              <button key={genre} type="button" className={styles.genreTag} onClick={() => navigate("/search")}>
+              <span key={genre} className={styles.genreChip}>
                 {genre}
-              </button>
+              </span>
             ))}
           </div>
         ) : (
-          <p className={styles.emptyText}>Добавь треки в избранное, чтобы профиль собрал твои жанры.</p>
+          <p className={styles.emptyText}>Жанры появятся после загрузки треков с указанным жанром.</p>
         )}
       </section>
 
@@ -688,6 +942,244 @@ export default function ProfilePage() {
       ) : null}
 
       <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
+
+      <ModalDialog
+        open={accountDialogOpen}
+        title="Настройки аккаунта"
+        description="Смена отображаемого имени и пароля."
+        onClose={handleCloseAccountDialog}
+      >
+        <form className={`${styles.authForm} ${styles.modalForm}`.trim()} onSubmit={handleUpdateProfile}>
+          <label className={styles.authLabel}>
+            Отображаемое имя
+            <input
+              className={styles.authInput}
+              value={profileDisplayName}
+              onChange={(event) => setProfileDisplayName(event.target.value)}
+              maxLength={48}
+            />
+          </label>
+          {profileError ? <p className={styles.authError}>{profileError}</p> : null}
+          <div className={styles.authActions}>
+            <button type="submit" className={styles.authPrimaryButton} disabled={profileSubmitting}>
+              {profileSubmitting ? "Сохраняем..." : "Сохранить профиль"}
+            </button>
+          </div>
+        </form>
+
+        <form className={`${styles.authForm} ${styles.modalForm}`.trim()} onSubmit={handleChangePassword}>
+          <label className={styles.authLabel}>
+            Текущий пароль
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(event) =>
+                setPasswordForm((prev) => ({ ...prev, currentPassword: event.target.value }))
+              }
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          <label className={styles.authLabel}>
+            Новый пароль
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          <label className={styles.authLabel}>
+            Подтверждение нового пароля
+            <input
+              className={styles.authInput}
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(event) =>
+                setPasswordForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+              }
+              minLength={6}
+              maxLength={128}
+            />
+          </label>
+          {passwordError ? <p className={styles.authError}>{passwordError}</p> : null}
+          <div className={styles.authActions}>
+            <button type="submit" className={styles.authPrimaryButton} disabled={passwordSubmitting}>
+              {passwordSubmitting ? "Сохраняем..." : "Изменить пароль"}
+            </button>
+          </div>
+        </form>
+      </ModalDialog>
+
+      <ModalDialog
+        open={uploadDialogOpen}
+        title="Загрузка трека"
+        description="Заполни данные трека и укажи жанр. Этот жанр попадет в любимые жанры профиля."
+        onClose={handleCloseUploadDialog}
+      >
+        <form className={`${styles.authForm} ${styles.modalForm}`.trim()} onSubmit={handleUploadTrack}>
+          <label className={styles.authLabel}>
+            Аудиофайл
+            <input
+              ref={uploadAudioInputRef}
+              className={styles.fileInputHidden}
+              type="file"
+              accept="audio/*"
+              onChange={handleUploadAudioFileChange}
+            />
+            <div className={styles.filePickerRow}>
+              <button type="button" className={styles.filePickerButton} onClick={handleSelectUploadAudioFile}>
+                Выбрать файл
+              </button>
+              <span className={styles.filePickerText}>
+                {uploadForm.audio ? uploadForm.audio.name : "Файл не выбран"}
+              </span>
+            </div>
+          </label>
+
+          <div className={styles.uploadGrid}>
+            <label className={styles.authLabel}>
+              Название
+              <input
+                className={styles.authInput}
+                value={uploadForm.title}
+                maxLength={120}
+                required
+                onChange={(event) => handleUploadFieldChange("title", event.target.value)}
+              />
+            </label>
+
+            <label className={styles.authLabel}>
+              Исполнитель
+              <input
+                className={styles.authInput}
+                value={uploadForm.artist}
+                maxLength={160}
+                required
+                onChange={(event) => handleUploadFieldChange("artist", event.target.value)}
+              />
+            </label>
+
+            <label className={styles.authLabel}>
+              Жанр
+              <input
+                className={styles.authInput}
+                value={uploadForm.genre}
+                maxLength={40}
+                required
+                placeholder="Например, synthwave"
+                onChange={(event) => handleUploadFieldChange("genre", event.target.value)}
+              />
+            </label>
+
+            <label className={styles.authLabel}>
+              Track ID (опционально)
+              <input
+                className={styles.authInput}
+                value={uploadForm.trackId}
+                maxLength={80}
+                onChange={(event) => handleUploadFieldChange("trackId", event.target.value)}
+              />
+            </label>
+
+            <label className={styles.authLabel}>
+              Длительность, сек (опционально)
+              <input
+                className={styles.authInput}
+                type="number"
+                min={1}
+                step={1}
+                value={uploadForm.durationSec}
+                onChange={(event) => handleUploadFieldChange("durationSec", event.target.value)}
+              />
+            </label>
+
+            <div className={styles.coverUploadBlock}>
+              <p className={styles.coverUploadTitle}>Обложка (опционально)</p>
+              <div className={styles.coverUploadLayout}>
+                <span
+                  className={styles.coverPreview}
+                  style={{ background: uploadForm.cover || DEFAULT_UPLOAD_TRACK_COVER }}
+                />
+                <div className={styles.coverUploadControls}>
+                  <input
+                    ref={uploadCoverInputRef}
+                    className={styles.fileInputHidden}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadCoverFileChange}
+                  />
+                  <div className={styles.coverUploadButtons}>
+                    <button
+                      type="button"
+                      className={styles.filePickerButton}
+                      disabled={uploadCoverProcessing}
+                      onClick={handleSelectUploadCoverFile}
+                    >
+                      {uploadCoverProcessing ? "Обрабатываем..." : "Загрузить обложку"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.authSecondaryButton}
+                      disabled={!uploadForm.cover || uploadCoverProcessing}
+                      onClick={handleClearUploadCover}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                  <p className={styles.filePickerText}>{uploadCoverFileName || "JPG/PNG/WebP, до 5 МБ"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <label className={styles.authLabel}>
+            Доп. теги (через запятую, опционально)
+            <input
+              className={styles.authInput}
+              value={uploadForm.tags}
+              maxLength={240}
+              placeholder="night, driving"
+              onChange={(event) => handleUploadFieldChange("tags", event.target.value)}
+            />
+          </label>
+
+          <label className={styles.uploadCheckbox}>
+            <input
+              type="checkbox"
+              checked={uploadForm.explicit}
+              onChange={(event) => handleUploadFieldChange("explicit", event.target.checked)}
+            />
+            Explicit
+          </label>
+
+          <p className={styles.uploadHint}>Трек появится в каталоге после загрузки и обновления данных плеера.</p>
+
+          {uploadError ? <p className={styles.authError}>{uploadError}</p> : null}
+          {uploadedTrackId ? <p className={styles.uploadSuccess}>Загружено: {uploadedTrackId}</p> : null}
+
+          <div className={styles.authActions}>
+            <button
+              type="submit"
+              className={styles.authPrimaryButton}
+              disabled={uploadSubmitting || uploadCoverProcessing}
+            >
+              {uploadSubmitting ? "Загружаем..." : "Загрузить трек"}
+            </button>
+            <button
+              type="button"
+              className={styles.authSecondaryButton}
+              disabled={uploadSubmitting || uploadCoverProcessing}
+              onClick={handleCloseUploadDialog}
+            >
+              Закрыть
+            </button>
+          </div>
+        </form>
+      </ModalDialog>
     </PageShell>
   );
 }

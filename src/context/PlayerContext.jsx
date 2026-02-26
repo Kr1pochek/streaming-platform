@@ -953,6 +953,38 @@ export function PlayerProvider({ children }) {
     streamQualitySelectionRef.current = normalizeStreamQualitySelection(state.streamQualitySelected);
   }, [state.streamQualitySelected]);
 
+  const applyCatalogPayload = useCallback((data) => {
+    const nextTracks = Array.isArray(data?.tracks) ? data.tracks : [];
+    const nextArtists = Array.isArray(data?.artists) ? data.artists : [];
+    runtimeTracks = nextTracks;
+    runtimeArtists = nextArtists;
+    trackMap = Object.fromEntries(nextTracks.map((track) => [track.id, track]));
+    artistMap = Object.fromEntries(nextArtists.map((artist) => [artist.id, artist]));
+
+    dispatch({
+      type: "catalog_hydrated",
+      fallbackQueueIds: nextTracks.slice(0, 7).map((track) => track.id),
+    });
+  }, []);
+
+  const refreshCatalog = useCallback(
+    async ({ silent = false } = {}) => {
+      try {
+        const data = await fetchCatalogMap();
+        applyCatalogPayload(data);
+      } catch (error) {
+        if (!silent) {
+          dispatch({
+            type: "notify",
+            message: "Failed to load catalog. Check API connectivity.",
+          });
+        }
+        throw error;
+      }
+    },
+    [applyCatalogPayload]
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -960,18 +992,7 @@ export function PlayerProvider({ children }) {
       try {
         const data = await fetchCatalogMap();
         if (cancelled) return;
-
-        const nextTracks = Array.isArray(data?.tracks) ? data.tracks : [];
-        const nextArtists = Array.isArray(data?.artists) ? data.artists : [];
-        runtimeTracks = nextTracks;
-        runtimeArtists = nextArtists;
-        trackMap = Object.fromEntries(nextTracks.map((track) => [track.id, track]));
-        artistMap = Object.fromEntries(nextArtists.map((artist) => [artist.id, artist]));
-
-        dispatch({
-          type: "catalog_hydrated",
-          fallbackQueueIds: nextTracks.slice(0, 7).map((track) => track.id),
-        });
+        applyCatalogPayload(data);
       } catch {
         dispatch({
           type: "notify",
@@ -985,7 +1006,7 @@ export function PlayerProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyCatalogPayload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1525,6 +1546,7 @@ export function PlayerProvider({ children }) {
       dismissToast: (toastId) => dispatch({ type: "dismiss_toast", toastId }),
       notify: (message) => dispatch({ type: "notify", message }),
       setStreamQuality: (selection) => setStreamQualitySelection(selection),
+      refreshCatalog,
     }),
     [
       state,
@@ -1534,10 +1556,9 @@ export function PlayerProvider({ children }) {
       progressPercent,
       currentDuration,
       setStreamQualitySelection,
+      refreshCatalog,
     ]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }
-
-
