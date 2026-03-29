@@ -58,7 +58,7 @@ export function parseTrustProxySetting(value = process.env.TRUST_PROXY) {
   return configured;
 }
 
-export function createApp() {
+export function createApp({ apiRouterOptions = {} } = {}) {
   const app = express();
   const serveClientBuild = shouldServeClientBuild();
   const jsonLimit = String(process.env.API_JSON_LIMIT ?? "4mb");
@@ -78,7 +78,7 @@ export function createApp() {
     })
   );
   app.use("/api/media", express.static(mediaDirectory));
-  app.use("/api", createApiRouter());
+  app.use("/api", createApiRouter(apiRouterOptions));
 
   if (serveClientBuild) {
     app.use(express.static(distDirectory));

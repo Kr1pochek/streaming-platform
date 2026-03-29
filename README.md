@@ -11,7 +11,39 @@
 npm install
 ```
 
-## 2. Environment
+## 2. Fast demo run
+
+Fastest path for local defense demo:
+
+```bash
+cp .env.demo .env
+npm install
+npm run start:app
+```
+
+PowerShell:
+
+```powershell
+Copy-Item .env.demo .env
+npm install
+npm run start:app
+```
+
+In a second terminal:
+
+```bash
+npm run dev
+```
+
+Checks:
+
+```bash
+npm run smoke -- --client
+```
+
+`npm run start:app` waits for PostgreSQL, applies migrations, seeds data, and starts the API.
+
+## 3. Environment
 
 Copy `.env.example` to `.env` and set values:
 
@@ -26,6 +58,7 @@ API_HOST=127.0.0.1
 API_PORT=4000
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # TRUST_PROXY=false
+# PASSWORD_RESET_RETURN_TOKEN=false
 # PLAYBACK_SIGNING_SECRET=change_me
 # PLAYBACK_REQUIRE_SIGNED=false
 # PLAYBACK_EMBED_SIGNED_URL=true
@@ -36,6 +69,9 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # GENERATE_HLS_ON_UPLOAD=true
 # FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe
 # FFPROBE_PATH=C:\ffmpeg\bin\ffprobe.exe
+# DB_WAIT_RETRIES=30
+# DB_WAIT_INTERVAL_MS=2000
+# NODE_ENV=production
 # MEDIA_STORAGE_DRIVER=local
 # MEDIA_CDN_BASE_URL=https://cdn.example.com/audio
 # MEDIA_S3_ENDPOINT=http://127.0.0.1:9000
@@ -47,9 +83,12 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # MEDIA_S3_PREFIX=audio
 # MEDIA_S3_PUBLIC_BASE_URL=
 # MEDIA_S3_ACL=
+# SMOKE_BASE_URL=http://127.0.0.1:4000
 ```
 
-## 3. Migrations and seed
+For a quick local demo config, use tracked `.env.demo`.
+
+## 4. Migrations and seed
 
 ```bash
 npm run db:migrate
@@ -62,7 +101,13 @@ Or:
 npm run db:setup
 ```
 
-## 4. Run backend
+Or use the one-command startup flow:
+
+```bash
+npm run start:app
+```
+
+## 5. Run backend
 
 ```bash
 npm run server
@@ -70,7 +115,11 @@ npm run server
 
 Backend listens on `http://127.0.0.1:4000` by default.
 
-## 5. Run frontend
+Liveness: `GET /api/health`
+
+Readiness: `GET /api/ready`
+
+## 6. Run frontend
 
 In a separate terminal:
 
@@ -80,17 +129,24 @@ npm run dev
 
 Vite proxies `/api/*` to `http://127.0.0.1:4000`.
 
-## 6. Tests, lint, build
+## 7. Tests, lint, build
 
 ```bash
 npm run test
 npm run lint
 npm run build
+npm run smoke
 ```
 
 If `dist/index.html` exists, backend can serve the built frontend.
 
-## 7. Streaming setup (optional)
+To verify built frontend too:
+
+```bash
+npm run smoke -- --client
+```
+
+## 8. Streaming setup (optional)
 
 By default tracks are streamed with HTTP Range on `GET /api/stream/:trackId`.
 
@@ -115,7 +171,7 @@ npm run stream:hls -- --dry-run
 
 Generated files are placed in `public/audio/hls/<trackId>/`.
 
-## 8. Track Upload API
+## 9. Track Upload API
 
 `POST /api/tracks/upload` (requires `Authorization: Bearer <token>`).
 
@@ -135,7 +191,7 @@ Server flow:
 - upserts track + artists + tags in PostgreSQL
 - optionally generates local HLS (`GENERATE_HLS_ON_UPLOAD=true`)
 
-## 9. S3/MinIO + CDN migration
+## 10. S3/MinIO + CDN migration
 
 Set `MEDIA_STORAGE_DRIVER=s3` and S3 vars, then migrate existing local DB audio URLs:
 
@@ -149,7 +205,7 @@ Dry run:
 npm run media:migrate:s3 -- --dry-run
 ```
 
-## 10. Optional seed user
+## 11. Optional seed user
 
 `npm run db:seed` creates a user only when both variables are set:
 
@@ -161,7 +217,7 @@ SEED_DISPLAY_NAME=Demo User
 
 If these vars are not set, seed user creation is skipped.
 
-## 11. Docker (PostgreSQL + API + Frontend)
+## 12. Docker (PostgreSQL + API + Frontend)
 
 ```bash
 docker compose up --build
@@ -169,11 +225,17 @@ docker compose up --build
 
 Services:
 - `db` (PostgreSQL on `5432`)
-- `app` (migrations + seed + API + built frontend on `4000`)
+- `app` (waits for DB, runs migrations + seed, then serves API + built frontend on `4000`)
 
 Open: `http://localhost:4000`.
 
-## 12. CI
+Quick check after container startup:
+
+```bash
+npm run smoke -- --client
+```
+
+## 13. CI
 
 Workflow: `.github/workflows/ci.yml`
 
@@ -192,6 +254,7 @@ npm run build
 - `npm run dev:client` - frontend dev server
 - `npm run dev:server` - backend dev run
 - `npm run server` - backend run
+- `npm run start:app` - wait for DB, run migrations + seed, start backend
 - `npm run db:migrate` - apply SQL migrations
 - `npm run db:seed` - seed/sync catalog and optional seed user
 - `npm run db:setup` - migrations + seed
@@ -201,6 +264,7 @@ npm run build
 - `npm run test` - tests (`node:test`)
 - `npm run lint` - eslint
 - `npm run build` - frontend production build
+- `npm run smoke` - smoke check for `/api/health` and `/api/ready`
 - `npm run preview` - preview production build
 
 ## Backend structure

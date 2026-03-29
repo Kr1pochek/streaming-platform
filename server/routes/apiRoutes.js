@@ -117,10 +117,12 @@ function parseBoolean(value, fallback = false) {
 }
 
 function shouldExposePasswordResetToken() {
-  return parseBoolean(
-    process.env.PASSWORD_RESET_RETURN_TOKEN,
-    String(process.env.NODE_ENV ?? "").toLowerCase() !== "production"
-  );
+  return parseBoolean(process.env.PASSWORD_RESET_RETURN_TOKEN, false);
+}
+
+async function defaultReadinessCheck() {
+  await pool.query("select 1;");
+  await pool.query("select 1 from schema_migrations limit 1;");
 }
 
 function requestUserId(req) {
@@ -298,12 +300,22 @@ export function createApiRouter({
   statFile = fs.statSync,
   readStreamFactory = fs.createReadStream,
   nowProvider = () => Date.now(),
+  readinessCheck = defaultReadinessCheck,
 } = {}) {
   const router = express.Router();
   router.use(optionalAuth);
 
   router.get("/health", (_req, res) => {
     res.json({ ok: true });
+  });
+
+  router.get("/ready", async (_req, res) => {
+    try {
+      await readinessCheck();
+      res.json({ ok: true, database: "up" });
+    } catch {
+      res.status(503).json({ ok: false, database: "down" });
+    }
   });
 
   router.post(

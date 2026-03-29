@@ -22,4 +22,4 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/.env.example ./.env.example
 
 EXPOSE 4000
-CMD ["node", "server/index.js"]
+CMD ["node", "scripts/start-app.mjs"]
