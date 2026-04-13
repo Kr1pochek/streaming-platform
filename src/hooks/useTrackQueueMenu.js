@@ -6,11 +6,32 @@ export default function useTrackQueueMenu() {
   const [menuState, setMenuState] = useState(null);
 
   const openTrackMenu = (event, trackId) => {
-    event.preventDefault();
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    const hasPointerCoordinates =
+      Number.isFinite(event?.clientX) &&
+      Number.isFinite(event?.clientY) &&
+      (event.clientX !== 0 || event.clientY !== 0);
+
+    let x = hasPointerCoordinates ? event.clientX : null;
+    let y = hasPointerCoordinates ? event.clientY : null;
+
+    if ((!Number.isFinite(x) || !Number.isFinite(y)) && event?.currentTarget?.getBoundingClientRect) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      x = bounds.right - 12;
+      y = bounds.bottom + 8;
+    }
+
+    if ((!Number.isFinite(x) || !Number.isFinite(y)) && typeof window !== "undefined") {
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 2;
+    }
+
     setMenuState({
       trackId,
-      x: event.clientX,
-      y: event.clientY,
+      x: x ?? 0,
+      y: y ?? 0,
     });
   };
 

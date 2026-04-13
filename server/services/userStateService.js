@@ -4,6 +4,7 @@ const MAX_LIKED_TRACKS = 500;
 const MAX_FOLLOWED_ARTISTS = 300;
 const MAX_HISTORY_TRACKS = 100;
 const MAX_QUEUE_TRACKS = 500;
+const MAX_SAVED_PLAYLISTS = 300;
 const USER_STATE_COLUMN_MISSING_ERROR_CODE = "42703";
 
 function uniqueStrings(values = []) {
@@ -59,6 +60,7 @@ export function emptyUserState() {
     likedTrackIds: [],
     followedArtistIds: [],
     historyTrackIds: [],
+    savedPlaylistIds: [],
     queueTrackIds: [],
     queueCurrentIndex: 0,
     queueProgressSec: 0,
@@ -68,14 +70,35 @@ export function emptyUserState() {
 
 export async function ensureUserStateRow(userId) {
   const now = Date.now();
-  await pool.query(
-    `
-    insert into user_states (user_id, liked_track_ids, followed_artist_ids, history_track_ids, updated_at)
-    values ($1, array[]::text[], array[]::text[], array[]::text[], $2)
-    on conflict (user_id) do nothing;
-  `,
-    [userId, now]
-  );
+  try {
+    await pool.query(
+      `
+      insert into user_states (
+        user_id,
+        liked_track_ids,
+        followed_artist_ids,
+        history_track_ids,
+        saved_playlist_ids,
+        updated_at
+      )
+      values ($1, array[]::text[], array[]::text[], array[]::text[], array[]::text[], $2)
+      on conflict (user_id) do nothing;
+    `,
+      [userId, now]
+    );
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+    await pool.query(
+      `
+      insert into user_states (user_id, liked_track_ids, followed_artist_ids, history_track_ids, updated_at)
+      values ($1, array[]::text[], array[]::text[], array[]::text[], $2)
+      on conflict (user_id) do nothing;
+    `,
+      [userId, now]
+    );
+  }
 }
 
 export async function fetchUserState(userId) {
@@ -89,6 +112,7 @@ export async function fetchUserState(userId) {
         liked_track_ids as "likedTrackIds",
         followed_artist_ids as "followedArtistIds",
         history_track_ids as "historyTrackIds",
+        saved_playlist_ids as "savedPlaylistIds",
         queue_track_ids as "queueTrackIds",
         queue_current_index as "queueCurrentIndex",
         queue_progress_sec as "queueProgressSec",
@@ -126,6 +150,7 @@ export async function fetchUserState(userId) {
     likedTrackIds: normalizeArrayValue(row.likedTrackIds),
     followedArtistIds: normalizeArrayValue(row.followedArtistIds),
     historyTrackIds: normalizeArrayValue(row.historyTrackIds),
+    savedPlaylistIds: normalizeArrayValue(row.savedPlaylistIds),
     queueTrackIds: normalizeArrayValue(row.queueTrackIds),
     queueCurrentIndex: clampInteger(row.queueCurrentIndex, 0, 0, 100_000),
     queueProgressSec: clampNumber(row.queueProgressSec, 0, 0, 60 * 60 * 24),
@@ -138,6 +163,7 @@ export async function sanitizeUserStateInput(input) {
   const catalog = await fetchCatalog();
   const trackIdSet = new Set(catalog.tracks.map((track) => track.id));
   const artistIdSet = new Set(catalog.artists.map((artist) => artist.id));
+  const playlistIdSet = new Set(catalog.playlists.map((playlist) => playlist.id));
   const queueTrackIds = sanitizeWithAllowlist(state.queueTrackIds, trackIdSet, MAX_QUEUE_TRACKS);
   const queueCurrentIndex = clampInteger(
     state.queueCurrentIndex,
@@ -153,6 +179,7 @@ export async function sanitizeUserStateInput(input) {
     likedTrackIds: sanitizeWithAllowlist(state.likedTrackIds, trackIdSet, MAX_LIKED_TRACKS),
     followedArtistIds: sanitizeWithAllowlist(state.followedArtistIds, artistIdSet, MAX_FOLLOWED_ARTISTS),
     historyTrackIds: sanitizeWithAllowlist(state.historyTrackIds, trackIdSet, MAX_HISTORY_TRACKS),
+    savedPlaylistIds: sanitizeWithAllowlist(state.savedPlaylistIds, playlistIdSet, MAX_SAVED_PLAYLISTS),
     queueTrackIds,
     queueCurrentIndex,
     queueProgressSec,
@@ -172,17 +199,19 @@ export async function updateUserState(userId, nextStateInput) {
         liked_track_ids,
         followed_artist_ids,
         history_track_ids,
+        saved_playlist_ids,
         queue_track_ids,
         queue_current_index,
         queue_progress_sec,
         queue_is_playing,
         updated_at
       )
-      values ($1, $2::text[], $3::text[], $4::text[], $5::text[], $6, $7, $8, $9)
+      values ($1, $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7, $8, $9, $10)
       on conflict (user_id) do update
         set liked_track_ids = excluded.liked_track_ids,
             followed_artist_ids = excluded.followed_artist_ids,
             history_track_ids = excluded.history_track_ids,
+            saved_playlist_ids = excluded.saved_playlist_ids,
             queue_track_ids = excluded.queue_track_ids,
             queue_current_index = excluded.queue_current_index,
             queue_progress_sec = excluded.queue_progress_sec,
@@ -194,6 +223,7 @@ export async function updateUserState(userId, nextStateInput) {
         nextState.likedTrackIds,
         nextState.followedArtistIds,
         nextState.historyTrackIds,
+        nextState.savedPlaylistIds,
         nextState.queueTrackIds,
         nextState.queueCurrentIndex,
         nextState.queueProgressSec,

@@ -1,6 +1,7 @@
 ﻿import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiExternalLink, FiPlus } from "react-icons/fi";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
+import { FiChevronRight, FiExternalLink, FiMoreHorizontal, FiPlay, FiPlus } from "react-icons/fi";
 import styles from "./LibraryPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -15,9 +16,14 @@ import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import SmartRecommendations from "../components/SmartRecommendations.jsx";
 import ModalDialog from "../components/ModalDialog.jsx";
+import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
+import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
+import CardActionMenu from "../components/CardActionMenu.jsx";
+import useCardActionMenu from "../hooks/useCardActionMenu.js";
 
 const INITIAL_FOLLOWED_ARTISTS_LIMIT = 6;
 const INITIAL_MY_PLAYLISTS_LIMIT = 6;
+const INITIAL_SAVED_PLAYLISTS_LIMIT = 6;
 const DEFAULT_PLAYLIST_DESCRIPTION = "Custom playlist";
 const LEGACY_DEFAULT_PLAYLIST_DESCRIPTIONS = new Set([
   "Пользовательский плейлист",
@@ -99,6 +105,7 @@ function descriptionToFormValue(value) {
 
 export default function LibraryPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated } = useAuth();
   const loadLibraryFeed = useCallback(() => fetchLibraryFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadLibraryFeed);
@@ -109,11 +116,19 @@ export default function LibraryPage() {
     playTrack,
     toggleLikeTrack,
     toggleArtistFollow,
+    togglePlaylistSave,
     notify,
   } = usePlayer();
+  const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
+  const {
+    menuState: cardMenuState,
+    openCardMenu,
+    closeCardMenu,
+  } = useCardActionMenu();
 
   const [showAllArtists, setShowAllArtists] = useState(false);
   const [showAllPlaylists, setShowAllPlaylists] = useState(false);
+  const [showAllSavedPlaylists, setShowAllSavedPlaylists] = useState(false);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createCoverUploading, setCreateCoverUploading] = useState(false);
@@ -121,6 +136,7 @@ export default function LibraryPage() {
     title: "Новый плейлист",
     description: "",
     cover: "",
+    isPublic: false,
   });
 
   const [editDialog, setEditDialog] = useState({
@@ -129,12 +145,14 @@ export default function LibraryPage() {
     title: "",
     description: "",
     cover: "",
+    isPublic: false,
   });
   const [editCoverUploading, setEditCoverUploading] = useState(false);
 
   const [deleteDialogPlaylist, setDeleteDialogPlaylist] = useState(null);
 
   const playlists = useMemo(() => data?.playlists ?? [], [data?.playlists]);
+  const savedPlaylists = useMemo(() => data?.savedPlaylists ?? [], [data?.savedPlaylists]);
   const myPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isCustom), [playlists]);
 
   const canTogglePlaylists = myPlaylists.length > INITIAL_MY_PLAYLISTS_LIMIT;
@@ -142,6 +160,11 @@ export default function LibraryPage() {
     canTogglePlaylists && !showAllPlaylists
       ? myPlaylists.slice(0, INITIAL_MY_PLAYLISTS_LIMIT)
       : myPlaylists;
+  const canToggleSavedPlaylists = savedPlaylists.length > INITIAL_SAVED_PLAYLISTS_LIMIT;
+  const visibleSavedPlaylists =
+    canToggleSavedPlaylists && !showAllSavedPlaylists
+      ? savedPlaylists.slice(0, INITIAL_SAVED_PLAYLISTS_LIMIT)
+      : savedPlaylists;
 
   const followedArtists = useMemo(() => {
     const artistsById = new Map((data?.artists ?? []).map((artist) => [artist.id, artist]));
@@ -155,7 +178,31 @@ export default function LibraryPage() {
       : followedArtists;
 
   const recommendations = useMemo(() => Object.values(trackMap).slice(0, 4), [trackMap]);
-  const isEmpty = status === "success" && !myPlaylists.length && !followedArtists.length;
+  const isEmpty = status === "success" && !myPlaylists.length && !savedPlaylists.length && !followedArtists.length;
+
+  useEffect(() => {
+    if (searchParams.get("createPlaylist") !== "1") {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("createPlaylist");
+    setSearchParams(nextParams, { replace: true });
+
+    if (!isAuthenticated) {
+      notify("Войди в аккаунт, чтобы управлять плейлистами.");
+      navigate("/profile");
+      return;
+    }
+
+    setCreateForm({
+      title: "Новый плейлист",
+      description: "",
+      cover: "",
+      isPublic: false,
+    });
+    setCreateDialogOpen(true);
+  }, [isAuthenticated, navigate, notify, searchParams, setSearchParams]);
 
   const requireAuthenticated = () => {
     if (isAuthenticated) {
@@ -174,6 +221,7 @@ export default function LibraryPage() {
       title: "Новый плейлист",
       description: "",
       cover: "",
+      isPublic: false,
     });
     setCreateDialogOpen(true);
   };
@@ -188,6 +236,7 @@ export default function LibraryPage() {
       title: playlist.title,
       description: descriptionToFormValue(playlist.subtitle),
       cover: String(playlist.cover ?? "").trim(),
+      isPublic: Boolean(playlist.isPublic),
     });
   };
 
@@ -206,9 +255,10 @@ export default function LibraryPage() {
         title,
         description: createForm.description.trim(),
         cover: createForm.cover.trim(),
+        isPublic: createForm.isPublic,
       });
       setCreateDialogOpen(false);
-      setCreateForm({ title: "Новый плейлист", description: "", cover: "" });
+      setCreateForm({ title: "Новый плейлист", description: "", cover: "", isPublic: false });
       await reload();
       notify("Плейлист создан.");
     } catch (error) {
@@ -235,13 +285,27 @@ export default function LibraryPage() {
         title,
         description: editDialog.description.trim(),
         cover: editDialog.cover.trim(),
+        isPublic: editDialog.isPublic,
       });
-      setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "" });
+      setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "", isPublic: false });
       await reload();
       notify("Плейлист обновлен.");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Не удалось обновить плейлист.");
     }
+  };
+
+  const handleToggleSavedPlaylist = async (playlistId) => {
+    if (!requireAuthenticated()) {
+      return;
+    }
+
+    const synced = await togglePlaylistSave(playlistId);
+    if (!synced) {
+      return;
+    }
+
+    await reload();
   };
 
   const handleDeletePlaylist = async () => {
@@ -300,12 +364,29 @@ export default function LibraryPage() {
     }
   };
 
+  const copyEntityLink = async (path, successMessage, promptLabel) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const absoluteUrl = `${window.location.origin}${path}`;
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(absoluteUrl);
+      notify(successMessage);
+    } catch {
+      window.prompt(promptLabel, absoluteUrl);
+    }
+  };
+
   return (
     <PageShell>
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Моя музыка</h1>
-          <p className={styles.subtitle}>Плейлисты и избранные исполнители в одном месте.</p>
+          <p className={styles.subtitle}>Свои плейлисты, сохраненные подборки и избранные исполнители в одном месте.</p>
         </div>
         <div className={styles.headerActions}>
           <button type="button" className={styles.primaryButton} onClick={openCreateDialog}>
@@ -344,7 +425,7 @@ export default function LibraryPage() {
             tracks={recommendations}
             onPlayTrack={playTrack}
             onLikeTrack={toggleLikeTrack}
-            onOpenTrack={(trackId) => navigate(`/track/${trackId}`)}
+            onOpenTrackMenu={openTrackMenu}
           />
         </>
       ) : null}
@@ -361,6 +442,7 @@ export default function LibraryPage() {
               <>
                 <div className={styles.playlistGrid}>
                   {visibleMyPlaylists.map((playlist) => {
+                    const firstTrackId = playlist.trackIds?.[0] ?? null;
                     return (
                       <article key={playlist.id} className={styles.playlistCard}>
                         <button
@@ -375,20 +457,70 @@ export default function LibraryPage() {
                           />
                           <div className={styles.playlistMeta}>
                             <h3 className={styles.playlistTitle}>{playlist.title}</h3>
+                            <div className={styles.playlistPills}>
+                              <span className={styles.playlistPill}>
+                                {playlist.isPublic ? "Публичный" : "Только вам"}
+                              </span>
+                            </div>
                             <p className={styles.playlistSubtitle}>{displayPlaylistDescription(playlist.subtitle)}</p>
                             <p className={styles.playlistCount}>{playlist.trackIds.length} треков</p>
                           </div>
                         </button>
-                        <div className={styles.playlistActions}>
-                          <button type="button" className={styles.playlistGhostButton} onClick={() => openEditDialog(playlist)}>
-                            Редактировать
-                          </button>
+                        <div className={styles.cardActions}>
+                          {firstTrackId ? (
+                            <button
+                              type="button"
+                              className={styles.cardActionButton}
+                              aria-label="Слушать плейлист"
+                              onClick={() => playTrack(firstTrackId)}
+                            >
+                              <FiPlay />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            className={`${styles.playlistGhostButton} ${styles.playlistDeleteButton}`.trim()}
-                            onClick={() => setDeleteDialogPlaylist(playlist)}
+                            className={styles.cardActionButton}
+                            aria-label="Меню плейлиста"
+                            onClick={(event) =>
+                              openCardMenu(event, {
+                                title: playlist.title,
+                                subtitle: `${playlist.trackIds.length} треков`,
+                                actions: [
+                                  {
+                                    id: `open-playlist-${playlist.id}`,
+                                    icon: "open",
+                                    label: "Открыть плейлист",
+                                    onSelect: () => navigate(`/playlist/${playlist.id}`),
+                                  },
+                                  {
+                                    id: `share-playlist-${playlist.id}`,
+                                    icon: "share",
+                                    label: "Поделиться",
+                                    onSelect: () =>
+                                      copyEntityLink(
+                                        `/playlist/${playlist.id}`,
+                                        "Ссылка на плейлист скопирована.",
+                                        "Скопируй ссылку на плейлист:"
+                                      ),
+                                  },
+                                  {
+                                    id: `edit-playlist-${playlist.id}`,
+                                    icon: "edit",
+                                    label: "Редактировать",
+                                    onSelect: () => openEditDialog(playlist),
+                                  },
+                                  {
+                                    id: `delete-playlist-${playlist.id}`,
+                                    icon: "delete",
+                                    label: "Удалить",
+                                    tone: "danger",
+                                    onSelect: () => setDeleteDialogPlaylist(playlist),
+                                  },
+                                ],
+                              })
+                            }
                           >
-                            Удалить
+                            <FiMoreHorizontal />
                           </button>
                         </div>
                       </article>
@@ -419,6 +551,114 @@ export default function LibraryPage() {
 
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
+              <h2 className={styles.sectionTitle}>Сохраненные плейлисты</h2>
+              <span className={styles.playlistCountBadge}>{savedPlaylists.length}</span>
+              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+            </div>
+            {savedPlaylists.length ? (
+              <>
+                <div className={styles.playlistGrid}>
+                  {visibleSavedPlaylists.map((playlist) => (
+                    <article key={playlist.id} className={styles.playlistCard}>
+                      <button
+                        type="button"
+                        className={styles.playlistMainButton}
+                        onClick={() => navigate(`/playlist/${playlist.id}`)}
+                        aria-label={`Открыть плейлист ${playlist.title}`}
+                      >
+                        <div
+                          className={styles.playlistCover}
+                          style={{ background: playlist.cover || DEFAULT_PLAYLIST_COVER }}
+                        />
+                        <div className={styles.playlistMeta}>
+                          <h3 className={styles.playlistTitle}>{playlist.title}</h3>
+                          <div className={styles.playlistPills}>
+                            <span className={styles.playlistPill}>
+                              {playlist.isCustom ? "Публичный плейлист" : "Подборка каталога"}
+                            </span>
+                          </div>
+                          <p className={styles.playlistSubtitle}>{displayPlaylistDescription(playlist.subtitle)}</p>
+                          <p className={styles.playlistCount}>{playlist.trackIds.length} треков</p>
+                        </div>
+                      </button>
+                      <div className={styles.cardActions}>
+                        {playlist.trackIds?.[0] ? (
+                          <button
+                            type="button"
+                            className={styles.cardActionButton}
+                            aria-label="Слушать плейлист"
+                            onClick={() => playTrack(playlist.trackIds[0])}
+                          >
+                            <FiPlay />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={styles.cardActionButton}
+                          aria-label="Меню плейлиста"
+                          onClick={(event) =>
+                            openCardMenu(event, {
+                              title: playlist.title,
+                              subtitle: `${playlist.trackIds.length} треков`,
+                              actions: [
+                                {
+                                  id: `open-saved-playlist-${playlist.id}`,
+                                  icon: "open",
+                                  label: "Открыть плейлист",
+                                  onSelect: () => navigate(`/playlist/${playlist.id}`),
+                                },
+                                {
+                                  id: `share-saved-playlist-${playlist.id}`,
+                                  icon: "share",
+                                  label: "Поделиться",
+                                  onSelect: () =>
+                                    copyEntityLink(
+                                      `/playlist/${playlist.id}`,
+                                      "Ссылка на плейлист скопирована.",
+                                      "Скопируй ссылку на плейлист:"
+                                    ),
+                                },
+                                {
+                                  id: `remove-saved-playlist-${playlist.id}`,
+                                  icon: "remove",
+                                  label: "Убрать из моей музыки",
+                                  tone: "danger",
+                                  onSelect: () => handleToggleSavedPlaylist(playlist.id),
+                                },
+                              ],
+                            })
+                          }
+                        >
+                          <FiMoreHorizontal />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {canToggleSavedPlaylists ? (
+                  <button
+                    type="button"
+                    className={styles.playlistToggleButton}
+                    onClick={() => setShowAllSavedPlaylists((value) => !value)}
+                  >
+                    {showAllSavedPlaylists ? "Свернуть" : "Показать все"}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <div className={styles.sectionState}>
+                <ResourceState
+                  title="Пока нет сохраненных плейлистов"
+                  description="Открывай публичные плейлисты и добавляй их в свою музыку кнопкой нравится."
+                  actionLabel="Перейти в поиск"
+                  onAction={() => navigate("/search")}
+                />
+              </div>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionTitleRow}>
               <h2 className={styles.sectionTitle}>Мои исполнители</h2>
               <span className={styles.artistCount}>{followedArtists.length}</span>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
@@ -428,26 +668,64 @@ export default function LibraryPage() {
                 <div className={styles.artistGrid}>
                   {visibleFollowedArtists.map((artist) => (
                     <article key={artist.id} className={styles.artistCard}>
-                      <span className={styles.artistAvatar}>{artist.name.slice(0, 1).toUpperCase()}</span>
-                      <span className={styles.artistMeta}>
-                        <span className={styles.artistName}>{artist.name}</span>
-                        <span className={styles.artistFollowers}>{artist.followers} подписчиков</span>
-                      </span>
-                      <div className={styles.artistActions}>
+                      <button
+                        type="button"
+                        className={styles.artistMainButton}
+                        onClick={() => navigate(`/artist/${artist.id}`)}
+                      >
+                        <span className={styles.artistAvatar}>{artist.name.slice(0, 1).toUpperCase()}</span>
+                        <span className={styles.artistMeta}>
+                          <span className={styles.artistName}>{artist.name}</span>
+                          <span className={styles.artistFollowers}>{artist.followers} подписчиков</span>
+                        </span>
+                      </button>
+                      <div className={styles.cardActions}>
                         <button
                           type="button"
-                          className={styles.artistButton}
+                          className={styles.cardActionButton}
+                          aria-label="Открыть исполнителя"
                           onClick={() => navigate(`/artist/${artist.id}`)}
                         >
                           <FiExternalLink />
-                          Открыть
                         </button>
                         <button
                           type="button"
-                          className={`${styles.artistButton} ${styles.artistUnfollowButton}`.trim()}
-                          onClick={() => toggleArtistFollow(artist.id)}
+                          className={styles.cardActionButton}
+                          aria-label="Меню исполнителя"
+                          onClick={(event) =>
+                            openCardMenu(event, {
+                              title: artist.name,
+                              subtitle: `${artist.followers} подписчиков`,
+                              actions: [
+                                {
+                                  id: `open-artist-${artist.id}`,
+                                  icon: "open",
+                                  label: "Открыть исполнителя",
+                                  onSelect: () => navigate(`/artist/${artist.id}`),
+                                },
+                                {
+                                  id: `share-artist-${artist.id}`,
+                                  icon: "share",
+                                  label: "Поделиться",
+                                  onSelect: () =>
+                                    copyEntityLink(
+                                      `/artist/${artist.id}`,
+                                      "Ссылка на исполнителя скопирована.",
+                                      "Скопируй ссылку на исполнителя:"
+                                    ),
+                                },
+                                {
+                                  id: `unfollow-artist-${artist.id}`,
+                                  icon: "unfollow",
+                                  label: "Отписаться",
+                                  tone: "danger",
+                                  onSelect: () => toggleArtistFollow(artist.id),
+                                },
+                              ],
+                            })
+                          }
                         >
-                          Отписаться
+                          <FiMoreHorizontal />
                         </button>
                       </div>
                     </article>
@@ -480,7 +758,7 @@ export default function LibraryPage() {
       <ModalDialog
         open={createDialogOpen}
         title="Создать плейлист"
-        description="Название, описание и обложка для нового плейлиста."
+        description="Название, описание, обложка и видимость для нового плейлиста."
         onClose={() => setCreateDialogOpen(false)}
         actions={
           <>
@@ -525,6 +803,26 @@ export default function LibraryPage() {
           />
         </div>
         <div className={styles.dialogField}>
+          <span className={styles.dialogLabel}>Видимость</span>
+          <div className={styles.dialogVisibilityGroup}>
+            <button
+              type="button"
+              className={`${styles.dialogVisibilityButton} ${!createForm.isPublic ? styles.dialogVisibilityButtonActive : ""}`.trim()}
+              onClick={() => setCreateForm((prev) => ({ ...prev, isPublic: false }))}
+            >
+              Только я
+            </button>
+            <button
+              type="button"
+              className={`${styles.dialogVisibilityButton} ${createForm.isPublic ? styles.dialogVisibilityButtonActive : ""}`.trim()}
+              onClick={() => setCreateForm((prev) => ({ ...prev, isPublic: true }))}
+            >
+              Публичный
+            </button>
+          </div>
+          <p className={styles.dialogHint}>Публичный плейлист можно открыть по ссылке и сохранить в библиотеку.</p>
+        </div>
+        <div className={styles.dialogField}>
           <span className={styles.dialogLabel}>Обложка</span>
           <div
             className={styles.dialogCoverPreview}
@@ -558,13 +856,13 @@ export default function LibraryPage() {
         open={editDialog.open}
         title="Редактировать плейлист"
         description={editDialog.playlist ? `Плейлист: ${editDialog.playlist.title}` : ""}
-        onClose={() => setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "" })}
+        onClose={() => setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "", isPublic: false })}
         actions={
           <>
             <button
               type="button"
               className={styles.dialogGhostButton}
-              onClick={() => setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "" })}
+              onClick={() => setEditDialog({ open: false, playlist: null, title: "", description: "", cover: "", isPublic: false })}
             >
               Отмена
             </button>
@@ -600,6 +898,26 @@ export default function LibraryPage() {
             placeholder="Описание плейлиста"
             maxLength={280}
           />
+        </div>
+        <div className={styles.dialogField}>
+          <span className={styles.dialogLabel}>Видимость</span>
+          <div className={styles.dialogVisibilityGroup}>
+            <button
+              type="button"
+              className={`${styles.dialogVisibilityButton} ${!editDialog.isPublic ? styles.dialogVisibilityButtonActive : ""}`.trim()}
+              onClick={() => setEditDialog((prev) => ({ ...prev, isPublic: false }))}
+            >
+              Только я
+            </button>
+            <button
+              type="button"
+              className={`${styles.dialogVisibilityButton} ${editDialog.isPublic ? styles.dialogVisibilityButtonActive : ""}`.trim()}
+              onClick={() => setEditDialog((prev) => ({ ...prev, isPublic: true }))}
+            >
+              Публичный
+            </button>
+          </div>
+          <p className={styles.dialogHint}>Публичный плейлист доступен по ссылке и виден в сохранениях.</p>
         </div>
         <div className={styles.dialogField}>
           <span className={styles.dialogLabel}>Обложка</span>
@@ -655,6 +973,8 @@ export default function LibraryPage() {
           </>
         }
       />
+      <CardActionMenu menuState={cardMenuState} onClose={closeCardMenu} />
+      <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
     </PageShell>
   );
 }

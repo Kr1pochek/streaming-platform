@@ -25,6 +25,20 @@ function sanitizeDisplayName(value = "", fallback = "") {
   return cleaned || fallback;
 }
 
+function parseBoolean(value, fallback = false) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 }
@@ -39,6 +53,8 @@ function toPublicUser(row) {
     username: row.username,
     displayName: row.display_name ?? row.displayName ?? row.username,
     createdAt: Number(row.created_at ?? row.createdAt ?? 0),
+    isAdmin: Boolean(row.is_admin),
+    isBanned: Boolean(row.is_banned),
   };
 }
 
@@ -101,6 +117,7 @@ export function resolveSeedUserConfig(env = process.env) {
   const rawUsername = String(env.SEED_USERNAME ?? "").trim();
   const rawPassword = String(env.SEED_PASSWORD ?? "");
   const rawDisplayName = String(env.SEED_DISPLAY_NAME ?? "");
+  const isAdmin = parseBoolean(env.SEED_IS_ADMIN, false);
 
   if (!rawUsername && !rawPassword) {
     return null;
@@ -114,10 +131,11 @@ export function resolveSeedUserConfig(env = process.env) {
     username,
     password: rawPassword,
     displayName: sanitizeDisplayName(rawDisplayName, username),
+    isAdmin,
   };
 }
 
-export async function createUserAccount({ username, password, displayName }) {
+export async function createUserAccount({ username, password, displayName, isAdmin = false }) {
   const usernameValidation = validateUsername(username);
   if (!usernameValidation.valid) {
     const error = new Error(usernameValidation.message);
@@ -149,11 +167,11 @@ export async function createUserAccount({ username, password, displayName }) {
   try {
     const { rows } = await pool.query(
       `
-      insert into users (id, username, display_name, password_hash, password_salt, created_at)
-      values ($1, $2, $3, $4, $5, $6)
-      returning id, username, display_name, created_at;
+      insert into users (id, username, display_name, password_hash, password_salt, created_at, is_admin)
+      values ($1, $2, $3, $4, $5, $6, $7)
+      returning id, username, display_name, created_at, is_admin, is_banned;
     `,
-      [userId, normalizedUsername, normalizedDisplayName, passwordHash, salt, createdAt]
+      [userId, normalizedUsername, normalizedDisplayName, passwordHash, salt, createdAt, Boolean(isAdmin)]
     );
 
     await pool.query(
@@ -185,7 +203,16 @@ export async function verifyUserCredentials({ username, password }) {
 
   const { rows } = await pool.query(
     `
-    select id, username, display_name, password_hash, password_salt, created_at
+    select
+      id,
+      username,
+      display_name,
+      password_hash,
+      password_salt,
+      is_admin,
+      is_banned,
+      ban_reason,
+      created_at
     from users
     where lower(username) = lower($1)
     limit 1;
@@ -196,6 +223,15 @@ export async function verifyUserCredentials({ username, password }) {
   const user = rows[0];
   if (!user) {
     return null;
+  }
+
+  if (user.is_banned) {
+    const reason = String(user.ban_reason ?? "").trim();
+    const error = new Error(
+      reason ? `Аккаунт заблокирован. Причина: ${reason}` : "Аккаунт заблокирован."
+    );
+    error.status = 403;
+    throw error;
   }
 
   const candidateHash = hashPassword(rawPassword, user.password_salt);
@@ -247,7 +283,7 @@ export async function updateUserProfile({ userId, displayName }) {
     update users
     set display_name = $2
     where id = $1
-    returning id, username, display_name, created_at;
+    returning id, username, display_name, created_at, is_admin, is_banned;
   `,
     [normalizedUserId, displayNameValidation.value]
   );
@@ -474,11 +510,14 @@ export async function resolveSession(token) {
       u.id,
       u.username,
       u.display_name,
+      u.is_admin,
+      u.is_banned,
       u.created_at
     from user_sessions s
     join users u on u.id = s.user_id
     where s.token_hash = $1
       and s.expires_at > $2
+      and coalesce(u.is_banned, false) = false
     limit 1;
   `,
     [tokenDigest, now]
@@ -524,7 +563,7 @@ export async function ensureSeedUser() {
 
   const { rows } = await pool.query(
     `
-    select id, username, display_name, created_at
+    select id, username, display_name, created_at, is_admin, is_banned
     from users
     where lower(username) = lower($1)
     limit 1;
@@ -533,6 +572,19 @@ export async function ensureSeedUser() {
   );
 
   if (rows[0]) {
+    if (seedConfig.isAdmin && !rows[0].is_admin) {
+      const { rows: promotedRows } = await pool.query(
+        `
+        update users
+        set is_admin = true
+        where id = $1
+        returning id, username, display_name, created_at, is_admin, is_banned;
+      `,
+        [rows[0].id]
+      );
+      return toPublicUser(promotedRows[0]);
+    }
+
     return toPublicUser(rows[0]);
   }
 

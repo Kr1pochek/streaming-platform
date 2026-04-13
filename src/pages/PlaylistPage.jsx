@@ -6,8 +6,8 @@ import {
   FiExternalLink,
   FiHeart,
   FiLink2,
+  FiMoreHorizontal,
   FiPlay,
-  FiPlus,
   FiShuffle,
   FiTrash2,
 } from "react-icons/fi";
@@ -23,6 +23,7 @@ import {
   renameUserPlaylist,
 } from "../api/musicApi.js";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
@@ -62,11 +63,21 @@ function moveTrack(tracks, fromIndex, toIndex) {
 export default function PlaylistPage() {
   const { playlistId = "" } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const loadPlaylistPage = useCallback(() => fetchPlaylistPage(playlistId), [playlistId]);
   const { status, data, error, reload } = useAsyncResource(loadPlaylistPage);
 
-  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext, addQueueNext, notify } =
-    usePlayer();
+  const {
+    likedIds,
+    savedPlaylistIds,
+    currentTrackId,
+    playTrack,
+    playQueue,
+    toggleLikeTrack,
+    togglePlaylistSave,
+    addQueueNext,
+    notify,
+  } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -82,6 +93,9 @@ export default function PlaylistPage() {
 
   const playlistTrackIds = useMemo(() => orderedTracks.map((track) => track.id), [orderedTracks]);
   const isCustomPlaylist = Boolean(data?.playlist?.isCustom);
+  const isOwner = Boolean(data?.playlist?.userId && user?.id && data.playlist.userId === user.id);
+  const isSavedPlaylist = Boolean(data?.playlist?.id && savedPlaylistIds.includes(data.playlist.id));
+  const canSavePlaylist = Boolean(data?.playlist?.id) && !isOwner;
 
   const totalDuration = useMemo(
     () => orderedTracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0),
@@ -208,6 +222,22 @@ export default function PlaylistPage() {
     }
   };
 
+  const handleToggleSavePlaylist = async () => {
+    if (!data?.playlist?.id) {
+      return;
+    }
+    if (!isAuthenticated) {
+      notify("Войди в аккаунт, чтобы сохранять плейлисты в свою музыку.");
+      navigate("/profile");
+      return;
+    }
+
+    const synced = await togglePlaylistSave(data.playlist.id);
+    if (!synced) {
+      return;
+    }
+  };
+
   return (
     <PageShell>
       <button type="button" className={styles.backButton} onClick={() => navigate(-1)}>
@@ -237,12 +267,25 @@ export default function PlaylistPage() {
                   <FiClock />
                   {formatDurationClock(totalDuration)}
                 </span>
+                {data.playlist.isCustom ? (
+                  <span>{data.playlist.isPublic ? "Публичный" : "Только вам"}</span>
+                ) : null}
               </div>
               <div className={styles.heroActions}>
                 <button type="button" className={styles.primaryButton} onClick={() => playQueue(playlistTrackIds, 0)}>
                   <FiPlay />
                   Слушать
                 </button>
+                {canSavePlaylist ? (
+                  <button
+                    type="button"
+                    className={`${styles.secondaryButton} ${isSavedPlaylist ? styles.secondaryButtonActive : ""}`.trim()}
+                    onClick={() => void handleToggleSavePlaylist()}
+                  >
+                    {isSavedPlaylist ? <FiHeart /> : <LuHeart />}
+                    {isSavedPlaylist ? "В моей музыке" : "Сохранить"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={styles.secondaryButton}
@@ -323,8 +366,8 @@ export default function PlaylistPage() {
                       <span className={styles.trackCover} style={{ background: track.cover }} />
                       <span className={styles.trackMeta}>
                         <span className={styles.trackTitle}>
-                          {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                           {track.title}
+                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                         </span>
                         <ArtistInlineLinks
                           artistLine={track.artist}
@@ -339,27 +382,11 @@ export default function PlaylistPage() {
                     </button>
                     <button
                       type="button"
-                      className={`${styles.iconButton} ${liked ? styles.iconButtonActive : ""}`.trim()}
-                      aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                      onClick={() => toggleLikeTrack(track.id)}
-                    >
-                      {liked ? <FiHeart /> : <LuHeart />}
-                    </button>
-                    <button
-                      type="button"
                       className={styles.iconButton}
-                      aria-label="Открыть страницу трека"
-                      onClick={() => navigate(`/track/${track.id}`)}
+                      aria-label="Открыть меню трека"
+                      onClick={(event) => openTrackMenu(event, track.id)}
                     >
-                      <FiExternalLink />
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Добавить далее в очередь"
-                      onClick={() => addTrackNext(track.id)}
-                    >
-                      <FiPlus />
+                      <FiMoreHorizontal />
                     </button>
                     {isCustomPlaylist ? (
                       <button
@@ -419,13 +446,10 @@ export default function PlaylistPage() {
                         <button
                           type="button"
                           className={styles.relatedActionButton}
-                          aria-label="Добавить далее"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            addTrackNext(firstTrackId);
-                          }}
+                          aria-label="Открыть меню трека"
+                          onClick={(event) => openTrackMenu(event, firstTrackId)}
                         >
-                          <FiPlus />
+                          <FiMoreHorizontal />
                         </button>
                       </span>
                     ) : null}

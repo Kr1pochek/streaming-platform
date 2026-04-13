@@ -6,6 +6,7 @@ import {
   FiHeart,
   FiUser,
   FiLogIn,
+  FiSettings,
 } from "react-icons/fi";
 import styles from "./Sidebar.module.css";
 import useAuth from "../hooks/useAuth.js";
@@ -76,6 +77,18 @@ export default function Sidebar() {
             <FiUser className={styles.navIcon} />
             <span>Профиль</span>
           </NavLink>
+
+          {user?.isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `${styles.navItem} ${isActive ? styles.navItemActive : ""}`.trim()
+              }
+            >
+              <FiSettings className={styles.navIcon} />
+              <span>Админка</span>
+            </NavLink>
+          )}
         </nav>
       </div>
 

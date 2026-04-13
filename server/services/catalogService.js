@@ -15,6 +15,7 @@ import {
   shouldEmbedSignedPlaybackUrl,
 } from "./playbackService.js";
 export const USER_PLAYLIST_ID_PREFIX = "upl-";
+export const SYSTEM_PLAYLIST_ID_PREFIX = "sys-";
 export const DEFAULT_ERROR_MESSAGE = "Failed to load data. Please refresh the page.";
 export const CUSTOM_PLAYLIST_SUBTITLE = "Custom playlist";
 const LEGACY_CUSTOM_PLAYLIST_SUBTITLES = new Set([
@@ -70,6 +71,20 @@ export function normalizeTitle(value = "") {
   return String(value ?? "").trim();
 }
 
+export function parseBooleanFlag(value, fallback = false) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
 export function normalizePlaylistSubtitle(value = "") {
   const subtitle = normalizeTitle(value);
   if (LEGACY_CUSTOM_PLAYLIST_SUBTITLES.has(subtitle)) {
@@ -93,8 +108,16 @@ export function isCustomPlaylistId(playlistId) {
   return String(playlistId).startsWith(USER_PLAYLIST_ID_PREFIX);
 }
 
+export function isSystemPlaylistId(playlistId) {
+  return String(playlistId).startsWith(SYSTEM_PLAYLIST_ID_PREFIX);
+}
+
 export function isCustomPlaylist(playlist) {
   return Boolean(playlist?.isCustom) || isCustomPlaylistId(playlist?.id);
+}
+
+export function isSystemPlaylist(playlist) {
+  return Boolean(playlist?.isSystem) || isSystemPlaylistId(playlist?.id);
 }
 
 export function compareBySeed(orderMap, leftId, rightId) {
@@ -191,6 +214,46 @@ export function playbackUrlForTrack(trackId, audioUrl) {
   return normalizedAudioUrl;
 }
 
+export function isTrackAudioAvailable(trackId, audioUrl) {
+  const normalizedTrackId = String(trackId ?? "").trim();
+  const normalizedAudioUrl = String(audioUrl ?? "").trim();
+  if (!normalizedTrackId || !normalizedAudioUrl) {
+    return false;
+  }
+
+  const localMediaPath = resolveMediaFilePath(normalizedAudioUrl);
+  if (!localMediaPath) {
+    return true;
+  }
+
+  if (fs.existsSync(localMediaPath)) {
+    return true;
+  }
+
+  return hasHlsManifestForTrack(normalizedTrackId);
+}
+
+export function mapTrackRow(row) {
+  const rawAudioUrl = String(row.audioUrl ?? "").trim();
+  const hasLocalAudio = Boolean(resolveMediaFilePath(rawAudioUrl));
+  const hasHls = hasHlsManifestForTrack(row.id);
+
+  return {
+    id: row.id,
+    title: row.title,
+    artist: row.artist,
+    durationSec: Number(row.durationSec ?? 0),
+    explicit: Boolean(row.explicit),
+    cover: row.cover,
+    rawAudioUrl,
+    isLocalAudio: hasLocalAudio,
+    audioUrl: playbackUrlForTrack(row.id, rawAudioUrl),
+    hlsUrl: hasHls ? hlsManifestUrlForTrack(row.id) : null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    createdAt: Number(row.createdAt ?? 0),
+  };
+}
+
 export function trackHasArtist(track, artistName) {
   const normalizedArtistName = normalizeArtistName(artistName);
   return splitArtistNames(track.artist).some((candidateName) => normalizeArtistName(candidateName) === normalizedArtistName);
@@ -206,8 +269,149 @@ export function getPrimaryArtistForTrack(track, artists) {
   return findArtistByName(artists, primaryArtistName);
 }
 
+function compareTracksByFreshness(left, right) {
+  const createdAtDiff = Number(right?.createdAt ?? 0) - Number(left?.createdAt ?? 0);
+  if (createdAtDiff !== 0) {
+    return createdAtDiff;
+  }
+  return String(left?.title ?? left?.id ?? "").localeCompare(String(right?.title ?? right?.id ?? ""), "ru");
+}
+
+function playlistTrackSignature(trackIds = []) {
+  return trackIds.join("|");
+}
+
+function topArtistFromTracks(tracks = []) {
+  const artistSummary = new Map();
+
+  for (const track of tracks) {
+    for (const artistName of splitArtistNames(track.artist)) {
+      const normalizedArtistName = normalizeArtistName(artistName);
+      if (!normalizedArtistName) {
+        continue;
+      }
+
+      const current = artistSummary.get(normalizedArtistName) ?? {
+        label: artistName,
+        trackIds: [],
+      };
+
+      if (!current.trackIds.includes(track.id)) {
+        current.trackIds.push(track.id);
+      }
+      artistSummary.set(normalizedArtistName, current);
+    }
+  }
+
+  return [...artistSummary.values()]
+    .sort((left, right) => {
+      const countDiff = right.trackIds.length - left.trackIds.length;
+      if (countDiff !== 0) {
+        return countDiff;
+      }
+      return String(left.label).localeCompare(String(right.label), "ru");
+    })[0] ?? null;
+}
+
+function createSystemPlaylist({ id, title, subtitle, cover, trackIds }) {
+  return {
+    id,
+    title,
+    subtitle,
+    cover: cover || coverForPlaylist(id),
+    userId: null,
+    isCustom: false,
+    isSystem: true,
+    isPublic: true,
+    createdAt: 0,
+    trackIds: Array.from(new Set((trackIds ?? []).filter(Boolean))),
+  };
+}
+
+export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylists = [] } = {}) {
+  const availableTracks = Array.isArray(tracks) ? tracks.filter((track) => track?.id) : [];
+  const existingPublicPlaylists = existingPlaylists.filter(
+    (playlist) => !isCustomPlaylist(playlist) && !isSystemPlaylist(playlist) && (playlist.trackIds?.length ?? 0) > 0
+  );
+
+  if (!availableTracks.length || existingPublicPlaylists.length >= 3) {
+    return [];
+  }
+
+  const tracksByFreshness = [...availableTracks].sort(compareTracksByFreshness);
+  const trackIdsByFreshness = tracksByFreshness.map((track) => track.id);
+  const trackIdsReversed = [...trackIdsByFreshness].reverse();
+  const topArtist = topArtistFromTracks(tracksByFreshness);
+
+  const candidates = [
+    createSystemPlaylist({
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}catalog-now`,
+      title: "Сейчас в каталоге",
+      subtitle: `${trackIdsByFreshness.length} доступных треков`,
+      cover: tracksByFreshness[0]?.cover,
+      trackIds: trackIdsByFreshness,
+    }),
+    createSystemPlaylist({
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}rotation`,
+      title: "Короткая ротация",
+      subtitle: "Быстрый микс из того, что уже можно слушать",
+      cover: tracksByFreshness[Math.min(1, tracksByFreshness.length - 1)]?.cover ?? tracksByFreshness[0]?.cover,
+      trackIds: trackIdsReversed,
+    }),
+    createSystemPlaylist({
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}fresh`,
+      title: "Свежие загрузки",
+      subtitle: "Последние доступные треки",
+      cover: tracksByFreshness[0]?.cover,
+      trackIds: trackIdsByFreshness.slice(0, Math.min(trackIdsByFreshness.length, 8)),
+    }),
+  ];
+
+  if (topArtist && topArtist.trackIds.length >= 2) {
+    candidates.push(
+      createSystemPlaylist({
+        id: `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`,
+        title: `Фокус: ${topArtist.label}`,
+        subtitle: "Подборка по самому наполненному артисту",
+        cover: tracksByFreshness.find((track) => topArtist.trackIds.includes(track.id))?.cover,
+        trackIds: topArtist.trackIds,
+      })
+    );
+  }
+
+  const seenSignatures = new Set(
+    existingPlaylists
+      .filter((playlist) => Array.isArray(playlist.trackIds) && playlist.trackIds.length > 0)
+      .map((playlist) => playlistTrackSignature(playlist.trackIds))
+  );
+
+  const supplementalPlaylists = [];
+  for (const playlist of candidates) {
+    if (!playlist.trackIds.length) {
+      continue;
+    }
+
+    const signature = playlistTrackSignature(playlist.trackIds);
+    if (seenSignatures.has(signature)) {
+      continue;
+    }
+
+    seenSignatures.add(signature);
+    supplementalPlaylists.push(playlist);
+  }
+
+  return supplementalPlaylists.slice(0, Math.max(1, 4 - existingPublicPlaylists.length));
+}
+
 export function sortTracks(tracks) {
-  return [...tracks].sort((left, right) => compareBySeed(trackOrderMap, left.id, right.id));
+  return [...tracks].sort((left, right) => {
+    const leftIsSeedTrack = trackOrderMap.has(left.id);
+    const rightIsSeedTrack = trackOrderMap.has(right.id);
+    if (leftIsSeedTrack || rightIsSeedTrack) {
+      return compareBySeed(trackOrderMap, left.id, right.id);
+    }
+    return compareTracksByFreshness(left, right);
+  });
 }
 
 export function sortArtists(artists) {
@@ -267,10 +471,7 @@ export async function ensureSchema() {
 }
 
 export async function seedCatalogIfEmpty() {
-  const { rows } = await pool.query("select count(*)::int as count from tracks;");
-  if (Number(rows[0]?.count ?? 0) > 0) {
-    return;
-  }
+  const seededTrackCreatedAt = Date.now();
 
   await withTransaction(async (client) => {
     for (const artist of seedArtists) {
@@ -286,15 +487,16 @@ export async function seedCatalogIfEmpty() {
 
     for (const track of seedTracks) {
       await client.query(
-        `insert into tracks (id, title, duration_sec, explicit, cover, audio_url)
-         values ($1, $2, $3, $4, $5, $6)
+        `insert into tracks (id, title, duration_sec, explicit, cover, audio_url, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7)
          on conflict (id) do update
            set title = excluded.title,
                duration_sec = excluded.duration_sec,
                explicit = excluded.explicit,
                cover = excluded.cover,
-               audio_url = excluded.audio_url;`,
-        [track.id, track.title, track.durationSec, track.explicit, track.cover, track.audioUrl ?? null]
+               audio_url = excluded.audio_url,
+               created_at = coalesce(tracks.created_at, excluded.created_at);`,
+        [track.id, track.title, track.durationSec, track.explicit, track.cover, track.audioUrl ?? null, seededTrackCreatedAt]
       );
 
       const trackArtistNames = splitArtistNames(track.artist);
@@ -452,7 +654,9 @@ export async function syncTrackArtists() {
   });
 }
 
-export async function validateCatalogAudioFiles() {
+export async function validateCatalogAudioFiles({
+  strictMissingFiles = parseBooleanFlag(process.env.STRICT_AUDIO_VALIDATION, false),
+} = {}) {
   const { rows } = await pool.query(`
     select
       t.id,
@@ -488,20 +692,41 @@ export async function validateCatalogAudioFiles() {
   }
 
   if (!missingAudioUrl.length && !missingFiles.length && !invalidLocalUrls.length) {
-    return rows.length;
+    return {
+      totalTracks: rows.length,
+      missingAudioUrl,
+      missingFiles,
+      invalidLocalUrls,
+      strictMissingFiles,
+      ok: true,
+      hasWarnings: false,
+    };
   }
 
   const details = [];
   if (missingAudioUrl.length) {
     details.push(`missing audioUrl: ${missingAudioUrl.join(", ")}`);
   }
-  if (missingFiles.length) {
+  if (missingFiles.length && strictMissingFiles) {
     details.push(`missing files: ${missingFiles.join(", ")}`);
   }
   if (invalidLocalUrls.length) {
     details.push(`invalid local URLs: ${invalidLocalUrls.join(", ")}`);
   }
-  throw new Error(`Audio catalog validation failed (${rows.length} tracks): ${details.join("; ")}`);
+
+  if (details.length) {
+    throw new Error(`Audio catalog validation failed (${rows.length} tracks): ${details.join("; ")}`);
+  }
+
+  return {
+    totalTracks: rows.length,
+    missingAudioUrl,
+    missingFiles,
+    invalidLocalUrls,
+    strictMissingFiles,
+    ok: true,
+    hasWarnings: missingFiles.length > 0,
+  };
 }
 
 export async function seedReleasesIfEmpty() {
@@ -554,6 +779,7 @@ export async function fetchTracks() {
       t.explicit,
       t.cover,
       t.audio_url as "audioUrl",
+      coalesce(t.created_at, 0) as "createdAt",
       coalesce(
         (
           select string_agg(a.name, ', ' order by ta.artist_order)
@@ -571,22 +797,13 @@ export async function fetchTracks() {
         ),
         array[]::text[]
       ) as tags
-    from tracks t;
+    from tracks t
+    where coalesce(t.is_hidden, false) = false;
   `);
 
-  const tracks = rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    artist: row.artist,
-    durationSec: Number(row.durationSec),
-    explicit: Boolean(row.explicit),
-    cover: row.cover,
-    rawAudioUrl: row.audioUrl,
-    isLocalAudio: Boolean(resolveMediaFilePath(row.audioUrl)),
-    audioUrl: playbackUrlForTrack(row.id, row.audioUrl),
-    hlsUrl: hasHlsManifestForTrack(row.id) ? hlsManifestUrlForTrack(row.id) : null,
-    tags: Array.isArray(row.tags) ? row.tags : [],
-  }));
+  const tracks = rows
+    .filter((row) => isTrackAudioAvailable(row.id, row.audioUrl))
+    .map((row) => mapTrackRow(row));
 
   return sortTracks(tracks);
 }
@@ -600,6 +817,7 @@ export async function fetchPlaylists() {
       p.cover,
       p.user_id as "userId",
       coalesce(p.is_custom, false) as "isCustom",
+      coalesce(p.is_public, false) as "isPublic",
       coalesce(p.created_at, 0) as "createdAt",
       coalesce(
         (
@@ -619,6 +837,7 @@ export async function fetchPlaylists() {
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),
+    isPublic: !(Boolean(row.isCustom) || isCustomPlaylistId(row.id)) || Boolean(row.isPublic),
     createdAt: Number(row.createdAt ?? 0),
     trackIds: Array.isArray(row.trackIds) ? row.trackIds : [],
   }));
@@ -693,10 +912,14 @@ export async function searchCatalogInDatabase({
 
   const pattern = `%${normalizedQuery}%`;
   const limitPlusOne = safeLimit + 1;
+  const trackLimitWithBuffer = safeLimit * 4 + 1;
   const includeTracks = normalizedFilter === "all" || normalizedFilter === "tracks";
   const includePlaylists = normalizedFilter === "all" || normalizedFilter === "playlists";
   const includeArtists = normalizedFilter === "all" || normalizedFilter === "artists";
   const includeAlbums = normalizedFilter === "all" || normalizedFilter === "albums";
+  const catalog = includePlaylists || includeAlbums ? await fetchCatalog() : null;
+  const visibleTrackIdSet = new Set(catalog?.tracks?.map((track) => track.id) ?? []);
+  const visibleReleaseIdSet = new Set(catalog?.releases?.map((release) => release.id) ?? []);
 
   let rawTracks = [];
   let rawPlaylists = [];
@@ -732,7 +955,15 @@ export async function searchCatalogInDatabase({
         ) as tags
       from tracks t
       where
-        lower(t.title) like $1
+        coalesce(t.is_hidden, false) = false
+        and (
+          lower(t.title) like $1
+        or exists (
+          select 1
+          from track_tags tt
+          where tt.track_id = t.id
+            and lower(tt.tag) like $1
+        )
         or exists (
           select 1
           from track_artists ta
@@ -740,11 +971,12 @@ export async function searchCatalogInDatabase({
           where ta.track_id = t.id
             and lower(a.name) like $1
         )
+        )
       order by t.title
       limit $2
       offset $3;
     `,
-      [pattern, limitPlusOne, safeOffset]
+      [pattern, trackLimitWithBuffer, safeOffset]
     );
     rawTracks = rows;
   }
@@ -759,6 +991,7 @@ export async function searchCatalogInDatabase({
         p.cover,
         p.user_id as "userId",
         coalesce(p.is_custom, false) as "isCustom",
+        coalesce(p.is_public, false) as "isPublic",
         coalesce(p.created_at, 0) as "createdAt",
         coalesce(
           (
@@ -772,6 +1005,13 @@ export async function searchCatalogInDatabase({
       where
         lower(p.title) like $1
         or lower(coalesce(p.subtitle, '')) like $1
+        or exists (
+          select 1
+          from playlist_tracks pt
+          join track_tags tt on tt.track_id = pt.track_id
+          where pt.playlist_id = p.id
+            and lower(tt.tag) like $1
+        )
       order by p.title
       limit $2
       offset $3;
@@ -787,6 +1027,13 @@ export async function searchCatalogInDatabase({
       select id, name, followers
       from artists
       where lower(name) like $1
+         or exists (
+           select 1
+           from track_artists ta
+           join track_tags tt on tt.track_id = ta.track_id
+           where ta.artist_id = artists.id
+             and lower(tt.tag) like $1
+         )
       order by name
       limit $2
       offset $3;
@@ -820,6 +1067,13 @@ export async function searchCatalogInDatabase({
       where
         lower(r.title) like $1
         or lower(a.name) like $1
+        or exists (
+          select 1
+          from release_tracks rt
+          join track_tags tt on tt.track_id = rt.track_id
+          where rt.release_id = r.id
+            and lower(tt.tag) like $1
+        )
       order by r.year desc, r.title
       limit $2
       offset $3;
@@ -829,25 +1083,14 @@ export async function searchCatalogInDatabase({
     rawAlbums = rows;
   }
 
-  const tracksHasMore = rawTracks.length > safeLimit;
+  const filteredTracks = rawTracks.filter((row) => isTrackAudioAvailable(row.id, row.audioUrl));
+  const tracksHasMore = filteredTracks.length > safeLimit || rawTracks.length >= trackLimitWithBuffer;
   const playlistsHasMore = rawPlaylists.length > safeLimit;
   const artistsHasMore = rawArtists.length > safeLimit;
   const albumsHasMore = rawAlbums.length > safeLimit;
   const hasMore = tracksHasMore || playlistsHasMore || artistsHasMore || albumsHasMore;
 
-  const tracks = rawTracks.slice(0, safeLimit).map((row) => ({
-    id: row.id,
-    title: row.title,
-    artist: row.artist,
-    durationSec: Number(row.durationSec ?? 0),
-    explicit: Boolean(row.explicit),
-    cover: row.cover,
-    rawAudioUrl: row.audioUrl,
-    isLocalAudio: Boolean(resolveMediaFilePath(row.audioUrl)),
-    audioUrl: playbackUrlForTrack(row.id, row.audioUrl),
-    hlsUrl: hasHlsManifestForTrack(row.id) ? hlsManifestUrlForTrack(row.id) : null,
-    tags: Array.isArray(row.tags) ? row.tags : [],
-  }));
+  const tracks = filteredTracks.slice(0, safeLimit).map((row) => mapTrackRow(row));
 
   const playlists = rawPlaylists.slice(0, safeLimit).map((row) => ({
     id: row.id,
@@ -856,9 +1099,11 @@ export async function searchCatalogInDatabase({
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),
+    isPublic: !(Boolean(row.isCustom) || isCustomPlaylistId(row.id)) || Boolean(row.isPublic),
     createdAt: Number(row.createdAt ?? 0),
     trackIds: Array.isArray(row.trackIds) ? row.trackIds : [],
-  }));
+  }))
+    .filter((playlist) => playlist.isCustom || playlist.trackIds.some((trackId) => visibleTrackIdSet.has(trackId)));
 
   const artists = rawArtists.slice(0, safeLimit).map((row) => ({
     id: row.id,
@@ -875,7 +1120,8 @@ export async function searchCatalogInDatabase({
     cover: row.cover,
     artistName: row.artistName,
     trackIds: Array.isArray(row.trackIds) ? row.trackIds : [],
-  }));
+  }))
+    .filter((album) => visibleReleaseIdSet.has(album.id));
 
   return {
     tracks,
@@ -913,13 +1159,25 @@ export async function fetchCatalog() {
     ...playlist,
     trackIds: uniqueTrackIds(playlist.trackIds, trackMap),
   }));
+  const playablePlaylists = playlistsWithValidTracks.filter(
+    (playlist) => playlist.trackIds.length > 0 || isCustomPlaylist(playlist)
+  );
+  const supplementalPlaylists = buildCatalogSupplementalPlaylists({
+    tracks,
+    existingPlaylists: playablePlaylists,
+  });
+  const releasesWithValidTracks = releases.map((release) => ({
+    ...release,
+    trackIds: uniqueTrackIds(release.trackIds, trackMap),
+  }))
+    .filter((release) => release.trackIds.length > 0);
 
   const catalog = {
     artists,
     tracks,
     trackMap,
-    playlists: playlistsWithValidTracks,
-    releases,
+    playlists: sortPlaylists([...playablePlaylists, ...supplementalPlaylists]),
+    releases: releasesWithValidTracks,
   };
 
   catalogCache = {
@@ -940,6 +1198,7 @@ export async function getPlaylistById(playlistId) {
       p.cover,
       p.user_id as "userId",
       coalesce(p.is_custom, false) as "isCustom",
+      coalesce(p.is_public, false) as "isPublic",
       coalesce(p.created_at, 0) as "createdAt",
       coalesce(
         (
@@ -968,6 +1227,7 @@ export async function getPlaylistById(playlistId) {
     cover: row.cover,
     userId: row.userId ?? null,
     isCustom: Boolean(row.isCustom) || isCustomPlaylistId(row.id),
+    isPublic: !(Boolean(row.isCustom) || isCustomPlaylistId(row.id)) || Boolean(row.isPublic),
     createdAt: Number(row.createdAt ?? 0),
     trackIds: Array.isArray(row.trackIds) ? row.trackIds : [],
   };

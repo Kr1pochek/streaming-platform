@@ -1,7 +1,6 @@
 ﻿import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiExternalLink, FiHeart, FiPlay, FiPlus, FiShuffle } from "react-icons/fi";
-import { LuHeart } from "react-icons/lu";
+import { FiArrowLeft, FiHeart, FiMoreHorizontal, FiPlay, FiShuffle } from "react-icons/fi";
 import styles from "./ReleasePage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -28,7 +27,7 @@ export default function ReleasePage() {
   const loadReleasePage = useCallback(() => fetchReleasePage(releaseId), [releaseId]);
   const { status, data, error, reload } = useAsyncResource(loadReleasePage);
 
-  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext } = usePlayer();
+  const { likedIds, currentTrackId, playTrack, playQueue } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const artistLine = useMemo(() => data?.release?.artistName ?? "", [data?.release?.artistName]);
@@ -102,8 +101,8 @@ export default function ReleasePage() {
                       <span className={styles.trackCover} style={{ background: track.cover }} />
                       <span className={styles.trackMeta}>
                         <span className={styles.trackTitle}>
-                          {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                           {track.title}
+                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                         </span>
                         <ArtistInlineLinks
                           artistLine={track.artist}
@@ -118,27 +117,11 @@ export default function ReleasePage() {
                     </button>
                     <button
                       type="button"
-                      className={`${styles.iconButton} ${liked ? styles.iconButtonActive : ""}`.trim()}
-                      aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                      onClick={() => toggleLikeTrack(track.id)}
-                    >
-                      {liked ? <FiHeart /> : <LuHeart />}
-                    </button>
-                    <button
-                      type="button"
                       className={styles.iconButton}
-                      aria-label="Открыть страницу трека"
-                      onClick={() => navigate(`/track/${track.id}`)}
+                      aria-label="Открыть меню трека"
+                      onClick={(event) => openTrackMenu(event, track.id)}
                     >
-                      <FiExternalLink />
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Добавить далее в очередь"
-                      onClick={() => addTrackNext(track.id)}
-                    >
-                      <FiPlus />
+                      <FiMoreHorizontal />
                     </button>
                   </li>
                 );

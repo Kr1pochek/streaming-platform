@@ -42,6 +42,7 @@ npm run smoke -- --client
 ```
 
 `npm run start:app` waits for PostgreSQL, applies migrations, seeds data, and starts the API.
+If some old local audio files are missing, the app still starts and hides unavailable local tracks from the user catalog. Set `STRICT_AUDIO_VALIDATION=true` if you want startup to fail on missing media.
 
 ## 3. Environment
 
@@ -71,6 +72,7 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # FFPROBE_PATH=C:\ffmpeg\bin\ffprobe.exe
 # DB_WAIT_RETRIES=30
 # DB_WAIT_INTERVAL_MS=2000
+# STRICT_AUDIO_VALIDATION=false
 # NODE_ENV=production
 # MEDIA_STORAGE_DRIVER=local
 # MEDIA_CDN_BASE_URL=https://cdn.example.com/audio
@@ -213,9 +215,10 @@ npm run media:migrate:s3 -- --dry-run
 SEED_USERNAME=demo_user
 SEED_PASSWORD=strong_password_here
 SEED_DISPLAY_NAME=Demo User
+# SEED_IS_ADMIN=true
 ```
 
-If these vars are not set, seed user creation is skipped.
+If these vars are not set, seed user creation is skipped. Set `SEED_IS_ADMIN=true` when you want the seeded account to become the first admin.
 
 ## 12. Docker (PostgreSQL + API + Frontend)
 

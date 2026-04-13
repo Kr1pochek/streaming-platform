@@ -58,7 +58,17 @@ export function parseTrustProxySetting(value = process.env.TRUST_PROXY) {
   return configured;
 }
 
-export function createApp({ apiRouterOptions = {} } = {}) {
+function shouldSkipGlobalApiRateLimit(req) {
+  const requestPath = String(req.path ?? "");
+  return (
+    requestPath.startsWith("/media/") ||
+    requestPath.startsWith("/stream/") ||
+    requestPath.startsWith("/playback/") ||
+    requestPath === "/me/player-state"
+  );
+}
+
+export function createApp({ apiRouterOptions = {}, apiRateLimitOptions = {} } = {}) {
   const app = express();
   const serveClientBuild = shouldServeClientBuild();
   const jsonLimit = String(process.env.API_JSON_LIMIT ?? "4mb");
@@ -75,6 +85,8 @@ export function createApp({ apiRouterOptions = {} } = {}) {
       maxEntries: Number(process.env.API_RATE_LIMIT_MAX_ENTRIES ?? 20_000),
       cleanupIntervalMs: Number(process.env.API_RATE_LIMIT_CLEANUP_MS ?? 30_000),
       keyResolver: (req) => `api:${resolveRequestIp(req)}`,
+      skip: shouldSkipGlobalApiRateLimit,
+      ...apiRateLimitOptions,
     })
   );
   app.use("/api/media", express.static(mediaDirectory));

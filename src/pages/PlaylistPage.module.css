@@ -103,6 +103,11 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.secondaryButtonActive {
+  color: #ffd35d;
+  border: 1px solid rgba(255, 211, 93, 0.4);
+}
+
 .dangerButton {
   border: 1px solid rgba(255, 106, 106, 0.35);
   color: rgba(255, 170, 170, 0.9);
@@ -139,7 +144,7 @@
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.04);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
   padding: 0 8px;
@@ -205,6 +210,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.trackLikedHeart {
+  width: 11px;
+  height: 11px;
+  color: #f5cc46;
+  flex: 0 0 auto;
 }
 
 .currentDot {

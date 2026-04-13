@@ -1,6 +1,6 @@
 ﻿import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiExternalLink, FiHeart, FiMusic, FiPlay, FiPlus, FiSearch } from "react-icons/fi";
+import { FiChevronRight, FiHeart, FiMoreHorizontal, FiMusic, FiPlay, FiSearch } from "react-icons/fi";
 import styles from "./LikedPage.module.css";
 import usePlayer from "../hooks/usePlayer.js";
 import PageShell from "../components/PageShell.jsx";
@@ -18,7 +18,7 @@ function splitColumns(items) {
 
 export default function LikedPage() {
   const navigate = useNavigate();
-  const { likedIds, trackMap, currentTrackId, playTrack, toggleLikeTrack, addTrackNext } = usePlayer();
+  const { likedIds, trackMap, currentTrackId, playTrack, toggleLikeTrack } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const likedTracks = useMemo(() => likedIds.map((id) => trackMap[id]).filter(Boolean), [likedIds, trackMap]);
@@ -76,7 +76,7 @@ export default function LikedPage() {
             tracks={recommendations}
             onPlayTrack={playTrack}
             onLikeTrack={toggleLikeTrack}
-            onOpenTrack={(trackId) => navigate(`/track/${trackId}`)}
+            onOpenTrackMenu={openTrackMenu}
           />
         </section>
       ) : (
@@ -91,9 +91,6 @@ export default function LikedPage() {
                 tracks={leftTracks}
                 currentTrackId={currentTrackId}
                 onPlay={playTrack}
-                onToggleLike={toggleLikeTrack}
-                onAddNext={addTrackNext}
-                onOpenTrack={(id) => navigate(`/track/${id}`)}
                 onOpenArtist={(id) => navigate(`/artist/${id}`)}
                 onOpenTrackMenu={openTrackMenu}
               />
@@ -101,9 +98,6 @@ export default function LikedPage() {
                 tracks={rightTracks}
                 currentTrackId={currentTrackId}
                 onPlay={playTrack}
-                onToggleLike={toggleLikeTrack}
-                onAddNext={addTrackNext}
-                onOpenTrack={(id) => navigate(`/track/${id}`)}
                 onOpenArtist={(id) => navigate(`/artist/${id}`)}
                 onOpenTrackMenu={openTrackMenu}
               />
@@ -141,9 +135,6 @@ function TrackColumn({
   tracks,
   currentTrackId,
   onPlay,
-  onToggleLike,
-  onAddNext,
-  onOpenTrack,
   onOpenArtist,
   onOpenTrackMenu,
 }) {
@@ -160,8 +151,8 @@ function TrackColumn({
             <span className={styles.trackCover} style={{ background: track.cover }} />
             <span className={styles.trackMeta}>
               <span className={styles.trackTitle}>
-                {currentTrackId === track.id ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                 {track.title}
+                <FiHeart className={styles.trackLikedHeart} aria-hidden="true" />
               </span>
               <ArtistInlineLinks
                 artistLine={track.artist}
@@ -176,27 +167,11 @@ function TrackColumn({
           </button>
           <button
             type="button"
-            className={`${styles.unlikeButton} ${styles.unlikeButtonActive}`.trim()}
-            aria-label="Убрать из избранного"
-            onClick={() => onToggleLike(track.id)}
-          >
-            <FiHeart />
-          </button>
-          <button
-            type="button"
             className={styles.queueButton}
-            aria-label="Добавить далее в очередь"
-            onClick={() => onAddNext(track.id)}
+            aria-label="Открыть меню трека"
+            onClick={(event) => onOpenTrackMenu(event, track.id)}
           >
-            <FiPlus />
-          </button>
-          <button
-            type="button"
-            className={styles.trackOpenButton}
-            aria-label="Открыть страницу трека"
-            onClick={() => onOpenTrack(track.id)}
-          >
-            <FiExternalLink />
+            <FiMoreHorizontal />
           </button>
         </li>
       ))}

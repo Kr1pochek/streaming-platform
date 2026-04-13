@@ -10,8 +10,11 @@ const app = createApp();
 async function startServer() {
   await assertCatalogSchemaReady();
 
-  const validatedTracksCount = await validateCatalogAudioFiles();
-  console.log(`Audio files validated for ${validatedTracksCount} tracks.`);
+  const validation = await validateCatalogAudioFiles();
+  const warningSuffix = validation.hasWarnings
+    ? ` (${validation.missingFiles.length} local file warnings, filtered from catalog until media is restored)`
+    : "";
+  console.log(`Audio catalog checked for ${validation.totalTracks} tracks${warningSuffix}.`);
 
   const port = Number(process.env.API_PORT ?? 4000);
   const host = process.env.API_HOST ?? "127.0.0.1";

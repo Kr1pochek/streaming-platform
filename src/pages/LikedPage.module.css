@@ -93,7 +93,7 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 8px;
 }
@@ -140,6 +140,13 @@
   text-overflow: ellipsis;
 }
 
+.trackLikedHeart {
+  width: 11px;
+  height: 11px;
+  color: #f5cc46;
+  flex: 0 0 auto;
+}
+
 .currentDot {
   width: 7px;
   height: 7px;
@@ -172,9 +179,7 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
-.unlikeButton,
-.queueButton,
-.trackOpenButton {
+.queueButton {
   width: 28px;
   height: 28px;
   border: none;

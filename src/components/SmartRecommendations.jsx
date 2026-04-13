@@ -1,4 +1,4 @@
-import { FiArrowRight, FiHeart, FiPlay } from "react-icons/fi";
+import { FiArrowRight, FiHeart, FiMoreHorizontal, FiPlay } from "react-icons/fi";
 import styles from "./SmartRecommendations.module.css";
 
 export default function SmartRecommendations({
@@ -7,6 +7,7 @@ export default function SmartRecommendations({
   onPlayTrack,
   onLikeTrack,
   onOpenTrack,
+  onOpenTrackMenu,
 }) {
   if (!tracks?.length) {
     return null;
@@ -17,7 +18,11 @@ export default function SmartRecommendations({
       <h3 className={styles.title}>{title}</h3>
       <div className={styles.grid}>
         {tracks.map((track) => (
-          <article key={track.id} className={styles.card}>
+          <article
+            key={track.id}
+            className={styles.card}
+            onContextMenu={onOpenTrackMenu ? (event) => onOpenTrackMenu(event, track.id) : undefined}
+          >
             <span className={styles.cover} style={{ background: track.cover }} />
             <span className={styles.meta}>
               <span className={styles.trackTitle}>{track.title}</span>
@@ -44,9 +49,9 @@ export default function SmartRecommendations({
                 type="button"
                 className={styles.iconButton}
                 aria-label="Открыть страницу трека"
-                onClick={() => onOpenTrack(track.id)}
+                onClick={onOpenTrackMenu ? (event) => onOpenTrackMenu(event, track.id) : () => onOpenTrack(track.id)}
               >
-                <FiArrowRight />
+                {onOpenTrackMenu ? <FiMoreHorizontal /> : <FiArrowRight />}
               </button>
             </span>
           </article>

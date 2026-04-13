@@ -30,10 +30,13 @@ async function main() {
   await runCatalogSeed();
   const seedUser = await ensureSeedUser();
   await printSummary();
-  const validatedTracksCount = await validateCatalogAudioFiles();
-  console.log(`audio validation passed for ${validatedTracksCount} tracks`);
+  const validation = await validateCatalogAudioFiles();
+  const warningSuffix = validation.hasWarnings
+    ? ` (${validation.missingFiles.length} local file warnings, unavailable tracks are hidden from the user catalog)`
+    : "";
+  console.log(`audio catalog checked for ${validation.totalTracks} tracks${warningSuffix}`);
   if (seedUser) {
-    console.log(`seed user: ${seedUser.username}`);
+    console.log(`seed user: ${seedUser.username}${seedUser.isAdmin ? " (admin)" : ""}`);
   } else {
     console.log("seed user: skipped (SEED_USERNAME/SEED_PASSWORD are not set)");
   }

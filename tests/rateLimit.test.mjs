@@ -60,3 +60,17 @@ test("createRateLimiter evicts old keys when maxEntries is reached", async () =>
   // If "a" was evicted due to maxEntries limit, this request is treated as a new bucket.
   assert.equal(await invokeMiddleware(limiter, { key: "a" }), null);
 });
+
+test("createRateLimiter supports skip predicate for bypassed routes", async () => {
+  const limiter = createRateLimiter({
+    windowMs: 1_000,
+    max: 1,
+    keyResolver: (req) => req.key,
+    skip: (req) => req.bypass === true,
+  });
+
+  assert.equal(await invokeMiddleware(limiter, { key: "shared", bypass: true }), null);
+  assert.equal(await invokeMiddleware(limiter, { key: "shared", bypass: true }), null);
+  assert.equal(await invokeMiddleware(limiter, { key: "shared", bypass: false }), null);
+  assert.equal((await invokeMiddleware(limiter, { key: "shared", bypass: false }))?.status, 429);
+});

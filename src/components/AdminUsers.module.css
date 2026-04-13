@@ -1,0 +1,175 @@
+.container {
+  padding: 24px 0;
+}
+
+.container h2 {
+  font-size: 20px;
+  margin: 0 0 8px 0;
+  color: #fff;
+}
+
+.count {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #999;
+}
+
+.table {
+  border: 1px solid #333;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.header,
+.row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 1fr 1fr 1fr;
+  gap: 16px;
+  padding: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.header {
+  background: #1a1a1a;
+  font-weight: 600;
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  padding: 16px 12px;
+}
+
+.row {
+  padding: 16px 12px;
+  align-items: center;
+  background: #0a0a0a;
+  font-size: 13px;
+  color: #fff;
+  transition: background 0.2s;
+}
+
+.row:hover {
+  background: #111;
+}
+
+.usernameCol,
+.displayCol,
+.statusCol,
+.uploadedCol,
+.actionCol {
+  text-align: left;
+}
+
+.statusCol,
+.uploadedCol,
+.actionCol {
+  text-align: center;
+}
+
+.admin {
+  display: inline-block;
+  background: #3498db;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.active {
+  display: inline-block;
+  background: #1db954;
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.banned {
+  display: inline-block;
+  background: #e74c3c;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.btnBan,
+.btnUnban {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btnBan {
+  background: #e74c3c;
+  color: #fff;
+}
+
+.btnBan:hover {
+  background: #c0392b;
+}
+
+.btnUnban {
+  background: #1db954;
+  color: #000;
+}
+
+.btnUnban:hover {
+  background: #1ed760;
+}
+
+.adminLabel {
+  font-size: 12px;
+  color: #999;
+}
+
+.empty,
+.loading,
+.error {
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: #999;
+  background: #0a0a0a;
+  border-radius: 8px;
+}
+
+.error {
+  color: #e74c3c;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 13px;
+  color: #fff;
+}
+
+.pagination button {
+  padding: 8px 16px;
+  background: #1db954;
+  border: none;
+  border-radius: 20px;
+  color: #000;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pagination button:hover:not(:disabled) {
+  background: #1ed760;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

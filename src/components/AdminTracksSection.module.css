@@ -1,0 +1,435 @@
+.section {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(18, 20, 24, 0.95), rgba(14, 16, 20, 0.92));
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: rgba(132, 218, 255, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.description {
+  margin: 0;
+  max-width: 760px;
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.refreshButton,
+.filterButton,
+.actionGhostButton,
+.actionPrimaryButton,
+.actionDangerButton,
+.paginationButton,
+.dialogGhostButton,
+.dialogDangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.refreshButton,
+.actionGhostButton,
+.paginationButton,
+.dialogGhostButton {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f5faf7;
+}
+
+.actionPrimaryButton {
+  background: rgba(106, 214, 129, 0.14);
+  border-color: rgba(106, 214, 129, 0.24);
+  color: #9ee37d;
+}
+
+.actionDangerButton,
+.dialogDangerButton {
+  background: rgba(255, 111, 101, 0.16);
+  border-color: rgba(255, 111, 101, 0.24);
+  color: #ffb0ab;
+}
+
+.refreshButton:hover,
+.filterButton:hover,
+.actionGhostButton:hover,
+.actionPrimaryButton:hover,
+.actionDangerButton:hover,
+.paginationButton:hover,
+.dialogGhostButton:hover,
+.dialogDangerButton:hover {
+  transform: translateY(-1px);
+}
+
+.refreshButton:disabled,
+.filterButton:disabled,
+.actionGhostButton:disabled,
+.actionPrimaryButton:disabled,
+.actionDangerButton:disabled,
+.paginationButton:disabled,
+.dialogGhostButton:disabled,
+.dialogDangerButton:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(240, 245, 242, 0.65);
+}
+
+.searchField input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f7faf8;
+  font-size: 14px;
+}
+
+.searchField input::placeholder {
+  color: rgba(236, 242, 238, 0.42);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterButton {
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(240, 245, 242, 0.82);
+}
+
+.filterButtonActive {
+  background: rgba(132, 218, 255, 0.14);
+  border-color: rgba(132, 218, 255, 0.24);
+  color: #b3eaff;
+}
+
+.summaryBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: rgba(236, 242, 238, 0.66);
+  font-size: 12px;
+}
+
+.summaryBar span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.feedback,
+.inlineError {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.feedback {
+  background: rgba(106, 214, 129, 0.12);
+  border: 1px solid rgba(106, 214, 129, 0.18);
+  color: #a8ebb5;
+}
+
+.inlineError {
+  background: rgba(255, 111, 101, 0.12);
+  border: 1px solid rgba(255, 111, 101, 0.18);
+  color: #ffb4af;
+}
+
+.emptyState {
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.emptyDescription {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.cardList {
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cardHidden {
+  border-color: rgba(255, 111, 101, 0.18);
+  background: linear-gradient(140deg, rgba(255, 111, 101, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.cardMain {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.cover {
+  width: 104px;
+  height: 104px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meta {
+  display: grid;
+  gap: 10px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trackTitle {
+  margin: 0;
+  color: #f7faf8;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.smallBadge,
+.badge,
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(246, 250, 248, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.trackArtist {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.74);
+  font-size: 14px;
+}
+
+.badges,
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badgeVisible {
+  background: rgba(106, 214, 129, 0.14);
+  color: #9ee37d;
+}
+
+.badgeHidden {
+  background: rgba(255, 111, 101, 0.16);
+  color: #ffb0ab;
+}
+
+.badgeHealthy {
+  background: rgba(132, 218, 255, 0.16);
+  color: #b3eaff;
+}
+
+.badgeBroken {
+  background: rgba(255, 181, 93, 0.16);
+  color: #ffd08c;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detailItem {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.detailLabel {
+  color: rgba(236, 242, 238, 0.54);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detailValue {
+  color: #f7faf8;
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.reason {
+  margin: 0;
+  color: rgba(251, 220, 215, 0.88);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.paginationLabel {
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 13px;
+}
+
+.dialogField {
+  display: grid;
+  gap: 8px;
+}
+
+.dialogField span {
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dialogTextarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 108px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7faf8;
+  font: inherit;
+  outline: none;
+}
+
+.dialogTextarea:focus {
+  border-color: rgba(255, 181, 93, 0.48);
+}
+
+@media (max-width: 860px) {
+  .cardMain {
+    grid-template-columns: 1fr;
+  }
+
+  .cover {
+    width: 100%;
+    height: 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .refreshButton,
+  .paginationButton {
+    width: 100%;
+  }
+
+  .details {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination {
+    align-items: stretch;
+  }
+}

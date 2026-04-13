@@ -10,6 +10,9 @@ import { formatDuration } from "../utils/formatters.js";
 import PlayerContext from "./playerContext.js";
 
 const repeatModes = ["off", "all", "one"];
+const REMOTE_STATE_PROGRESS_STEP_SEC = 15;
+const REMOTE_STATE_SAVE_DELAY_IDLE_MS = 450;
+const REMOTE_STATE_SAVE_DELAY_PLAYING_MS = 1_200;
 let runtimeTracks = [];
 let runtimeArtists = [];
 let trackMap = Object.create(null);
@@ -26,6 +29,7 @@ const defaultState = {
   likedIds: [],
   followedArtistIds: [],
   historyIds: [],
+  savedPlaylistIds: [],
   shuffleEnabled: false,
   repeatMode: "off",
   streamQualityAvailable: false,
@@ -34,6 +38,7 @@ const defaultState = {
   streamQualityMode: "off",
   streamQualityLevel: "",
   seekVersion: 0,
+  previewSession: null,
   toastSeq: 0,
   toastItems: [],
   catalogVersion: 0,
@@ -97,6 +102,37 @@ function addHistory(historyIds, trackId) {
   return [trackId, ...filtered].slice(0, 24);
 }
 
+function resolvePreviewSession(track, requestedDurationSec = 18) {
+  const trackDuration = Math.max(0, Number(track?.durationSec ?? 0));
+  const safeDuration = clamp(Number(requestedDurationSec) || 18, 15, 20);
+  if (!trackDuration) {
+    return {
+      trackId: track?.id ?? "",
+      startSec: 0,
+      endSec: safeDuration,
+    };
+  }
+
+  const previewDuration = Math.min(safeDuration, trackDuration);
+  if (trackDuration <= previewDuration + 6) {
+    return {
+      trackId: track.id,
+      startSec: 0,
+      endSec: previewDuration,
+    };
+  }
+
+  const maxStartSec = Math.max(trackDuration - previewDuration - 4, 0);
+  const preferredStartSec = Math.max(Math.floor(trackDuration * 0.22), 12);
+  const startSec = clamp(preferredStartSec, 0, maxStartSec);
+
+  return {
+    trackId: track.id,
+    startSec,
+    endSec: Math.min(trackDuration, startSec + previewDuration),
+  };
+}
+
 function pickRandomIndex(currentIndex, length) {
   if (length <= 1) return currentIndex;
   let nextIndex = currentIndex;
@@ -144,6 +180,7 @@ function normalizePersistedState(raw) {
   const hasLikedIds = Array.isArray(raw.likedIds);
   const hasFollowedArtistIds = Array.isArray(raw.followedArtistIds);
   const hasHistoryIds = Array.isArray(raw.historyIds);
+  const hasSavedPlaylistIds = Array.isArray(raw.savedPlaylistIds);
 
   const queue = hasQueue ? uniqueStringIds(raw.queue) : defaultState.queue;
   const likedIds = hasLikedIds ? uniqueStringIds(raw.likedIds) : defaultState.likedIds;
@@ -153,6 +190,9 @@ function normalizePersistedState(raw) {
   const historyIds = hasHistoryIds
     ? uniqueStringIds(raw.historyIds).slice(0, 24)
     : defaultState.historyIds;
+  const savedPlaylistIds = hasSavedPlaylistIds
+    ? uniqueStringIds(raw.savedPlaylistIds)
+    : defaultState.savedPlaylistIds;
 
   return {
     queue,
@@ -165,6 +205,7 @@ function normalizePersistedState(raw) {
     likedIds,
     followedArtistIds,
     historyIds,
+    savedPlaylistIds,
     shuffleEnabled: Boolean(raw.shuffleEnabled),
     repeatMode: repeatModes.includes(raw.repeatMode) ? raw.repeatMode : defaultState.repeatMode,
   };
@@ -199,7 +240,11 @@ function playerReducer(state, action) {
       if (!state.queue.length) {
         return state;
       }
-      return { ...state, isPlaying: !state.isPlaying };
+      return {
+        ...state,
+        isPlaying: !state.isPlaying,
+        previewSession: state.isPlaying ? null : state.previewSession,
+      };
     }
 
     case "catalog_hydrated": {
@@ -244,10 +289,35 @@ function playerReducer(state, action) {
         currentIndex: nextCurrentIndex,
         progressSec: nextProgress,
         isPlaying: false,
+        previewSession: null,
         seekVersion: hasRemoteQueue ? state.seekVersion + 1 : state.seekVersion,
         likedIds: uniqueTrackIds(action.likedIds ?? []),
         followedArtistIds: uniqueArtistIds(action.followedArtistIds ?? []),
         historyIds: uniqueTrackIds(action.historyIds ?? []).slice(0, 24),
+        savedPlaylistIds: uniqueStringIds(action.savedPlaylistIds ?? []),
+      };
+    }
+
+    case "play_preview": {
+      const track = trackMap[action.trackId];
+      if (!track) {
+        return state;
+      }
+
+      const existingIndex = state.queue.indexOf(action.trackId);
+      const nextQueue = existingIndex >= 0 ? state.queue : [action.trackId, ...state.queue.filter(Boolean)];
+      const nextIndex = existingIndex >= 0 ? existingIndex : 0;
+      const previewSession = resolvePreviewSession(track, action.durationSec);
+
+      return {
+        ...state,
+        queue: nextQueue,
+        currentIndex: nextIndex,
+        isPlaying: true,
+        progressSec: previewSession.startSec,
+        previewSession,
+        seekVersion: state.seekVersion + 1,
+        historyIds: addHistory(state.historyIds, action.trackId),
       };
     }
 
@@ -266,6 +336,7 @@ function playerReducer(state, action) {
         currentIndex: nextIndex,
         isPlaying: true,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         historyIds: addHistory(state.historyIds, action.trackId),
       };
@@ -286,6 +357,7 @@ function playerReducer(state, action) {
         currentIndex: startIndex,
         isPlaying: true,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         historyIds: addHistory(state.historyIds, nextTrackId),
       };
@@ -303,6 +375,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: index,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, trackId),
@@ -321,6 +394,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: nextIndex,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, nextTrackId),
@@ -336,6 +410,7 @@ function playerReducer(state, action) {
         return {
           ...state,
           progressSec: 0,
+          previewSession: null,
           seekVersion: state.seekVersion + 1,
         };
       }
@@ -347,6 +422,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: prevIndex,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, prevTrackId),
@@ -361,6 +437,7 @@ function playerReducer(state, action) {
           ...state,
           isPlaying: false,
           progressSec: 0,
+          previewSession: null,
         };
       }
 
@@ -368,6 +445,7 @@ function playerReducer(state, action) {
         return {
           ...state,
           progressSec: 0,
+          previewSession: null,
           seekVersion: state.seekVersion + 1,
           isPlaying: true,
           historyIds: addHistory(state.historyIds, currentTrackId),
@@ -380,6 +458,7 @@ function playerReducer(state, action) {
           ...state,
           isPlaying: false,
           progressSec: currentTrack.durationSec,
+          previewSession: null,
         };
       }
 
@@ -388,6 +467,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: nextIndex,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, nextTrackId),
@@ -404,6 +484,7 @@ function playerReducer(state, action) {
       return {
         ...state,
         progressSec,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
       };
     }
@@ -414,6 +495,19 @@ function playerReducer(state, action) {
       if (!track) return state;
 
       const nextValue = clamp(action.progressSec, 0, track.durationSec);
+      if (
+        state.previewSession?.trackId === trackId &&
+        Number.isFinite(Number(state.previewSession?.endSec)) &&
+        nextValue >= Number(state.previewSession.endSec)
+      ) {
+        return {
+          ...state,
+          isPlaying: false,
+          progressSec: Number(state.previewSession.endSec),
+          previewSession: null,
+        };
+      }
+
       if (Math.floor(nextValue) === Math.floor(state.progressSec)) {
         return state;
       }
@@ -483,6 +577,7 @@ function playerReducer(state, action) {
           currentIndex: 0,
           isPlaying: false,
           progressSec: 0,
+          previewSession: null,
           seekVersion: state.seekVersion + 1,
         };
       }
@@ -504,6 +599,7 @@ function playerReducer(state, action) {
         queue: nextQueue,
         currentIndex: nextIndex,
         progressSec: nextProgress,
+        previewSession: index === state.currentIndex ? null : state.previewSession,
         seekVersion: state.seekVersion + (index === state.currentIndex ? 1 : 0),
         historyIds: nextHistory,
       };
@@ -516,6 +612,7 @@ function playerReducer(state, action) {
         currentIndex: 0,
         isPlaying: false,
         progressSec: 0,
+        previewSession: null,
         seekVersion: state.seekVersion + 1,
       };
       return state.queue.length ? enqueueToast(nextState, "Очередь очищена") : nextState;
@@ -563,6 +660,45 @@ function playerReducer(state, action) {
           currentIndex: nextCurrentIndex,
         },
         "Добавлено далее в очередь"
+      );
+    }
+
+    case "add_track_last": {
+      if (!trackMap[action.trackId]) {
+        return state;
+      }
+
+      if (!state.queue.length) {
+        return enqueueToast(
+          {
+            ...state,
+            queue: [action.trackId],
+            currentIndex: 0,
+          },
+          "РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ"
+        );
+      }
+
+      const currentTrackId = state.queue[state.currentIndex];
+      if (!currentTrackId) {
+        return state;
+      }
+
+      if (currentTrackId === action.trackId) {
+        return enqueueToast(state, "Р­С‚РѕС‚ С‚СЂРµРє СѓР¶Рµ РёРіСЂР°РµС‚");
+      }
+
+      const nextQueueBase = state.queue.filter((trackId) => trackId !== action.trackId);
+      const nextQueue = [...nextQueueBase, action.trackId];
+      const nextCurrentIndex = Math.max(nextQueue.indexOf(currentTrackId), 0);
+
+      return enqueueToast(
+        {
+          ...state,
+          queue: nextQueue,
+          currentIndex: nextCurrentIndex,
+        },
+        "Р”РѕР±Р°РІР»РµРЅРѕ РІ РєРѕРЅРµС† РѕС‡РµСЂРµРґРё"
       );
     }
 
@@ -707,6 +843,26 @@ function playerReducer(state, action) {
           followedArtistIds: nextFollowedArtistIds,
         },
         message
+      );
+    }
+
+    case "toggle_save_playlist": {
+      const playlistId = String(action.playlistId ?? "").trim();
+      if (!playlistId) {
+        return state;
+      }
+
+      const isSaved = state.savedPlaylistIds.includes(playlistId);
+      const nextSavedPlaylistIds = isSaved
+        ? state.savedPlaylistIds.filter((id) => id !== playlistId)
+        : [playlistId, ...state.savedPlaylistIds];
+
+      return enqueueToast(
+        {
+          ...state,
+          savedPlaylistIds: nextSavedPlaylistIds,
+        },
+        isSaved ? "Плейлист убран из моей музыки" : "Плейлист сохранен в моей музыке"
       );
     }
 
@@ -1035,6 +1191,7 @@ export function PlayerProvider({ children }) {
           likedIds: remoteState?.likedTrackIds ?? [],
           followedArtistIds: remoteState?.followedArtistIds ?? [],
           historyIds: remoteState?.historyTrackIds ?? [],
+          savedPlaylistIds: remoteState?.savedPlaylistIds ?? [],
           queueTrackIds: remoteState?.queueTrackIds ?? [],
           queueCurrentIndex: remoteState?.queueCurrentIndex ?? 0,
           queueProgressSec: remoteState?.queueProgressSec ?? 0,
@@ -1058,6 +1215,17 @@ export function PlayerProvider({ children }) {
     };
   }, [isAuthenticated, authStatus, state.catalogVersion]);
 
+  const remoteStateSyncProgressKey = state.isPlaying
+    ? Math.floor(state.progressSec / REMOTE_STATE_PROGRESS_STEP_SEC)
+    : Math.floor(state.progressSec);
+  const normalizedRemoteProgressSec = Math.max(0, Math.floor(state.progressSec));
+  const persistedRemoteProgressSec = state.isPlaying
+    ? Math.floor(normalizedRemoteProgressSec / REMOTE_STATE_PROGRESS_STEP_SEC) * REMOTE_STATE_PROGRESS_STEP_SEC
+    : normalizedRemoteProgressSec;
+  const remoteStateSyncDelayMs = state.isPlaying
+    ? REMOTE_STATE_SAVE_DELAY_PLAYING_MS
+    : REMOTE_STATE_SAVE_DELAY_IDLE_MS;
+
   useEffect(() => {
     if (!isAuthenticated || !remoteStateReady) {
       return;
@@ -1070,9 +1238,10 @@ export function PlayerProvider({ children }) {
           likedTrackIds: state.likedIds,
           followedArtistIds: state.followedArtistIds,
           historyTrackIds: state.historyIds,
+          savedPlaylistIds: state.savedPlaylistIds,
           queueTrackIds: state.queue,
           queueCurrentIndex: state.currentIndex,
-          queueProgressSec: state.progressSec,
+          queueProgressSec: persistedRemoteProgressSec,
           queueIsPlaying: state.isPlaying,
         });
       } catch {
@@ -1083,7 +1252,7 @@ export function PlayerProvider({ children }) {
           });
         }
       }
-    }, 400);
+    }, remoteStateSyncDelayMs);
 
     return () => {
       cancelled = true;
@@ -1095,9 +1264,12 @@ export function PlayerProvider({ children }) {
     state.likedIds,
     state.followedArtistIds,
     state.historyIds,
+    state.savedPlaylistIds,
     state.queue,
     state.currentIndex,
-    state.progressSec,
+    remoteStateSyncProgressKey,
+    persistedRemoteProgressSec,
+    remoteStateSyncDelayMs,
     state.isPlaying,
   ]);
 
@@ -1471,6 +1643,7 @@ export function PlayerProvider({ children }) {
       likedIds: state.likedIds,
       followedArtistIds: state.followedArtistIds,
       historyIds: state.historyIds,
+      savedPlaylistIds: state.savedPlaylistIds,
       shuffleEnabled: state.shuffleEnabled,
       repeatMode: state.repeatMode,
     };
@@ -1487,9 +1660,50 @@ export function PlayerProvider({ children }) {
     state.likedIds,
     state.followedArtistIds,
     state.historyIds,
+    state.savedPlaylistIds,
     state.shuffleEnabled,
     state.repeatMode,
   ]);
+
+  const persistRemoteStateNow = useCallback(
+    async (overrides = {}) => {
+      if (!isAuthenticated || !remoteStateReady) {
+        return true;
+      }
+
+      try {
+        await updatePlayerState({
+          likedTrackIds: overrides.likedTrackIds ?? state.likedIds,
+          followedArtistIds: overrides.followedArtistIds ?? state.followedArtistIds,
+          historyTrackIds: overrides.historyTrackIds ?? state.historyIds,
+          savedPlaylistIds: overrides.savedPlaylistIds ?? state.savedPlaylistIds,
+          queueTrackIds: overrides.queueTrackIds ?? state.queue,
+          queueCurrentIndex: overrides.queueCurrentIndex ?? state.currentIndex,
+          queueProgressSec: overrides.queueProgressSec ?? persistedRemoteProgressSec,
+          queueIsPlaying: overrides.queueIsPlaying ?? state.isPlaying,
+        });
+        return true;
+      } catch {
+        dispatch({
+          type: "notify",
+          message: "Не удалось сохранить изменения в моей музыке.",
+        });
+        return false;
+      }
+    },
+    [
+      isAuthenticated,
+      remoteStateReady,
+      state.likedIds,
+      state.followedArtistIds,
+      state.historyIds,
+      state.savedPlaylistIds,
+      state.queue,
+      state.currentIndex,
+      persistedRemoteProgressSec,
+      state.isPlaying,
+    ]
+  );
 
   const value = useMemo(
     () => ({
@@ -1519,10 +1733,20 @@ export function PlayerProvider({ children }) {
       likedIds: state.likedIds,
       followedArtistIds: state.followedArtistIds,
       historyIds: state.historyIds,
+      savedPlaylistIds: state.savedPlaylistIds,
       toastItems: state.toastItems,
       isCurrentTrackLiked: Boolean(currentTrackId && state.likedIds.includes(currentTrackId)),
       isArtistFollowed: (artistId) => state.followedArtistIds.includes(artistId),
-      playTrack: (trackId) => dispatch({ type: "play_track", trackId }),
+      isPlaylistSaved: (playlistId) => state.savedPlaylistIds.includes(playlistId),
+      playTrack: (trackId) => {
+        if (trackId === currentTrackId) {
+          dispatch({ type: "toggle_play" });
+          return;
+        }
+        dispatch({ type: "play_track", trackId });
+      },
+      playTrackPreview: (trackId, durationSec = 18) =>
+        dispatch({ type: "play_preview", trackId, durationSec }),
       playQueue: (trackIds, startIndex = 0) => dispatch({ type: "play_queue", trackIds, startIndex }),
       jumpToQueueIndex: (index) => dispatch({ type: "jump_to_index", index }),
       nextTrack: () => dispatch({ type: "next_track" }),
@@ -1535,6 +1759,7 @@ export function PlayerProvider({ children }) {
       removeQueueItem: (index) => dispatch({ type: "remove_from_queue", index }),
       moveQueueItem: (fromIndex, toIndex) => dispatch({ type: "move_queue_item", fromIndex, toIndex }),
       addTrackNext: (trackId) => dispatch({ type: "add_track_next", trackId }),
+      addTrackLast: (trackId) => dispatch({ type: "add_track_last", trackId }),
       addQueueNext: (trackIds, sourceLabel = "Плейлист") =>
         dispatch({ type: "add_queue_next", trackIds, sourceLabel }),
       clearQueue: () => dispatch({ type: "clear_queue" }),
@@ -1542,6 +1767,17 @@ export function PlayerProvider({ children }) {
       unlikeTrack: (trackId) => dispatch({ type: "unlike_track", trackId }),
       toggleLikeTrack: (trackId) => dispatch({ type: "toggle_like_track", trackId }),
       toggleArtistFollow: (artistId) => dispatch({ type: "toggle_follow_artist", artistId }),
+      togglePlaylistSave: async (playlistId) => {
+        const normalizedPlaylistId = String(playlistId ?? "").trim();
+        if (!normalizedPlaylistId) {
+          return false;
+        }
+        const nextSavedPlaylistIds = state.savedPlaylistIds.includes(normalizedPlaylistId)
+          ? state.savedPlaylistIds.filter((id) => id !== normalizedPlaylistId)
+          : [normalizedPlaylistId, ...state.savedPlaylistIds];
+        dispatch({ type: "toggle_save_playlist", playlistId: normalizedPlaylistId });
+        return persistRemoteStateNow({ savedPlaylistIds: nextSavedPlaylistIds });
+      },
       clearHistory: () => dispatch({ type: "clear_history" }),
       dismissToast: (toastId) => dispatch({ type: "dismiss_toast", toastId }),
       notify: (message) => dispatch({ type: "notify", message }),
@@ -1556,6 +1792,7 @@ export function PlayerProvider({ children }) {
       progressPercent,
       currentDuration,
       setStreamQualitySelection,
+      persistRemoteStateNow,
       refreshCatalog,
     ]
   );

@@ -6,13 +6,12 @@ import {
   FiClock,
   FiExternalLink,
   FiHeart,
+  FiMoreHorizontal,
   FiPlay,
-  FiPlus,
   FiShuffle,
   FiUserPlus,
   FiUsers,
 } from "react-icons/fi";
-import { LuHeart } from "react-icons/lu";
 import styles from "./ArtistPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -38,8 +37,6 @@ export default function ArtistPage() {
     toggleArtistFollow,
     playTrack,
     playQueue,
-    toggleLikeTrack,
-    addTrackNext,
   } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
@@ -135,8 +132,8 @@ export default function ArtistPage() {
                           <span className={styles.trackCover} style={{ background: track.cover }} />
                           <span className={styles.trackMeta}>
                             <span className={styles.trackTitle}>
-                              {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                               {track.title}
+                              {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                             </span>
                             <ArtistInlineLinks
                               artistLine={track.artist}
@@ -151,27 +148,11 @@ export default function ArtistPage() {
                         </button>
                         <button
                           type="button"
-                          className={`${styles.iconButton} ${liked ? styles.iconButtonActive : ""}`.trim()}
-                          aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                          onClick={() => toggleLikeTrack(track.id)}
-                        >
-                          {liked ? <FiHeart /> : <LuHeart />}
-                        </button>
-                        <button
-                          type="button"
                           className={styles.iconButton}
-                          aria-label="Открыть страницу трека"
-                          onClick={() => navigate(`/track/${track.id}`)}
+                          aria-label="Открыть меню трека"
+                          onClick={(event) => openTrackMenu(event, track.id)}
                         >
-                          <FiExternalLink />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.iconButton}
-                          aria-label="Добавить далее в очередь"
-                          onClick={() => addTrackNext(track.id)}
-                        >
-                          <FiPlus />
+                          <FiMoreHorizontal />
                         </button>
                       </li>
                     );
@@ -256,14 +237,14 @@ export default function ArtistPage() {
                       <button
                         type="button"
                         className={styles.albumPlayButton}
-                        onClick={() => {
+                        onClick={(event) => {
                           if (album.trackIds[0]) {
-                            addTrackNext(album.trackIds[0]);
+                            openTrackMenu(event, album.trackIds[0]);
                           }
                         }}
                       >
-                        <FiPlus />
-                        Далее
+                        <FiMoreHorizontal />
+                        Меню
                       </button>
                     </span>
                   </article>

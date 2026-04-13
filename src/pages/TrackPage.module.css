@@ -296,10 +296,15 @@
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.04);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 0 8px;
+}
+
+.trackRow > button:nth-of-type(2),
+.trackRow > button:nth-of-type(3) {
+  display: none;
 }
 
 .trackRowActive {
@@ -342,6 +347,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.trackLikedHeart {
+  width: 11px;
+  height: 11px;
+  color: #f5cc46;
+  flex: 0 0 auto;
 }
 
 .currentDot {

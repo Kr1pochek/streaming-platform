@@ -14,13 +14,24 @@ test("resolveSeedUserConfig normalizes username and display name", () => {
     SEED_USERNAME: " Demo.User ",
     SEED_PASSWORD: "secret-123",
     SEED_DISPLAY_NAME: " Demo Name ",
+    SEED_IS_ADMIN: "true",
   });
 
   assert.deepEqual(result, {
     username: "demo.user",
     password: "secret-123",
     displayName: "Demo Name",
+    isAdmin: true,
   });
+});
+
+test("resolveSeedUserConfig keeps seed admin disabled by default", () => {
+  const result = resolveSeedUserConfig({
+    SEED_USERNAME: "demo",
+    SEED_PASSWORD: "secret-123",
+  });
+
+  assert.equal(result?.isAdmin, false);
 });
 
 test("resolveSeedUserConfig requires username and password together", () => {

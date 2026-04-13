@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMusic, FiPlay, FiPlus } from "react-icons/fi";
+import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMoreHorizontal, FiMusic, FiPlay } from "react-icons/fi";
 import { LuHeart } from "react-icons/lu";
 import styles from "./TrackPage.module.css";
 import PageShell from "../components/PageShell.jsx";
@@ -25,7 +25,7 @@ export default function TrackPage() {
   const loadTrackPage = useCallback(() => fetchTrackPage(trackId), [trackId]);
   const { status, data, error, reload } = useAsyncResource(loadTrackPage);
 
-  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, addTrackNext, notify } = usePlayer();
+  const { likedIds, currentTrackId, playTrack, playQueue, toggleLikeTrack, notify } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const isLiked = useMemo(() => likedIds.includes(trackId), [likedIds, trackId]);
@@ -173,10 +173,10 @@ export default function TrackPage() {
                           <button
                             type="button"
                             className={styles.cardActionButton}
-                            aria-label="Добавить далее"
-                            onClick={() => addTrackNext(firstTrackId)}
+                            aria-label="Открыть меню трека"
+                            onClick={(event) => openTrackMenu(event, firstTrackId)}
                           >
-                            <FiPlus />
+                            <FiMoreHorizontal />
                           </button>
                         </span>
                       ) : null}
@@ -243,8 +243,8 @@ export default function TrackPage() {
                       <span className={styles.trackCoverMini} style={{ background: track.cover }} />
                       <span className={styles.trackMeta}>
                         <span className={styles.trackTitle}>
-                          {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                           {track.title}
+                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                         </span>
                         <ArtistInlineLinks
                           artistLine={track.artist}
@@ -276,10 +276,10 @@ export default function TrackPage() {
                     <button
                       type="button"
                       className={styles.iconButton}
-                      aria-label="Добавить далее в очередь"
-                      onClick={() => addTrackNext(track.id)}
+                      aria-label="Открыть меню трека"
+                      onClick={(event) => openTrackMenu(event, track.id)}
                     >
-                      <FiPlus />
+                      <FiMoreHorizontal />
                     </button>
                   </li>
                 );

@@ -11,6 +11,7 @@ const TrackPage = lazy(() => import("./pages/TrackPage.jsx"));
 const ArtistPage = lazy(() => import("./pages/ArtistPage.jsx"));
 const ReleasePage = lazy(() => import("./pages/ReleasePage.jsx"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage.jsx"));
+const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 function RouteFallback() {
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="artist/:artistId" element={withSuspense(<ArtistPage />)} />
         <Route path="release/:releaseId" element={withSuspense(<ReleasePage />)} />
         <Route path="profile" element={withSuspense(<ProfilePage />)} />
+        <Route path="admin" element={withSuspense(<AdminPage />)} />
         <Route path="*" element={withSuspense(<NotFoundPage />)} />
       </Route>
     </Routes>

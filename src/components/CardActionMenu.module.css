@@ -1,0 +1,109 @@
+.menu {
+  position: fixed;
+  z-index: 85;
+  width: min(280px, calc(100vw - 24px));
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05)),
+    rgba(14, 16, 22, 0.74);
+  backdrop-filter: blur(22px) saturate(135%);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.menuHeader {
+  padding: 8px 8px 2px;
+}
+
+.menuTitle {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.menuSubtitle {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.menuList {
+  display: grid;
+  gap: 6px;
+}
+
+.menuButton {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f5f7fb;
+  padding: 0 14px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.menuButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.menuButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.menuButtonDanger {
+  border-color: rgba(255, 126, 126, 0.16);
+  color: rgba(255, 196, 196, 0.98);
+}
+
+.menuButtonDanger:hover:not(:disabled) {
+  background: rgba(169, 45, 45, 0.16);
+  border-color: rgba(255, 126, 126, 0.28);
+}
+
+.menuButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.menuIcon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menuIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.menuLabel {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

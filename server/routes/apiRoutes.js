@@ -5,11 +5,11 @@ import multer from "multer";
 import {
   initialQueue,
   quickActions,
-  searchCollections,
   showcases,
   vibeTags,
 } from "../../shared/musicData.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
+import { requireAdmin } from "../middleware/adminAuth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { createRateLimiter, resolveRequestIp } from "../middleware/rateLimit.js";
 import {
@@ -53,6 +53,18 @@ import {
 import { getSmartRecommendations } from "../services/recommendationService.js";
 import { fetchUserState, updateUserState } from "../services/userStateService.js";
 import { ingestUploadedTrack } from "../services/trackUploadService.js";
+import {
+  getAdminStats,
+  getUploadedTracks,
+  getUploadedTracksCount,
+  getUsers,
+  getUsersCount,
+  hideTrack,
+  unhideTrack,
+  banUser,
+  unbanUser,
+} from "../services/adminService.js";
+import { buildCatalogState, buildSearchCollections } from "../services/feedService.js";
 
 const authRateLimiter = createRateLimiter({
   windowMs: 60_000,
@@ -262,11 +274,68 @@ function canReadPlaylist(playlist, userId) {
   if (!isCustomPlaylist(playlist)) {
     return true;
   }
-  return Boolean(userId && playlist.userId === userId);
+  if (userId && playlist.userId === userId) {
+    return true;
+  }
+  return Boolean(playlist.isPublic);
 }
 
 function filterPlaylistsForUser(playlists = [], userId = null) {
   return playlists.filter((playlist) => canReadPlaylist(playlist, userId));
+}
+
+function playlistsWithTracks(playlists = []) {
+  return playlists.filter((playlist) => Array.isArray(playlist?.trackIds) && playlist.trackIds.length > 0);
+}
+
+function buildHomeShowcases(playlists = []) {
+  const availablePlaylists = playlistsWithTracks(playlists);
+  if (!availablePlaylists.length) {
+    return [];
+  }
+
+  const playlistById = new Map(availablePlaylists.map((playlist) => [playlist.id, playlist]));
+  const usedPlaylistIds = new Set();
+  const prioritizedShowcases = [];
+
+  for (const item of showcases) {
+    const playlist = playlistById.get(item.playlistId);
+    if (!playlist || usedPlaylistIds.has(playlist.id)) {
+      continue;
+    }
+
+    usedPlaylistIds.add(playlist.id);
+    prioritizedShowcases.push({
+      id: item.id,
+      playlistId: playlist.id,
+      title: item.title || playlist.title,
+      subtitle: playlist.subtitle || item.subtitle || `${playlist.trackIds.length} tracks`,
+      cover: playlist.cover || item.cover,
+      trackIds: playlist.trackIds,
+    });
+  }
+
+  for (const playlist of availablePlaylists) {
+    if (usedPlaylistIds.has(playlist.id)) {
+      continue;
+    }
+
+    usedPlaylistIds.add(playlist.id);
+    prioritizedShowcases.push({
+      id: `showcase-${playlist.id}`,
+      playlistId: playlist.id,
+      title: playlist.title,
+      subtitle: playlist.subtitle || `${playlist.trackIds.length} tracks`,
+      cover: playlist.cover,
+      trackIds: playlist.trackIds,
+    });
+
+    if (prioritizedShowcases.length >= 4) {
+      break;
+    }
+  }
+
+  return prioritizedShowcases.slice(0, 4);
 }
 
 async function ensureOwnedCustomPlaylist(client, playlistId, userId) {
@@ -468,6 +537,7 @@ export function createApiRouter({
         likedTrackIds: Array.isArray(req.body?.likedTrackIds) ? req.body.likedTrackIds : [],
         followedArtistIds: Array.isArray(req.body?.followedArtistIds) ? req.body.followedArtistIds : [],
         historyTrackIds: Array.isArray(req.body?.historyTrackIds) ? req.body.historyTrackIds : [],
+        savedPlaylistIds: Array.isArray(req.body?.savedPlaylistIds) ? req.body.savedPlaylistIds : [],
         queueTrackIds: Array.isArray(req.body?.queueTrackIds) ? req.body.queueTrackIds : [],
         queueCurrentIndex: req.body?.queueCurrentIndex,
         queueProgressSec: req.body?.queueProgressSec,
@@ -500,6 +570,7 @@ export function createApiRouter({
           explicit: req.body?.explicit,
           cover: req.body?.cover,
           tags: req.body?.tags,
+          uploaderUserId: req.auth.userId,
         });
 
         const { trackMap } = await catalogFetcher();
@@ -525,6 +596,7 @@ export function createApiRouter({
       const title = parsePlaylistTitle(req.body?.title);
       const description = parsePlaylistDescription(req.body?.description);
       const coverInput = parsePlaylistCover(req.body?.cover);
+      const isPublic = parseBoolean(req.body?.isPublic, false);
 
       const id = createUserPlaylistId();
       const createdAt = Date.now();
@@ -538,14 +610,15 @@ export function createApiRouter({
         createdAt,
         userId,
         isCustom: true,
+        isPublic,
       };
 
       await pool.query(
         `
-        insert into playlists (id, title, subtitle, cover, is_custom, created_at, user_id)
-        values ($1, $2, $3, $4, true, $5, $6);
+        insert into playlists (id, title, subtitle, cover, is_custom, is_public, created_at, user_id)
+        values ($1, $2, $3, $4, true, $5, $6, $7);
       `,
-        [playlist.id, playlist.title, playlist.subtitle, playlist.cover, playlist.createdAt, userId]
+        [playlist.id, playlist.title, playlist.subtitle, playlist.cover, playlist.isPublic, playlist.createdAt, userId]
       );
       invalidateCatalogCache();
 
@@ -566,8 +639,9 @@ export function createApiRouter({
       const hasTitle = hasOwnField(payload, "title");
       const hasDescription = hasOwnField(payload, "description");
       const hasCover = hasOwnField(payload, "cover");
+      const hasIsPublic = hasOwnField(payload, "isPublic");
 
-      if (!hasTitle && !hasDescription && !hasCover) {
+      if (!hasTitle && !hasDescription && !hasCover && !hasIsPublic) {
         throw new HttpError(400, "No fields to update.");
       }
 
@@ -576,6 +650,7 @@ export function createApiRouter({
       const nextSubtitle = hasDescription ? parsedDescription || CUSTOM_PLAYLIST_SUBTITLE : null;
       const parsedCover = hasCover ? parsePlaylistCover(payload.cover) : "";
       const nextCover = hasCover ? parsedCover || coverForPlaylist(playlistId) : null;
+      const nextIsPublic = hasIsPublic ? parseBoolean(payload.isPublic, false) : null;
 
       const { rowCount } = await pool.query(
         `
@@ -583,10 +658,11 @@ export function createApiRouter({
         set
           title = case when $2::boolean then $3 else title end,
           subtitle = case when $4::boolean then $5 else subtitle end,
-          cover = case when $6::boolean then $7 else cover end
+          cover = case when $6::boolean then $7 else cover end,
+          is_public = case when $8::boolean then $9 else is_public end
         where id = $1
-          and (is_custom = true or id like $8)
-          and user_id = $9;
+          and (is_custom = true or id like $10)
+          and user_id = $11;
       `,
         [
           playlistId,
@@ -596,6 +672,8 @@ export function createApiRouter({
           nextSubtitle,
           hasCover,
           nextCover,
+          hasIsPublic,
+          nextIsPublic,
           `${USER_PLAYLIST_ID_PREFIX}%`,
           req.auth.userId,
         ]
@@ -825,16 +903,13 @@ export function createApiRouter({
   router.get(
     "/home-feed",
     asyncHandler(async (req, res) => {
-      const { playlists, trackMap, artists, releases } = await fetchCatalog();
-      const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
-      const enrichedShowcases = showcases.map((item) => {
-        const playlist = playlists.find((candidate) => candidate.id === item.playlistId);
-        return {
-          ...item,
-          trackIds: playlist?.trackIds ?? [],
-        };
-      });
       const userId = requestUserId(req);
+      const { playlists, tracks, trackMap, artists, releases } = await fetchCatalog();
+      const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
+      const catalogState = buildCatalogState({ tracks, playlists: visiblePlaylists });
+      const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
+      const fallbackFreshTrackIds = tracks.slice(0, 6).map((track) => track.id);
+      const enrichedShowcases = buildHomeShowcases(visiblePlaylists);
 
       let releaseNotifications = [];
       if (userId) {
@@ -865,8 +940,9 @@ export function createApiRouter({
         quickActions,
         showcases: enrichedShowcases,
         vibeTags,
-        freshTrackIds,
+        freshTrackIds: freshTrackIds.length ? freshTrackIds : fallbackFreshTrackIds,
         releaseNotifications,
+        catalogState,
       });
     })
   );
@@ -874,22 +950,30 @@ export function createApiRouter({
   router.get(
     "/search-feed",
     asyncHandler(async (req, res) => {
-      const { playlists, tracks } = await fetchCatalog();
+      const { playlists, tracks, artists } = await fetchCatalog();
       const userId = requestUserId(req);
-      const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
+      const visiblePlaylists = playlistsWithTracks(filterPlaylistsForUser(playlists, userId));
+      const catalogState = buildCatalogState({ tracks, playlists: visiblePlaylists });
       const newTrackIds = tracks.slice(-8).map((track) => track.id);
-      const morePlaylists = visiblePlaylists.map((playlist) => ({
+      const morePlaylists = visiblePlaylists
+        .filter((playlist) => !isCustomPlaylist(playlist))
+        .map((playlist) => ({
         id: playlist.id,
         title: playlist.title,
         artist: playlist.subtitle,
         cover: playlist.cover,
         trackIds: playlist.trackIds,
-      }));
+        }));
 
       res.json({
-        collections: searchCollections,
+        collections: buildSearchCollections({
+          playlists: visiblePlaylists,
+          tracks,
+          artists,
+        }),
         newTrackIds,
         morePlaylists,
+        catalogState,
       });
     })
   );
@@ -926,7 +1010,9 @@ export function createApiRouter({
       });
 
       const userId = requestUserId(req);
-      const visiblePlaylists = filterPlaylistsForUser(result.playlists, userId);
+      const visiblePlaylists = filterPlaylistsForUser(result.playlists, userId).filter(
+        (playlist) => playlist.isCustom || (playlist.trackIds?.length ?? 0) > 0
+      );
       const hasPlaylistOverflow = visiblePlaylists.length < result.playlists.length;
       const adjustedHasMore = Boolean(result.pagination.hasMore || hasPlaylistOverflow);
 
@@ -951,16 +1037,22 @@ export function createApiRouter({
       const myPlaylists = userId
         ? visiblePlaylists.filter((playlist) => isCustomPlaylist(playlist) && playlist.userId === userId)
         : [];
+      let savedPlaylists = [];
       let followedArtists = [];
 
       if (userId) {
         const userState = await fetchUserState(userId);
         const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
+        const savedPlaylistIdSet = new Set(userState.savedPlaylistIds ?? []);
+        savedPlaylists = visiblePlaylists.filter(
+          (playlist) => savedPlaylistIdSet.has(playlist.id) && (!playlist.userId || playlist.userId !== userId)
+        );
         followedArtists = artists.filter((artist) => followedArtistIdSet.has(artist.id));
       }
 
       res.json({
         playlists: myPlaylists,
+        savedPlaylists,
         artists: followedArtists,
       });
     })
@@ -992,7 +1084,7 @@ export function createApiRouter({
       const overlapScore = (candidate) =>
         candidate.trackIds.filter((id) => playlist.trackIds.includes(id)).length;
 
-      const relatedPlaylists = visiblePlaylists
+      const relatedPlaylists = playlistsWithTracks(visiblePlaylists)
         .filter((item) => item.id !== playlist.id)
         .sort((first, second) => overlapScore(second) - overlapScore(first))
         .slice(0, 3);
@@ -1250,7 +1342,94 @@ export function createApiRouter({
     })
   );
 
+  // Admin routes
+  router.get(
+    "/admin/stats",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const stats = await getAdminStats();
+      res.json(stats);
+    })
+  );
+
+  router.get(
+    "/admin/tracks",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const limit = parseLimit(req.query.limit, 20);
+      const offset = parseOffset(req.query.offset, 0);
+      const query = normalizeTitle(req.query.query);
+      const status = normalizeTitle(req.query.status).toLowerCase() || "all";
+      const tracks = await getUploadedTracks({ limit, offset, query, status });
+      const count = await getUploadedTracksCount({ query, status });
+      res.json({ tracks, total: count, limit, offset });
+    })
+  );
+
+  router.get(
+    "/admin/users",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const limit = parseLimit(req.query.limit, 20);
+      const offset = parseOffset(req.query.offset, 0);
+      const query = normalizeTitle(req.query.query);
+      const status = normalizeTitle(req.query.status).toLowerCase() || "all";
+      const users = await getUsers({ limit, offset, query, status });
+      const count = await getUsersCount({ query, status });
+      res.json({ users, total: count, limit, offset });
+    })
+  );
+
+  router.post(
+    "/admin/tracks/:id/hide",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const trackId = String(req.params.id ?? "").trim();
+      const reason = String(req.body?.reason ?? "").trim() || "Content moderation";
+      await hideTrack(trackId, req.auth.userId, reason);
+      await invalidateCatalogCache();
+      res.json({ success: true, message: "Track hidden" });
+    })
+  );
+
+  router.post(
+    "/admin/tracks/:id/unhide",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const trackId = String(req.params.id ?? "").trim();
+      await unhideTrack(trackId);
+      await invalidateCatalogCache();
+      res.json({ success: true, message: "Track unhidden" });
+    })
+  );
+
+  router.post(
+    "/admin/users/:id/ban",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const userId = String(req.params.id ?? "").trim();
+      const reason = String(req.body?.reason ?? "").trim() || "Policy violation";
+      await banUser(userId, reason, req.auth.userId);
+      res.json({ success: true, message: "User banned" });
+    })
+  );
+
+  router.post(
+    "/admin/users/:id/unban",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const userId = String(req.params.id ?? "").trim();
+      await unbanUser(userId);
+      res.json({ success: true, message: "User unbanned" });
+    })
+  );
+
   return router;
 }
-
-

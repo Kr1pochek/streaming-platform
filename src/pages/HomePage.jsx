@@ -6,9 +6,9 @@ import {
   FiChevronRight,
   FiHeadphones,
   FiHeart,
+  FiMoreHorizontal,
   FiMusic,
   FiPlay,
-  FiPlus,
   FiRadio,
   FiTrendingUp,
   FiZap,
@@ -33,6 +33,22 @@ const actionIcons = {
   energy: FiZap,
 };
 
+function trackWord(count) {
+  const safeCount = Math.max(0, Number(count ?? 0));
+  const remainder100 = safeCount % 100;
+  const remainder10 = safeCount % 10;
+  if (remainder100 >= 11 && remainder100 <= 14) {
+    return "треков";
+  }
+  if (remainder10 === 1) {
+    return "трек";
+  }
+  if (remainder10 >= 2 && remainder10 <= 4) {
+    return "трека";
+  }
+  return "треков";
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -50,7 +66,6 @@ export default function HomePage() {
     likedIds,
     isPlaying,
     toggleLikeTrack,
-    addTrackNext,
   } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
@@ -63,11 +78,18 @@ export default function HomePage() {
   }, []);
   const greetingName = user?.displayName ?? user?.username ?? "гость";
   const releaseNotifications = Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : [];
+  const catalogState = data?.catalogState ?? {};
 
   const freshTracks = useMemo(
     () => (data?.freshTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
     [data?.freshTrackIds, trackMap]
   );
+  const freshTrackColumns = useMemo(() => {
+    const midpoint = Math.ceil(freshTracks.length / 2);
+    return [freshTracks.slice(0, midpoint), freshTracks.slice(midpoint)].filter((column) => column.length);
+  }, [freshTracks]);
+  const isCompactCatalog = Boolean(catalogState.sparseCatalog);
+  const visibleTrackCount = Number(catalogState.visibleTracks ?? freshTracks.length);
 
   const sectionsEmpty =
     status === "success" &&
@@ -86,7 +108,9 @@ export default function HomePage() {
 
             <h1 className={styles.heroTitle}>Музыка, которая попадает в настроение.</h1>
             <p className={styles.heroSubtitle}>
-              Сегодня в фокусе подборки, быстрые действия и свежие релизы, синхронизированные с плеером.
+              {isCompactCatalog
+                ? `Сейчас в каталоге ${visibleTrackCount} ${trackWord(visibleTrackCount)}. Главная автоматически собирает живые подборки из того, что уже доступно.`
+                : "Сегодня в фокусе подборки, быстрые действия и свежие релизы, синхронизированные с плеером."}
             </p>
 
             <div className={styles.heroActions}>
@@ -174,6 +198,16 @@ export default function HomePage() {
           />
         ) : null}
 
+        {status === "success" && isCompactCatalog ? (
+          <section className={styles.catalogNotice}>
+            <p className={styles.catalogNoticeTitle}>Каталог работает в компактном режиме</p>
+            <p className={styles.catalogNoticeText}>
+              Витрина, поиск и плейлисты уже адаптированы под маленькое количество треков, так что приложение можно
+              спокойно показывать и наполнять дальше.
+            </p>
+          </section>
+        ) : null}
+
         {status === "success" && !sectionsEmpty ? (
           <>
             {user?.id ? (
@@ -239,7 +273,7 @@ export default function HomePage() {
                 <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
               <div className={styles.actionGrid}>
-                {data.quickActions.map((item) => {
+                {(data?.quickActions ?? []).map((item) => {
                   const Icon =
                     item.id === "wave"
                       ? isPlaying
@@ -273,11 +307,11 @@ export default function HomePage() {
 
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
-                <h2 className={styles.sectionHeading}>Свежие подборки</h2>
+                <h2 className={styles.sectionHeading}>{isCompactCatalog ? "Доступно прямо сейчас" : "Свежие подборки"}</h2>
                 <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
               <div className={styles.showcaseGrid}>
-                {data.showcases.map((item) => (
+                {(data?.showcases ?? []).map((item) => (
                   <article key={item.id} className={styles.showcaseCard}>
                     <button
                       className={styles.showcaseMainButton}
@@ -309,10 +343,10 @@ export default function HomePage() {
                         <button
                           type="button"
                           className={styles.cardActionButton}
-                          aria-label="Добавить далее"
-                          onClick={() => addTrackNext(item.trackIds[0])}
+                          aria-label="Открыть меню трека"
+                          onClick={(event) => openTrackMenu(event, item.trackIds[0])}
                         >
-                          <FiArrowRight />
+                          <FiMoreHorizontal />
                         </button>
                       </span>
                     ) : null}
@@ -323,33 +357,38 @@ export default function HomePage() {
 
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
-                <h2 className={styles.sectionHeading}>На волне</h2>
+                <h2 className={styles.sectionHeading}>{isCompactCatalog ? "Все доступные треки" : "На волне"}</h2>
                 <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
-              <div className={styles.trackGrid}>
-                <TrackColumn
-                  tracks={freshTracks.slice(0, Math.ceil(freshTracks.length / 2))}
-                  likedIds={likedIds}
-                  currentTrackId={currentTrackId}
-                  onPlay={playTrack}
-                  onAddNext={addTrackNext}
-                  onOpenTrackMenu={openTrackMenu}
-                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                />
-                <TrackColumn
-                  tracks={freshTracks.slice(Math.ceil(freshTracks.length / 2))}
-                  likedIds={likedIds}
-                  currentTrackId={currentTrackId}
-                  onPlay={playTrack}
-                  onAddNext={addTrackNext}
-                  onOpenTrackMenu={openTrackMenu}
-                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                />
+              <div
+                className={`${styles.trackGrid} ${freshTrackColumns.length === 1 ? styles.trackGridSingle : ""}`.trim()}
+              >
+                {freshTrackColumns.map((column, index) => (
+                  <TrackColumn
+                    key={`fresh-column-${index}`}
+                    tracks={column}
+                    likedIds={likedIds}
+                    currentTrackId={currentTrackId}
+                    onPlay={playTrack}
+                    onOpenTrackMenu={openTrackMenu}
+                    onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                  />
+                ))}
               </div>
             </section>
           </>
         ) : null}
-      <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
+      <TrackQueueMenu
+        menuState={menuState}
+        onAddTrackNext={addTrackToQueueNext}
+        onOpenTrack={() => {
+          if (menuState?.trackId) {
+            navigate(`/track/${menuState.trackId}`);
+          }
+          closeTrackMenu();
+        }}
+        onClose={closeTrackMenu}
+      />
     </PageShell>
   );
 }
@@ -359,7 +398,6 @@ function TrackColumn({
   likedIds,
   currentTrackId,
   onPlay,
-  onAddNext,
   onOpenTrackMenu,
   onOpenArtist,
 }) {
@@ -376,14 +414,11 @@ function TrackColumn({
             onClick={() => onPlay(track.id)}
             onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
           >
-            <span className={styles.trackIcon}>
-              <FiMusic />
-            </span>
+            <span className={styles.trackCover} style={{ background: track.cover }} />
             <span className={styles.trackMeta}>
               <span className={styles.trackTitle}>
-                {currentTrackId === track.id ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                 {track.title}
-                {likedIds.includes(track.id) ? <span className={styles.trackLikedDot} aria-hidden="true" /> : null}
+                {likedIds.includes(track.id) ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
               </span>
               <ArtistInlineLinks
                 artistLine={track.artist}
@@ -398,10 +433,10 @@ function TrackColumn({
           <button
             type="button"
             className={styles.queueButton}
-            aria-label="Добавить далее в очередь"
-            onClick={() => onAddNext(track.id)}
+            aria-label="Открыть меню действий"
+            onClick={(event) => onOpenTrackMenu(event, track.id)}
           >
-            <FiPlus />
+            <FiMoreHorizontal />
           </button>
           <span className={styles.trackTime}>{formatDurationClock(track.durationSec)}</span>
         </li>

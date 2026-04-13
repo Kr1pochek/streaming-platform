@@ -253,20 +253,25 @@ async function upsertTrackMetadata({
   cover,
   audioUrl,
   tags,
+  uploaderUserId,
 }) {
+  const createdAt = Date.now();
+
   await withTransaction(async (client) => {
     await client.query(
       `
-      insert into tracks (id, title, duration_sec, explicit, cover, audio_url)
-      values ($1, $2, $3, $4, $5, $6)
+      insert into tracks (id, title, duration_sec, explicit, cover, audio_url, created_at, uploaded_by)
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
       on conflict (id) do update
         set title = excluded.title,
             duration_sec = excluded.duration_sec,
             explicit = excluded.explicit,
             cover = excluded.cover,
-            audio_url = excluded.audio_url;
+            audio_url = excluded.audio_url,
+            created_at = coalesce(tracks.created_at, excluded.created_at),
+            uploaded_by = coalesce(tracks.uploaded_by, excluded.uploaded_by);
     `,
-      [trackId, title, durationSec, explicit, cover, audioUrl]
+      [trackId, title, durationSec, explicit, cover, audioUrl, createdAt, uploaderUserId ?? null]
     );
 
     const artistNames = splitArtistNames(artistLine);
@@ -352,6 +357,7 @@ export async function ingestUploadedTrack({
   cover,
   tags,
   trackId,
+  uploaderUserId,
   env = process.env,
 } = {}) {
   const safeTitle = normalizeTitle(title);
@@ -405,6 +411,7 @@ export async function ingestUploadedTrack({
       cover: safeCover,
       audioUrl: persisted.publicUrl,
       tags: safeTags,
+      uploaderUserId,
     });
     invalidateCatalogCache();
 

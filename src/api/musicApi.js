@@ -158,6 +158,7 @@ function normalizeUserPlaylistPayload(payloadOrTitle) {
       title: payloadOrTitle.title,
       description: payloadOrTitle.description,
       cover: payloadOrTitle.cover,
+      isPublic: payloadOrTitle.isPublic,
     };
   }
 
@@ -387,4 +388,67 @@ export async function uploadTrack(payload = {}) {
     );
   }
   return responsePayload;
+}
+
+// Admin API functions
+export async function getAdminStats() {
+  return request("/admin/stats");
+}
+
+export async function getAdminTracks(optionsOrLimit = 20, offset = 0) {
+  const options =
+    typeof optionsOrLimit === "object" && optionsOrLimit !== null
+      ? optionsOrLimit
+      : { limit: optionsOrLimit, offset };
+
+  return request("/admin/tracks", {
+    query: {
+      limit: options.limit ?? 20,
+      offset: options.offset ?? 0,
+      query: options.query ?? "",
+      status: options.status ?? "all",
+    },
+  });
+}
+
+export async function getAdminUsers(optionsOrLimit = 20, offset = 0) {
+  const options =
+    typeof optionsOrLimit === "object" && optionsOrLimit !== null
+      ? optionsOrLimit
+      : { limit: optionsOrLimit, offset };
+
+  return request("/admin/users", {
+    query: {
+      limit: options.limit ?? 20,
+      offset: options.offset ?? 0,
+      query: options.query ?? "",
+      status: options.status ?? "all",
+    },
+  });
+}
+
+export async function hideAdminTrack(trackId, reason = "") {
+  return request(`/admin/tracks/${trackId}/hide`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export async function unhideAdminTrack(trackId) {
+  return request(`/admin/tracks/${trackId}/unhide`, {
+    method: "POST",
+  });
+}
+
+export async function banAdminUser(userId, reason = "") {
+  return request(`/admin/users/${userId}/ban`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export async function unbanAdminUser(userId) {
+  return request(`/admin/users/${userId}/unban`, {
+    method: "POST",
+  });
 }

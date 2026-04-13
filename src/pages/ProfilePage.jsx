@@ -6,7 +6,7 @@ import {
   FiExternalLink,
   FiHeart,
   FiLogOut,
-  FiPlus,
+  FiMoreHorizontal,
   FiSettings,
   FiUpload,
   FiUsers,
@@ -120,7 +120,6 @@ export default function ProfilePage() {
     playTrack,
     toggleLikeTrack,
     toggleArtistFollow,
-    addTrackNext,
     notify,
     refreshCatalog,
   } = usePlayer();
@@ -573,6 +572,8 @@ export default function ProfilePage() {
     setCredentials((prev) => ({ ...prev, [field]: value }));
   };
 
+  const authErrorLooksBlocked = /заблок|blocked|banned/i.test(authError);
+
   if (authStatus === "loading" && !isAuthenticated) {
     return (
       <PageShell>
@@ -634,7 +635,19 @@ export default function ProfilePage() {
                 </label>
               ) : null}
 
-              {authError ? <p className={styles.authError}>{authError}</p> : null}
+              {authError ? (
+                <div
+                  className={`${styles.authErrorPanel} ${authErrorLooksBlocked ? styles.authErrorPanelBlocked : ""}`.trim()}
+                  role="alert"
+                >
+                  <p className={styles.authError}>{authError}</p>
+                  {authErrorLooksBlocked ? (
+                    <p className={styles.authErrorHint}>
+                      Если это произошло по ошибке, свяжись с администратором платформы.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className={styles.authActions}>
                 <button type="submit" className={styles.authPrimaryButton} disabled={authSubmitting}>
                   {authSubmitting ? "Подключаем..." : authMode === "register" ? "Создать аккаунт" : "Войти"}
@@ -867,8 +880,8 @@ export default function ProfilePage() {
                     <span className={styles.trackCover} style={{ background: track.cover }} />
                     <span className={styles.trackMeta}>
                       <span className={styles.trackTitle}>
-                        {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                         {track.title}
+                        {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                       </span>
                       <ArtistInlineLinks
                         artistLine={track.artist}
@@ -895,10 +908,10 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     className={styles.iconButton}
-                    onClick={() => addTrackNext(track.id)}
-                    aria-label="Добавить далее в очередь"
+                    onClick={(event) => openTrackMenu(event, track.id)}
+                    aria-label="Открыть меню трека"
                   >
-                    <FiPlus />
+                    <FiMoreHorizontal />
                   </button>
                 </li>
               );
@@ -937,7 +950,7 @@ export default function ProfilePage() {
           tracks={recommendations}
           onPlayTrack={playTrack}
           onLikeTrack={toggleLikeTrack}
-          onOpenTrack={(trackId) => navigate(`/track/${trackId}`)}
+          onOpenTrackMenu={openTrackMenu}
         />
       ) : null}
 

@@ -1,7 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiExternalLink, FiHeart, FiPlay, FiPlus, FiSearch } from "react-icons/fi";
-import { LuHeart, LuHeartOff } from "react-icons/lu";
+import { FiChevronRight, FiHeart, FiMoreHorizontal, FiPlay, FiSearch } from "react-icons/fi";
 import styles from "./SearchPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -48,6 +47,10 @@ function splitColumns(items) {
   return [items.slice(0, splitPoint), items.slice(splitPoint)];
 }
 
+function nonEmptyColumns(items) {
+  return splitColumns(items).filter((column) => column.length);
+}
+
 function mergeById(currentItems = [], nextItems = []) {
   const result = [...currentItems];
   const seen = new Set(currentItems.map((item) => item?.id).filter(Boolean));
@@ -75,7 +78,6 @@ export default function SearchPage() {
     playTrack,
     toggleLikeTrack,
     clearHistory,
-    addTrackNext,
   } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
@@ -207,8 +209,11 @@ export default function SearchPage() {
     return source.slice(0, 4);
   }, [popularTracks, trackMap]);
 
-  const [popularLeft, popularRight] = useMemo(() => splitColumns(popularTracks), [popularTracks]);
-  const [historyLeft, historyRight] = useMemo(() => splitColumns(historyTracks), [historyTracks]);
+  const popularColumns = useMemo(() => nonEmptyColumns(popularTracks), [popularTracks]);
+  const historyColumns = useMemo(() => nonEmptyColumns(historyTracks), [historyTracks]);
+  const collections = Array.isArray(data?.collections) ? data.collections : [];
+  const morePlaylists = Array.isArray(data?.morePlaylists) ? data.morePlaylists : [];
+  const isSparseCatalog = Boolean(data?.catalogState?.sparseCatalog);
 
   const hasSearchQuery = normalizedQuery.length > 0;
   const searchResults = searchState.data;
@@ -218,6 +223,25 @@ export default function SearchPage() {
     !searchResults.playlists.length &&
     !searchResults.artists.length &&
     !searchResults.albums.length;
+
+  const handleOpenCollection = (item) => {
+    if (!item) {
+      return;
+    }
+    if (item.type === "playlist" && item.targetId) {
+      navigate(`/playlist/${item.targetId}`);
+      return;
+    }
+    if (item.type === "artist" && item.targetId) {
+      navigate(`/artist/${item.targetId}`);
+      return;
+    }
+    if (item.type === "search" && item.query) {
+      handleQueryChange(item.query);
+      return;
+    }
+    navigate("/search");
+  };
 
   return (
     <PageShell>
@@ -233,7 +257,7 @@ export default function SearchPage() {
             type="search"
             value={query}
             onChange={(event) => handleQueryChange(event.target.value)}
-            placeholder="Трек, альбом, исполнитель"
+            placeholder="Трек, альбом, исполнитель или жанр"
             autoComplete="off"
           />
         </div>
@@ -269,6 +293,13 @@ export default function SearchPage() {
         ) : null}
       </div>
 
+      {status === "success" && !hasSearchQuery && isSparseCatalog ? (
+        <p className={styles.catalogHint}>
+          Каталог сейчас компактный, поэтому раздел показывает живые переходы по тем артистам и подборкам,
+          которые уже доступны для прослушивания.
+        </p>
+      ) : null}
+
       {status === "loading" ? (
         <ResourceState loading title="Загружаем поиск" description="Подготавливаем подборки и списки треков." />
       ) : null}
@@ -295,8 +326,6 @@ export default function SearchPage() {
           loadingMore={searchState.loadingMore}
           onPlay={playTrack}
           onToggleLike={toggleLikeTrack}
-          onAddNext={addTrackNext}
-          onOpenTrack={(id) => navigate(`/track/${id}`)}
           onOpenPlaylist={(id) => navigate(`/playlist/${id}`)}
           onOpenArtist={(id) => navigate(`/artist/${id}`)}
           onOpenRelease={(id) => navigate(`/release/${id}`)}
@@ -314,59 +343,60 @@ export default function SearchPage() {
 
       {status === "success" && !hasSearchQuery && activeTab === "popular" ? (
         <>
+          {collections.length ? (
+            <section className={styles.section}>
+              <div className={styles.sectionTitleRow}>
+                <h2 className={styles.sectionHeading}>Быстрые переходы</h2>
+                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+              </div>
+              <div className={styles.collectionsGrid}>
+                {collections.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={styles.collectionCard}
+                    onClick={() => handleOpenCollection(item)}
+                  >
+                    <span className={styles.collectionCover} style={{ background: item.gradient }} />
+                    <span className={styles.collectionMeta}>
+                      <span className={styles.collectionTitle}>{item.title}</span>
+                      <span className={styles.collectionSubtitle}>{item.subtitle}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
-              <h2 className={styles.sectionHeading}>Подборки музыки</h2>
+              <h2 className={styles.sectionHeading}>{isSparseCatalog ? "Доступные треки" : "Новинки"}</h2>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
             </div>
-            <div className={styles.collectionsGrid}>
-              {data.collections.map((item) => (
-                <button key={item.id} type="button" className={styles.collectionCard}>
-                  <span className={styles.collectionCover} style={{ background: item.gradient }} />
-                  <span className={styles.collectionTitle}>{item.title}</span>
-                </button>
+            <div
+              className={`${styles.tracksGrid} ${popularColumns.length === 1 ? styles.tracksGridSingle : ""}`.trim()}
+            >
+              {popularColumns.map((column, index) => (
+                <TrackListColumn
+                  key={`popular-column-${index}`}
+                  tracks={column}
+                  likedIds={likedIds}
+                currentTrackId={currentTrackId}
+                onPlay={playTrack}
+                onOpenArtist={(id) => navigate(`/artist/${id}`)}
+                onOpenTrackMenu={openTrackMenu}
+              />
               ))}
             </div>
           </section>
 
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
-              <h2 className={styles.sectionHeading}>Мировые новинки</h2>
-              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
-            </div>
-            <div className={styles.tracksGrid}>
-              <TrackListColumn
-                tracks={popularLeft}
-                likedIds={likedIds}
-                currentTrackId={currentTrackId}
-                onPlay={playTrack}
-                onToggleLike={toggleLikeTrack}
-                onAddNext={addTrackNext}
-                onOpenTrack={(id) => navigate(`/track/${id}`)}
-                onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                onOpenTrackMenu={openTrackMenu}
-              />
-              <TrackListColumn
-                tracks={popularRight}
-                likedIds={likedIds}
-                currentTrackId={currentTrackId}
-                onPlay={playTrack}
-                onToggleLike={toggleLikeTrack}
-                onAddNext={addTrackNext}
-                onOpenTrack={(id) => navigate(`/track/${id}`)}
-                onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                onOpenTrackMenu={openTrackMenu}
-              />
-            </div>
-          </section>
-
-          <section className={styles.section}>
-            <div className={styles.sectionTitleRow}>
-              <h2 className={styles.sectionHeading}>Больше новой музыки</h2>
+              <h2 className={styles.sectionHeading}>{isSparseCatalog ? "Плейлисты каталога" : "Больше новой музыки"}</h2>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
             </div>
             <div className={styles.moreGrid}>
-              {data.morePlaylists.map((playlist) => {
+              {morePlaylists.map((playlist) => {
                 const firstTrackId = playlist.trackIds?.[0] ?? null;
                 return (
                   <article key={playlist.id} className={styles.moreCard}>
@@ -376,8 +406,10 @@ export default function SearchPage() {
                       onClick={() => navigate(`/playlist/${playlist.id}`)}
                     >
                       <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                      <span className={styles.moreTitle}>{playlist.title}</span>
-                      <span className={styles.moreArtist}>{playlist.artist}</span>
+                      <span className={styles.moreMeta}>
+                        <span className={styles.moreTitle}>{playlist.title}</span>
+                        <span className={styles.moreArtist}>{playlist.artist}</span>
+                      </span>
                     </button>
                     {firstTrackId ? (
                       <span className={styles.cardActions}>
@@ -400,10 +432,10 @@ export default function SearchPage() {
                         <button
                           type="button"
                           className={styles.cardActionButton}
-                          aria-label="Добавить далее"
-                          onClick={() => addTrackNext(firstTrackId)}
+                          aria-label="Открыть меню трека"
+                          onClick={(event) => openTrackMenu(event, firstTrackId)}
                         >
-                          <FiPlus />
+                          <FiMoreHorizontal />
                         </button>
                       </span>
                     ) : null}
@@ -423,29 +455,20 @@ export default function SearchPage() {
 
           {historyTracks.length ? (
             <>
-              <div className={styles.historyGrid}>
-                <HistoryColumn
-                  tracks={historyLeft}
-                  likedIds={likedIds}
-                  currentTrackId={currentTrackId}
-                  onPlay={playTrack}
-                  onToggleLike={toggleLikeTrack}
-                  onAddNext={addTrackNext}
-                  onOpenTrack={(id) => navigate(`/track/${id}`)}
-                  onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                  onOpenTrackMenu={openTrackMenu}
-                />
-                <HistoryColumn
-                  tracks={historyRight}
-                  likedIds={likedIds}
-                  currentTrackId={currentTrackId}
-                  onPlay={playTrack}
-                  onToggleLike={toggleLikeTrack}
-                  onAddNext={addTrackNext}
-                  onOpenTrack={(id) => navigate(`/track/${id}`)}
-                  onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                  onOpenTrackMenu={openTrackMenu}
-                />
+              <div
+                className={`${styles.historyGrid} ${historyColumns.length === 1 ? styles.historyGridSingle : ""}`.trim()}
+              >
+                {historyColumns.map((column, index) => (
+                  <HistoryColumn
+                    key={`history-column-${index}`}
+                    tracks={column}
+                    likedIds={likedIds}
+                    currentTrackId={currentTrackId}
+                    onPlay={playTrack}
+                    onOpenArtist={(id) => navigate(`/artist/${id}`)}
+                    onOpenTrackMenu={openTrackMenu}
+                  />
+                ))}
               </div>
               <button type="button" className={styles.clearHistoryButton} onClick={clearHistory}>
                 Очистить историю
@@ -464,7 +487,7 @@ export default function SearchPage() {
                 tracks={recommendations}
                 onPlayTrack={playTrack}
                 onLikeTrack={toggleLikeTrack}
-                onOpenTrack={(trackId) => navigate(`/track/${trackId}`)}
+                onOpenTrackMenu={openTrackMenu}
               />
             </>
           )}
@@ -488,8 +511,6 @@ function SearchResults({
   loadingMore,
   onPlay,
   onToggleLike,
-  onAddNext,
-  onOpenTrack,
   onOpenPlaylist,
   onOpenArtist,
   onOpenRelease,
@@ -532,13 +553,13 @@ function SearchResults({
           tracks={recommendationTracks}
           onPlayTrack={onPlay}
           onLikeTrack={onToggleLike}
-          onOpenTrack={onOpenTrack}
+          onOpenTrackMenu={onOpenTrackMenu}
         />
       </section>
     );
   }
 
-  const [resultLeft, resultRight] = splitColumns(searchResults.tracks);
+  const resultColumns = nonEmptyColumns(searchResults.tracks);
 
   return (
     <>
@@ -548,29 +569,20 @@ function SearchResults({
             <h2 className={styles.sectionHeading}>Треки</h2>
             <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
           </div>
-          <div className={styles.tracksGrid}>
-            <TrackListColumn
-              tracks={resultLeft}
-              likedIds={likedIds}
-              currentTrackId={currentTrackId}
-              onPlay={onPlay}
-              onToggleLike={onToggleLike}
-              onAddNext={onAddNext}
-              onOpenTrack={onOpenTrack}
-              onOpenArtist={onOpenArtist}
-              onOpenTrackMenu={onOpenTrackMenu}
-            />
-            <TrackListColumn
-              tracks={resultRight}
-              likedIds={likedIds}
-              currentTrackId={currentTrackId}
-              onPlay={onPlay}
-              onToggleLike={onToggleLike}
-              onAddNext={onAddNext}
-              onOpenTrack={onOpenTrack}
-              onOpenArtist={onOpenArtist}
-              onOpenTrackMenu={onOpenTrackMenu}
-            />
+          <div
+            className={`${styles.tracksGrid} ${resultColumns.length === 1 ? styles.tracksGridSingle : ""}`.trim()}
+          >
+            {resultColumns.map((column, index) => (
+              <TrackListColumn
+                key={`result-column-${index}`}
+                tracks={column}
+                likedIds={likedIds}
+                currentTrackId={currentTrackId}
+                onPlay={onPlay}
+                onOpenArtist={onOpenArtist}
+                onOpenTrackMenu={onOpenTrackMenu}
+              />
+            ))}
           </div>
         </section>
       )}
@@ -591,8 +603,10 @@ function SearchResults({
                     onClick={() => onOpenPlaylist(playlist.id)}
                   >
                     <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                    <span className={styles.moreTitle}>{playlist.title}</span>
-                    <span className={styles.moreArtist}>{playlist.subtitle}</span>
+                    <span className={styles.moreMeta}>
+                      <span className={styles.moreTitle}>{playlist.title}</span>
+                      <span className={styles.moreArtist}>{playlist.subtitle}</span>
+                    </span>
                   </button>
                   {firstTrackId ? (
                     <span className={styles.cardActions}>
@@ -615,10 +629,10 @@ function SearchResults({
                       <button
                         type="button"
                         className={styles.cardActionButton}
-                        aria-label="Добавить далее"
-                        onClick={() => onAddNext(firstTrackId)}
+                        aria-label="Открыть меню трека"
+                        onClick={(event) => onOpenTrackMenu(event, firstTrackId)}
                       >
-                        <FiPlus />
+                        <FiMoreHorizontal />
                       </button>
                     </span>
                   ) : null}
@@ -638,9 +652,11 @@ function SearchResults({
             {searchResults.albums.map((album) => (
               <button key={album.id} type="button" className={styles.moreCard} onClick={() => onOpenRelease(album.id)}>
                 <span className={styles.moreCover} style={{ background: album.cover }} />
-                <span className={styles.moreTitle}>{album.title}</span>
-                <span className={styles.moreArtist}>
-                  {album.artistName} • {album.year}
+                <span className={styles.moreMeta}>
+                  <span className={styles.moreTitle}>{album.title}</span>
+                  <span className={styles.moreArtist}>
+                    {album.artistName} • {album.year}
+                  </span>
                 </span>
               </button>
             ))}
@@ -693,9 +709,6 @@ function TrackListColumn({
   likedIds,
   currentTrackId,
   onPlay,
-  onToggleLike,
-  onAddNext,
-  onOpenTrack,
   onOpenArtist,
   onOpenTrackMenu,
 }) {
@@ -715,8 +728,8 @@ function TrackListColumn({
               <span className={styles.trackCover} style={{ background: track.cover }} />
               <span className={styles.trackMeta}>
                 <span className={styles.trackTitle}>
-                  {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                   {track.title}
+                  {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                   {track.explicit ? <span className={styles.explicitTag}>E</span> : null}
                 </span>
                 <ArtistInlineLinks
@@ -731,27 +744,11 @@ function TrackListColumn({
             </button>
             <button
               type="button"
-              className={styles.likeButton}
-              aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-              onClick={() => onToggleLike(track.id)}
-            >
-              {liked ? <FiHeart /> : <LuHeart />}
-            </button>
-            <button
-              type="button"
               className={styles.queueButton}
-              aria-label="Добавить далее в очередь"
-              onClick={() => onAddNext(track.id)}
+              aria-label="Открыть меню трека"
+              onClick={(event) => onOpenTrackMenu(event, track.id)}
             >
-              <FiPlus />
-            </button>
-            <button
-              type="button"
-              className={styles.openButton}
-              aria-label="Открыть страницу трека"
-              onClick={() => onOpenTrack(track.id)}
-            >
-              <FiExternalLink />
+              <FiMoreHorizontal />
             </button>
             <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
           </li>
@@ -766,9 +763,6 @@ function HistoryColumn({
   likedIds,
   currentTrackId,
   onPlay,
-  onToggleLike,
-  onAddNext,
-  onOpenTrack,
   onOpenArtist,
   onOpenTrackMenu,
 }) {
@@ -791,8 +785,8 @@ function HistoryColumn({
               <span className={styles.historyCover} style={{ background: track.cover }} />
               <span className={styles.historyMeta}>
                 <span className={styles.historyTitle}>
-                  {isActive ? <span className={styles.currentDot} aria-hidden="true" /> : null}
                   {track.title}
+                  {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
                   {track.explicit ? <span className={styles.explicitTag}>E</span> : null}
                 </span>
                 <ArtistInlineLinks
@@ -807,27 +801,11 @@ function HistoryColumn({
             </button>
             <button
               type="button"
-              className={styles.historyActionButton}
-              aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-              onClick={() => onToggleLike(track.id)}
-            >
-              {liked ? <FiHeart /> : <LuHeartOff />}
-            </button>
-            <button
-              type="button"
               className={styles.historyQueueButton}
-              aria-label="Добавить далее в очередь"
-              onClick={() => onAddNext(track.id)}
+              aria-label="Открыть меню трека"
+              onClick={(event) => onOpenTrackMenu(event, track.id)}
             >
-              <FiPlus />
-            </button>
-            <button
-              type="button"
-              className={styles.historyOpenButton}
-              aria-label="Открыть страницу трека"
-              onClick={() => onOpenTrack(track.id)}
-            >
-              <FiExternalLink />
+              <FiMoreHorizontal />
             </button>
             <span className={styles.historyDuration}>{formatDurationClock(track.durationSec)}</span>
           </li>

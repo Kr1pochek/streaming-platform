@@ -270,6 +270,28 @@
   font-weight: 700;
 }
 
+.authErrorPanel {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 118, 118, 0.18);
+  background: rgba(163, 54, 54, 0.08);
+  padding: 11px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.authErrorPanelBlocked {
+  border-color: rgba(255, 110, 110, 0.36);
+  background: linear-gradient(135deg, rgba(124, 26, 26, 0.28), rgba(54, 14, 14, 0.22));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.authErrorHint {
+  margin: 0;
+  color: rgba(255, 214, 214, 0.78);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .statCard {
   min-height: 72px;
   border-radius: 14px;
@@ -438,10 +460,14 @@
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.04);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 0 8px;
+}
+
+.trackRow > button:nth-of-type(2) {
+  display: none;
 }
 
 .trackRowActive {
@@ -484,6 +510,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.trackLikedHeart {
+  width: 11px;
+  height: 11px;
+  color: #f5cc46;
+  flex: 0 0 auto;
 }
 
 .currentDot {

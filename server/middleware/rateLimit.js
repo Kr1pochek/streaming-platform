@@ -14,6 +14,7 @@ export function createRateLimiter({
   maxEntries = 10_000,
   cleanupIntervalMs = 60_000,
   keyResolver = defaultKeyResolver,
+  skip = () => false,
 } = {}) {
   const storage = new Map();
   let lastCleanupAt = Date.now();
@@ -40,6 +41,11 @@ export function createRateLimiter({
   }
 
   return function rateLimit(req, _res, next) {
+    if (skip(req)) {
+      next();
+      return;
+    }
+
     const now = Date.now();
     cleanup(now);
 
