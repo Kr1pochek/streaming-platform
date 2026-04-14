@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { Client } from "pg";
+import { restorePortableSnapshotIfNeeded } from "./portable/portableSnapshot.mjs";
 
 function parsePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -126,8 +127,18 @@ async function main() {
   await waitForDatabase();
   console.log("Running database migrations...");
   await runNodeScript("scripts/db/migrate.mjs", "Database migrations");
-  console.log("Seeding catalog data...");
-  await runNodeScript("scripts/db/seed.mjs", "Database seed");
+  console.log("Checking portable snapshot...");
+  const snapshotRestore = await restorePortableSnapshotIfNeeded();
+  if (snapshotRestore.restored) {
+    console.log(
+      `Portable snapshot restored (${snapshotRestore.rowCount} rows, ${snapshotRestore.mediaFileCount} media files).`
+    );
+    console.log("Skipping default catalog seed because snapshot data is already loaded.");
+  } else {
+    console.log(`Portable snapshot restore skipped: ${snapshotRestore.reason}.`);
+    console.log("Seeding catalog data...");
+    await runNodeScript("scripts/db/seed.mjs", "Database seed");
+  }
   console.log("Starting API server...");
   await runServer();
 }

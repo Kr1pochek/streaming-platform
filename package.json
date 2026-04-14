@@ -15,6 +15,8 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/db/migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env scripts/db/seed.mjs",
     "db:setup": "npm run db:migrate && npm run db:seed",
+    "snapshot:export": "node --env-file-if-exists=.env scripts/portable/export-snapshot.mjs",
+    "snapshot:restore": "node --env-file-if-exists=.env scripts/portable/restore-snapshot.mjs",
     "start:app": "node --env-file-if-exists=.env scripts/start-app.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/smoke-check.mjs",
     "test": "node --test --test-isolation=none \"tests/**/*.test.mjs\"",

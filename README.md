@@ -44,7 +44,41 @@ npm run smoke -- --client
 `npm run start:app` waits for PostgreSQL, applies migrations, seeds data, and starts the API.
 If some old local audio files are missing, the app still starts and hides unavailable local tracks from the user catalog. Set `STRICT_AUDIO_VALIDATION=true` if you want startup to fail on missing media.
 
-## 3. Environment
+## 3. Portable clone with current data
+
+If you want another device to get the same accounts, uploaded tracks, playlists, likes, and local media after just:
+
+```bash
+git clone ...
+docker compose up --build
+```
+
+prepare a portable snapshot on the source machine first:
+
+```bash
+npm run snapshot:export
+git add portable-snapshot
+git commit -m "chore: refresh portable snapshot"
+git push
+```
+
+What the snapshot contains:
+- PostgreSQL application data exported from the current database
+- local media copied from `public/audio`
+
+What happens on the target machine:
+- `docker compose up --build` starts PostgreSQL + app
+- migrations run first
+- if the database is still empty and `portable-snapshot/database.json` exists, the app restores snapshot data automatically
+- local media from `portable-snapshot/media` is copied into the Docker `media_data` volume
+
+Important:
+- snapshot files can be large because audio/HLS files are copied into the repo
+- snapshot may include real user accounts and password hashes, so do not publish such a repo publicly unless that is intentional
+- if the Docker volume/database already contains data, automatic snapshot restore is skipped to avoid overwriting existing state
+- set `PORTABLE_SNAPSHOT_FORCE_RESTORE=true` if you intentionally want to overwrite an existing Docker database with the committed snapshot
+
+## 4. Environment
 
 Copy `.env.example` to `.env` and set values:
 
@@ -90,7 +124,7 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 For a quick local demo config, use tracked `.env.demo`.
 
-## 4. Migrations and seed
+## 5. Migrations and seed
 
 ```bash
 npm run db:migrate
@@ -109,7 +143,7 @@ Or use the one-command startup flow:
 npm run start:app
 ```
 
-## 5. Run backend
+## 6. Run backend
 
 ```bash
 npm run server
@@ -121,7 +155,7 @@ Liveness: `GET /api/health`
 
 Readiness: `GET /api/ready`
 
-## 6. Run frontend
+## 7. Run frontend
 
 In a separate terminal:
 
@@ -131,7 +165,7 @@ npm run dev
 
 Vite proxies `/api/*` to `http://127.0.0.1:4000`.
 
-## 7. Tests, lint, build
+## 8. Tests, lint, build
 
 ```bash
 npm run test
@@ -148,7 +182,7 @@ To verify built frontend too:
 npm run smoke -- --client
 ```
 
-## 8. Streaming setup (optional)
+## 9. Streaming setup (optional)
 
 By default tracks are streamed with HTTP Range on `GET /api/stream/:trackId`.
 
@@ -173,7 +207,7 @@ npm run stream:hls -- --dry-run
 
 Generated files are placed in `public/audio/hls/<trackId>/`.
 
-## 9. Track Upload API
+## 10. Track Upload API
 
 `POST /api/tracks/upload` (requires `Authorization: Bearer <token>`).
 
@@ -193,7 +227,7 @@ Server flow:
 - upserts track + artists + tags in PostgreSQL
 - optionally generates local HLS (`GENERATE_HLS_ON_UPLOAD=true`)
 
-## 10. S3/MinIO + CDN migration
+## 11. S3/MinIO + CDN migration
 
 Set `MEDIA_STORAGE_DRIVER=s3` and S3 vars, then migrate existing local DB audio URLs:
 
@@ -207,7 +241,7 @@ Dry run:
 npm run media:migrate:s3 -- --dry-run
 ```
 
-## 11. Optional seed user
+## 12. Optional seed user
 
 `npm run db:seed` creates a user only when both variables are set:
 
@@ -220,10 +254,11 @@ SEED_DISPLAY_NAME=Demo User
 
 If these vars are not set, seed user creation is skipped. Set `SEED_IS_ADMIN=true` when you want the seeded account to become the first admin.
 
-## 12. Docker (PostgreSQL + API + Frontend)
+## 13. Docker (PostgreSQL + API + Frontend)
 
-Before first start, copy `.env.example` to `.env` and set a real `PGPASSWORD`.
-`docker compose` now uses the same `PG*` variables from `.env`, so there is no hardcoded demo password in the compose file.
+For a quick local Docker run, `.env` is optional now.
+If `.env` is missing, Docker falls back to local-safe defaults such as `PGPASSWORD=postgres`.
+Create `.env` only when you want to override DB credentials, CORS, storage, or other runtime settings.
 
 ```bash
 docker compose up --build
@@ -231,7 +266,7 @@ docker compose up --build
 
 Services:
 - `db` (internal PostgreSQL service, not published to the host by default)
-- `app` (waits for DB, runs migrations + seed, then serves API + built frontend on `4000`)
+- `app` (waits for DB, runs migrations, restores portable snapshot when available, otherwise runs seed, then serves API + built frontend on `4000`)
 
 Open: `http://localhost:4000`.
 
@@ -239,6 +274,7 @@ Notes:
 - uploaded/local audio is persisted in the named Docker volume `media_data`
 - runtime image includes `ffmpeg`, so upload transcoding and HLS generation can work inside the container
 - if you need direct access to PostgreSQL, prefer `docker compose exec db psql ...` instead of opening `5432` publicly
+- committed portable snapshots are copied into the runtime image and restored only when the database is empty
 
 Quick check after container startup:
 
@@ -246,7 +282,7 @@ Quick check after container startup:
 npm run smoke -- --client
 ```
 
-## 13. CI
+## 14. CI
 
 Workflow: `.github/workflows/ci.yml`
 
@@ -269,6 +305,8 @@ npm run build
 - `npm run db:migrate` - apply SQL migrations
 - `npm run db:seed` - seed/sync catalog and optional seed user
 - `npm run db:setup` - migrations + seed
+- `npm run snapshot:export` - export current PostgreSQL data + local media into `portable-snapshot`
+- `npm run snapshot:restore` - restore committed portable snapshot into the current database/media directory
 - `npm run audio:import` - import audio into `public/audio/tracks`
 - `npm run stream:hls` - generate HLS manifests/segments into `public/audio/hls`
 - `npm run media:migrate:s3` - upload local audio to S3 and rewrite DB `tracks.audio_url`

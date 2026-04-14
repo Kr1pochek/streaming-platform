@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${PGDATABASE:-music_app}
       POSTGRES_USER: ${PGUSER:-postgres}
-      POSTGRES_PASSWORD: ${PGPASSWORD:?PGPASSWORD is required in .env for docker compose}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +27,7 @@ services:
       PGPORT: 5432
       PGDATABASE: ${PGDATABASE:-music_app}
       PGUSER: ${PGUSER:-postgres}
-      PGPASSWORD: ${PGPASSWORD:?PGPASSWORD is required in .env for docker compose}
+      PGPASSWORD: ${PGPASSWORD:-postgres}
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: 4000
@@ -56,6 +56,8 @@ services:
       GENERATE_HLS_ON_UPLOAD: ${GENERATE_HLS_ON_UPLOAD:-true}
       FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
       FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
+      PORTABLE_SNAPSHOT_FORCE_RESTORE: ${PORTABLE_SNAPSHOT_FORCE_RESTORE:-false}
+      PORTABLE_SNAPSHOT_RESTORE_MEDIA: ${PORTABLE_SNAPSHOT_RESTORE_MEDIA:-true}
     command: ["node", "scripts/start-app.mjs"]
     ports:
       - "4000:4000"
