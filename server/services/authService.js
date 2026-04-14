@@ -11,6 +11,7 @@ const PASSWORD_RESET_TOKEN_TTL_MS = Number(
   process.env.PASSWORD_RESET_TOKEN_TTL_MS ?? 1000 * 60 * 20
 );
 const USERNAME_UNIQUE_INDEX_NAME = "idx_users_username_lower";
+const VALID_ADMIN_ROLES = new Set(["user", "moderator", "super_admin"]);
 
 function nowMs() {
   return Date.now();
@@ -39,6 +40,31 @@ function parseBoolean(value, fallback = false) {
   return fallback;
 }
 
+export function normalizeAdminRole(value, fallback = "user") {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (VALID_ADMIN_ROLES.has(normalized)) {
+    return normalized;
+  }
+  return fallback;
+}
+
+export function isElevatedAdminRole(role) {
+  const normalized = normalizeAdminRole(role, "user");
+  return normalized === "moderator" || normalized === "super_admin";
+}
+
+export function isSuperAdminRole(role) {
+  return normalizeAdminRole(role, "user") === "super_admin";
+}
+
+function resolvePublicAdminRole(row) {
+  const explicitRole = normalizeAdminRole(row?.admin_role ?? row?.adminRole, "");
+  if (explicitRole) {
+    return explicitRole;
+  }
+  return row?.is_admin ?? row?.isAdmin ? "super_admin" : "user";
+}
+
 function hashPassword(password, salt) {
   return crypto.scryptSync(password, salt, 64).toString("hex");
 }
@@ -48,12 +74,15 @@ function hashToken(token) {
 }
 
 function toPublicUser(row) {
+  const adminRole = resolvePublicAdminRole(row);
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name ?? row.displayName ?? row.username,
     createdAt: Number(row.created_at ?? row.createdAt ?? 0),
-    isAdmin: Boolean(row.is_admin),
+    adminRole,
+    isAdmin: isElevatedAdminRole(adminRole),
+    isSuperAdmin: isSuperAdminRole(adminRole),
     isBanned: Boolean(row.is_banned),
   };
 }
@@ -118,6 +147,7 @@ export function resolveSeedUserConfig(env = process.env) {
   const rawPassword = String(env.SEED_PASSWORD ?? "");
   const rawDisplayName = String(env.SEED_DISPLAY_NAME ?? "");
   const isAdmin = parseBoolean(env.SEED_IS_ADMIN, false);
+  const rawAdminRole = String(env.SEED_ADMIN_ROLE ?? "").trim().toLowerCase();
 
   if (!rawUsername && !rawPassword) {
     return null;
@@ -125,17 +155,22 @@ export function resolveSeedUserConfig(env = process.env) {
   if (!rawUsername || !rawPassword) {
     throw new Error("SEED_USERNAME and SEED_PASSWORD must be provided together.");
   }
+  if (rawAdminRole && !VALID_ADMIN_ROLES.has(rawAdminRole)) {
+    throw new Error("SEED_ADMIN_ROLE must be one of: user, moderator, super_admin.");
+  }
 
   const username = sanitizeUsername(rawUsername);
+  const adminRole = rawAdminRole || (isAdmin ? "super_admin" : "user");
   return {
     username,
     password: rawPassword,
     displayName: sanitizeDisplayName(rawDisplayName, username),
-    isAdmin,
+    adminRole,
+    isAdmin: isElevatedAdminRole(adminRole),
   };
 }
 
-export async function createUserAccount({ username, password, displayName, isAdmin = false }) {
+export async function createUserAccount({ username, password, displayName, isAdmin = false, adminRole } = {}) {
   const usernameValidation = validateUsername(username);
   if (!usernameValidation.valid) {
     const error = new Error(usernameValidation.message);
@@ -159,6 +194,8 @@ export async function createUserAccount({ username, password, displayName, isAdm
   }
 
   const normalizedDisplayName = displayNameValidation.value;
+  const normalizedAdminRole = normalizeAdminRole(adminRole, isAdmin ? "super_admin" : "user");
+  const elevatedAdmin = isElevatedAdminRole(normalizedAdminRole);
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(passwordValidation.value, salt);
   const userId = `usr-${crypto.randomUUID()}`;
@@ -167,11 +204,11 @@ export async function createUserAccount({ username, password, displayName, isAdm
   try {
     const { rows } = await pool.query(
       `
-      insert into users (id, username, display_name, password_hash, password_salt, created_at, is_admin)
-      values ($1, $2, $3, $4, $5, $6, $7)
-      returning id, username, display_name, created_at, is_admin, is_banned;
+      insert into users (id, username, display_name, password_hash, password_salt, created_at, is_admin, admin_role)
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
     `,
-      [userId, normalizedUsername, normalizedDisplayName, passwordHash, salt, createdAt, Boolean(isAdmin)]
+      [userId, normalizedUsername, normalizedDisplayName, passwordHash, salt, createdAt, elevatedAdmin, normalizedAdminRole]
     );
 
     await pool.query(
@@ -210,6 +247,7 @@ export async function verifyUserCredentials({ username, password }) {
       password_hash,
       password_salt,
       is_admin,
+      admin_role,
       is_banned,
       ban_reason,
       created_at
@@ -283,7 +321,7 @@ export async function updateUserProfile({ userId, displayName }) {
     update users
     set display_name = $2
     where id = $1
-    returning id, username, display_name, created_at, is_admin, is_banned;
+    returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
   `,
     [normalizedUserId, displayNameValidation.value]
   );
@@ -511,6 +549,7 @@ export async function resolveSession(token) {
       u.username,
       u.display_name,
       u.is_admin,
+      u.admin_role,
       u.is_banned,
       u.created_at
     from user_sessions s
@@ -563,7 +602,7 @@ export async function ensureSeedUser() {
 
   const { rows } = await pool.query(
     `
-    select id, username, display_name, created_at, is_admin, is_banned
+    select id, username, display_name, created_at, is_admin, admin_role, is_banned
     from users
     where lower(username) = lower($1)
     limit 1;
@@ -572,15 +611,20 @@ export async function ensureSeedUser() {
   );
 
   if (rows[0]) {
-    if (seedConfig.isAdmin && !rows[0].is_admin) {
+    const currentRole = resolvePublicAdminRole(rows[0]);
+    if (
+      (seedConfig.adminRole === "super_admin" && currentRole !== "super_admin") ||
+      (seedConfig.adminRole === "moderator" && currentRole === "user")
+    ) {
       const { rows: promotedRows } = await pool.query(
         `
         update users
-        set is_admin = true
+        set is_admin = $2,
+            admin_role = $3
         where id = $1
-        returning id, username, display_name, created_at, is_admin, is_banned;
+        returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
       `,
-        [rows[0].id]
+        [rows[0].id, isElevatedAdminRole(seedConfig.adminRole), seedConfig.adminRole]
       );
       return toPublicUser(promotedRows[0]);
     }

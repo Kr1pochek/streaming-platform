@@ -472,3 +472,102 @@
   }
 }
 
+@media (max-width: 980px) {
+  .heroTitle {
+    font-size: 38px;
+  }
+
+  .playlistGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .cover {
+    width: min(200px, 100%);
+    height: auto;
+    aspect-ratio: 1 / 1;
+    justify-self: start;
+  }
+
+  .heroTitle {
+    font-size: 34px;
+  }
+
+  .sectionTitle {
+    font-size: 24px;
+  }
+
+  .userPlaylistRow {
+    min-height: auto;
+    padding: 10px 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .userPlaylistButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .trackMain {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .trackDuration {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .heroTitle {
+    font-size: 30px;
+  }
+
+  .heroActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .playlistGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .trackRow {
+    padding: 8px;
+  }
+
+  .trackMain {
+    gap: 8px;
+  }
+
+  .trackCoverMini {
+    width: 38px;
+    height: 38px;
+  }
+
+  .trackTitle {
+    font-size: 13px;
+  }
+
+  .moreArtistRow {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .artistTrackCard {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

@@ -3,7 +3,6 @@ import {
   FiHome,
   FiSearch,
   FiMusic,
-  FiHeart,
   FiUser,
   FiLogIn,
   FiSettings,
@@ -56,16 +55,6 @@ export default function Sidebar() {
           >
             <FiMusic className={styles.navIcon} />
             <span>Моя музыка</span>
-          </NavLink>
-
-          <NavLink
-            to="/liked"
-            className={({ isActive }) =>
-              `${styles.navItem} ${isActive ? styles.navItemActive : ""}`.trim()
-            }
-          >
-            <FiHeart className={styles.navIcon} />
-            <span>Мне нравится</span>
           </NavLink>
 
           <NavLink

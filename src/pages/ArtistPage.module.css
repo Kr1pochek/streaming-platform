@@ -120,13 +120,19 @@
 .mainSection {
   margin-top: 26px;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.78fr);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
   gap: 16px;
+  align-items: start;
 }
 
 .popularTracksColumn,
 .latestReleaseColumn {
   min-width: 0;
+}
+
+.latestReleaseColumn {
+  display: grid;
+  align-content: start;
 }
 
 .section,
@@ -286,16 +292,38 @@
 }
 
 .latestReleaseCard {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   margin-top: 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(245, 204, 70, 0.12), transparent 34%),
+    linear-gradient(160deg, rgba(30, 31, 35, 0.96), rgba(17, 18, 23, 0.94));
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 16px;
   display: grid;
-  gap: 8px;
+  gap: 12px;
+}
+
+.latestReleaseCard::before {
+  content: "";
+  position: absolute;
+  inset: auto -12% -18% 42%;
+  height: 220px;
+  background: var(--latest-release-cover);
+  background-position: center;
+  background-size: cover;
+  filter: blur(48px) saturate(1.16);
+  opacity: 0.2;
+  pointer-events: none;
 }
 
 .latestReleaseMainButton {
+  position: relative;
+  z-index: 1;
   border: none;
   background: transparent;
   color: inherit;
@@ -303,69 +331,140 @@
   padding: 0;
   width: 100%;
   display: grid;
-  gap: 8px;
+  gap: 14px;
   cursor: pointer;
 }
 
+.latestReleaseVisual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 228px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  overflow: hidden;
+}
+
+.latestReleaseGlow {
+  position: absolute;
+  inset: 14% 12%;
+  background: var(--latest-release-cover);
+  background-position: center;
+  background-size: cover;
+  filter: blur(42px) saturate(1.12);
+  opacity: 0.24;
+  transform: scale(1.08);
+}
+
 .latestReleaseCover {
-  width: 100%;
+  position: relative;
+  z-index: 1;
+  width: min(100%, 228px);
   aspect-ratio: 1 / 1;
-  border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.latestReleaseMainButton:hover .latestReleaseCover {
+  transform: translateY(-2px) rotate(-1.8deg);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.48);
+}
+
+.latestReleaseContent {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.latestReleaseEyebrow {
+  color: rgba(245, 204, 70, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .latestReleaseType {
-  margin: 2px 0 0;
+  width: fit-content;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 204, 70, 0.22);
+  background: rgba(245, 204, 70, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-  font-weight: 700;
+  color: #f7d367;
+  font-weight: 800;
 }
 
 .latestReleaseTitle {
   margin: 0;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 28px;
+  line-height: 1.02;
+  font-weight: 900;
+  letter-spacing: -0.02em;
 }
 
 .latestReleaseMeta {
   margin: 0;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 13px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .latestReleaseActions {
-  margin-top: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.latestReleaseButton,
-.latestReleaseOpen {
-  margin-top: 4px;
-  min-height: 36px;
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.9);
+.latestReleasePrimaryButton,
+.latestReleaseSecondaryButton {
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-}
-
-.latestReleaseButton {
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
   cursor: pointer;
-  padding: 0 12px;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 
-.latestReleaseOpen {
+.latestReleasePrimaryButton {
+  background: #f5cc46;
+  color: #181206;
+}
+
+.latestReleaseSecondaryButton {
   background: rgba(255, 255, 255, 0.08);
-  padding: 0 12px;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.latestReleasePrimaryButton:hover,
+.latestReleaseSecondaryButton:hover {
+  transform: translateY(-1px);
 }
 
 .albumScroller {
@@ -529,9 +628,9 @@
 .trackMain:focus-visible,
 .trackArtistLink:focus-visible,
 .iconButton:focus-visible,
-.latestReleaseButton:focus-visible,
 .latestReleaseMainButton:focus-visible,
-.latestReleaseOpen:focus-visible,
+.latestReleasePrimaryButton:focus-visible,
+.latestReleaseSecondaryButton:focus-visible,
 .albumMainButton:focus-visible,
 .albumPlayButton:focus-visible,
 .releaseRow:focus-visible {
@@ -568,6 +667,10 @@
   .mainSection {
     grid-template-columns: 1fr;
   }
+
+  .latestReleaseCard::before {
+    inset: auto -6% -14% 46%;
+  }
 }
 
 @media (max-width: 760px) {
@@ -577,5 +680,18 @@
 
   .sectionTitle {
     font-size: 28px;
+  }
+
+  .latestReleaseVisual {
+    min-height: 196px;
+    padding: 14px;
+  }
+
+  .latestReleaseTitle {
+    font-size: 24px;
+  }
+
+  .latestReleaseActions {
+    grid-template-columns: 1fr;
   }
 }

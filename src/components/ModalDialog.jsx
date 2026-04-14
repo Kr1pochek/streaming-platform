@@ -8,6 +8,8 @@ export default function ModalDialog({
   onClose,
   children,
   actions,
+  dialogClassName = "",
+  contentClassName = "",
 }) {
   useEffect(() => {
     if (!open) {
@@ -40,12 +42,17 @@ export default function ModalDialog({
         }
       }}
     >
-      <section className={styles.dialog} role="dialog" aria-modal="true" aria-label={title}>
+      <section
+        className={[styles.dialog, dialogClassName].filter(Boolean).join(" ")}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <header className={styles.header}>
           <h2 className={styles.title}>{title}</h2>
           {description ? <p className={styles.description}>{description}</p> : null}
         </header>
-        <div className={styles.content}>{children}</div>
+        <div className={[styles.content, contentClassName].filter(Boolean).join(" ")}>{children}</div>
         {actions ? <footer className={styles.footer}>{actions}</footer> : null}
       </section>
     </div>

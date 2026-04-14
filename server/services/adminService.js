@@ -1,16 +1,46 @@
 import {
   HttpError,
+  createReleaseId,
   fetchCatalog,
+  fetchArtists,
   hasHlsManifestForTrack,
+  isTrackAudioAvailable,
   isSystemPlaylist,
+  normalizeTitle,
   pool,
   resolveMediaFilePath,
   validateCatalogAudioFiles,
   withTransaction,
 } from "./catalogService.js";
+import { isElevatedAdminRole, isSuperAdminRole, normalizeAdminRole } from "./authService.js";
+
+const RELEASE_TYPES = new Set(["album", "ep", "single"]);
+const RELEASE_STATUSES = new Set(["draft", "published"]);
 
 function normalizeAdminQuery(value = "") {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function resolveAdminRoleSql(alias = "u") {
+  return `coalesce(nullif(${alias}.admin_role, ''), case when coalesce(${alias}.is_admin, false) = true then 'super_admin' else 'user' end)`;
+}
+
+function mapAdminUserRow(row = {}) {
+  const adminRole = normalizeAdminRole(
+    row.adminRole ?? row.admin_role,
+    row.isAdmin || row.is_admin ? "super_admin" : "user"
+  );
+
+  return {
+    ...row,
+    adminRole,
+    isAdmin: isElevatedAdminRole(adminRole),
+    isSuperAdmin: isSuperAdminRole(adminRole),
+    isBanned: Boolean(row.isBanned ?? row.is_banned),
+    createdAt: Number(row.createdAt ?? row.created_at ?? 0),
+    uploadedTracksCount: Number(row.uploadedTracksCount ?? row.uploaded_tracks_count ?? 0),
+    uploaded_tracks_count: Number(row.uploaded_tracks_count ?? row.uploadedTracksCount ?? 0),
+  };
 }
 
 function buildTrackFilters({ query = "", status = "all" } = {}) {
@@ -55,6 +85,7 @@ function buildTrackFilters({ query = "", status = "all" } = {}) {
 function buildUserFilters({ query = "", status = "all" } = {}) {
   const conditions = [];
   const values = [];
+  const adminRoleExpr = resolveAdminRoleSql("u");
 
   const normalizedQuery = normalizeAdminQuery(query);
   if (normalizedQuery) {
@@ -73,9 +104,40 @@ function buildUserFilters({ query = "", status = "all" } = {}) {
   if (normalizedStatus === "banned") {
     conditions.push("coalesce(u.is_banned, false) = true");
   } else if (normalizedStatus === "active") {
-    conditions.push("coalesce(u.is_banned, false) = false and coalesce(u.is_admin, false) = false");
+    conditions.push(`coalesce(u.is_banned, false) = false and ${adminRoleExpr} = 'user'`);
   } else if (normalizedStatus === "admin") {
-    conditions.push("coalesce(u.is_admin, false) = true");
+    conditions.push(`${adminRoleExpr} in ('moderator', 'super_admin')`);
+  } else if (normalizedStatus === "moderator") {
+    conditions.push(`${adminRoleExpr} = 'moderator'`);
+  } else if (normalizedStatus === "super_admin") {
+    conditions.push(`${adminRoleExpr} = 'super_admin'`);
+  }
+
+  const whereClause = conditions.length ? `where ${conditions.join(" and ")}` : "";
+  return { whereClause, values };
+}
+
+function buildReleaseFilters({ query = "", status = "all" } = {}) {
+  const conditions = [];
+  const values = [];
+
+  const normalizedQuery = normalizeAdminQuery(query);
+  if (normalizedQuery) {
+    values.push(`%${normalizedQuery}%`);
+    const parameter = `$${values.length}`;
+    conditions.push(`
+      (
+        lower(r.id) like ${parameter}
+        or lower(r.title) like ${parameter}
+        or lower(a.name) like ${parameter}
+      )
+    `);
+  }
+
+  const normalizedStatus = String(status ?? "all").trim().toLowerCase();
+  if (normalizedStatus === "draft" || normalizedStatus === "published") {
+    values.push(normalizedStatus);
+    conditions.push(`coalesce(nullif(r.status, ''), 'published') = $${values.length}`);
   }
 
   const whereClause = conditions.length ? `where ${conditions.join(" and ")}` : "";
@@ -84,6 +146,76 @@ function buildUserFilters({ query = "", status = "all" } = {}) {
 
 function compareText(left = "", right = "") {
   return String(left ?? "").localeCompare(String(right ?? ""), "ru");
+}
+
+function normalizeReleaseType(value = "") {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return RELEASE_TYPES.has(normalized) ? normalized : "";
+}
+
+function normalizeReleaseStatus(value = "", fallback = "draft") {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (RELEASE_STATUSES.has(normalized)) {
+    return normalized;
+  }
+  return RELEASE_STATUSES.has(fallback) ? fallback : "draft";
+}
+
+function normalizeReleaseYear(value) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  const currentYear = new Date().getFullYear();
+  if (!Number.isFinite(parsed)) {
+    return currentYear;
+  }
+  return Math.min(Math.max(parsed, 1900), currentYear + 2);
+}
+
+function uniqueReleaseTrackIds(trackIds = []) {
+  const seen = new Set();
+  const result = [];
+  for (const item of Array.isArray(trackIds) ? trackIds : []) {
+    const normalized = String(item ?? "").trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function assertReleaseTrackCount(type, trackIds = []) {
+  const count = Array.isArray(trackIds) ? trackIds.length : 0;
+
+  if (type === "single" && count !== 1) {
+    throw new HttpError(400, "Single must contain exactly one track.");
+  }
+
+  if ((type === "ep" || type === "album") && count < 2) {
+    throw new HttpError(400, "EP and album must contain at least two tracks.");
+  }
+}
+
+function mapAdminReleaseRow(row = {}) {
+  const status = normalizeReleaseStatus(row.status, "published");
+  const trackIds = Array.isArray(row.trackIds) ? row.trackIds : [];
+  return {
+    id: row.id,
+    artistId: row.artistId,
+    artistName: row.artistName ?? "",
+    title: row.title,
+    type: row.type,
+    year: Number(row.year ?? 0),
+    cover: row.cover ?? "",
+    description: row.description ?? "",
+    status,
+    isPublished: status === "published",
+    createdAt: Number(row.createdAt ?? 0),
+    publishedAt: Number(row.publishedAt ?? 0),
+    createdByUsername: row.createdByUsername ?? "",
+    trackIds,
+    trackCount: Number(row.trackCount ?? trackIds.length),
+  };
 }
 
 function compareTracksByAdminRecency(first, second) {
@@ -124,7 +256,9 @@ export async function getAdminStats() {
     select
       (select count(*) from users) as total_users,
       (select count(*) from users where is_banned = true) as banned_users,
-      (select count(*) from users where is_admin = true) as admin_users,
+      (select count(*) from users where admin_role in ('moderator', 'super_admin')) as admin_users,
+      (select count(*) from users where admin_role = 'moderator') as moderator_users,
+      (select count(*) from users where admin_role = 'super_admin') as super_admin_users,
       (select count(*) from tracks) as total_tracks,
       (select count(*) from tracks where is_hidden = true) as hidden_tracks,
       (select count(*) from artists) as total_artists,
@@ -143,12 +277,12 @@ export async function getAdminStats() {
         u.id,
         u.username,
         u.display_name as "displayName",
-        coalesce(u.is_admin, false) as "isAdmin",
+        ${resolveAdminRoleSql("u")} as "adminRole",
         coalesce(u.is_banned, false) as "isBanned",
         count(t.id)::int as "uploadedTracksCount"
       from users u
       join tracks t on t.uploaded_by = u.id
-      group by u.id, u.username, u.display_name, u.is_admin, u.is_banned
+      group by u.id, u.username, u.display_name, u.admin_role, u.is_admin, u.is_banned
       order by count(t.id) desc, max(coalesce(t.created_at, 0)) desc, u.username asc
       limit 5;
       `
@@ -159,7 +293,7 @@ export async function getAdminStats() {
         u.id,
         u.username,
         u.display_name as "displayName",
-        coalesce(u.is_admin, false) as "isAdmin",
+        ${resolveAdminRoleSql("u")} as "adminRole",
         coalesce(u.is_banned, false) as "isBanned",
         coalesce(u.created_at, 0) as "createdAt",
         coalesce(track_counts.uploaded_tracks_count, 0) as "uploadedTracksCount"
@@ -189,6 +323,8 @@ export async function getAdminStats() {
       users: Number(base.total_users ?? 0),
       bannedUsers: Number(base.banned_users ?? 0),
       adminUsers: Number(base.admin_users ?? 0),
+      moderatorUsers: Number(base.moderator_users ?? 0),
+      superAdminUsers: Number(base.super_admin_users ?? 0),
       tracks: Number(base.total_tracks ?? 0),
       hiddenTracks: Number(base.hidden_tracks ?? 0),
       artists: Number(base.total_artists ?? 0),
@@ -228,15 +364,8 @@ export async function getAdminStats() {
         .map((track) => summarizeTrackPreview(track)),
     },
     userHighlights: {
-      topUploaders: topUploadersResult.rows.map((row) => ({
-        ...row,
-        uploadedTracksCount: Number(row.uploadedTracksCount ?? 0),
-      })),
-      recentUsers: recentUsersResult.rows.map((row) => ({
-        ...row,
-        createdAt: Number(row.createdAt ?? 0),
-        uploadedTracksCount: Number(row.uploadedTracksCount ?? 0),
-      })),
+      topUploaders: topUploadersResult.rows.map((row) => mapAdminUserRow(row)),
+      recentUsers: recentUsersResult.rows.map((row) => mapAdminUserRow(row)),
     },
   };
 }
@@ -311,6 +440,395 @@ export async function getUploadedTracksCount({ query = "", status = "all" } = {}
   return result.rows[0]?.count || 0;
 }
 
+async function getAdminReleaseById(client, releaseId) {
+  const { rows } = await client.query(
+    `
+    select
+      r.id,
+      r.artist_id as "artistId",
+      a.name as "artistName",
+      r.title,
+      r.type,
+      r.year,
+      r.cover,
+      coalesce(r.description, '') as description,
+      coalesce(nullif(r.status, ''), 'published') as status,
+      coalesce(r.created_at, 0) as "createdAt",
+      coalesce(r.published_at, 0) as "publishedAt",
+      coalesce(creator.username, '') as "createdByUsername",
+      coalesce(
+        (
+          select array_agg(rt.track_id order by rt.position)
+          from release_tracks rt
+          where rt.release_id = r.id
+        ),
+        array[]::text[]
+      ) as "trackIds",
+      coalesce(
+        (
+          select count(*)::int
+          from release_tracks rt
+          where rt.release_id = r.id
+        ),
+        0
+      ) as "trackCount"
+    from releases r
+    join artists a on a.id = r.artist_id
+    left join users creator on creator.id = r.created_by
+    where r.id = $1
+    limit 1;
+    `,
+    [releaseId]
+  );
+
+  return rows[0] ? mapAdminReleaseRow(rows[0]) : null;
+}
+
+async function resolveReleaseTracks(client, trackIds, artistId) {
+  const normalizedTrackIds = uniqueReleaseTrackIds(trackIds);
+  if (!normalizedTrackIds.length) {
+    throw new HttpError(400, "Add at least one track to the release.");
+  }
+
+  const { rows } = await client.query(
+    `
+    select
+      t.id,
+      t.cover,
+      coalesce(t.is_hidden, false) as "isHidden"
+    from tracks t
+    where t.id = any($1::text[])
+      and exists (
+        select 1
+        from track_artists ta
+        where ta.track_id = t.id
+          and ta.artist_id = $2
+      );
+    `,
+    [normalizedTrackIds, artistId]
+  );
+
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows = normalizedTrackIds.map((trackId) => rowById.get(trackId)).filter(Boolean);
+
+  if (orderedRows.length !== normalizedTrackIds.length) {
+    throw new HttpError(400, "Some selected tracks do not belong to the chosen artist.");
+  }
+
+  const hiddenTrack = orderedRows.find((row) => row.isHidden);
+  if (hiddenTrack) {
+    throw new HttpError(400, "Hidden tracks cannot be added to a release.");
+  }
+
+  return orderedRows;
+}
+
+async function validateReleasePayload(client, payload = {}) {
+  const title = normalizeTitle(payload.title);
+  if (!title) {
+    throw new HttpError(400, "Release title is required.");
+  }
+
+  const artistId = String(payload.artistId ?? "").trim();
+  if (!artistId) {
+    throw new HttpError(400, "Artist is required.");
+  }
+
+  const { rows: artistRows } = await client.query(
+    `
+    select id, name
+    from artists
+    where id = $1
+    limit 1;
+    `,
+    [artistId]
+  );
+  const artist = artistRows[0];
+  if (!artist) {
+    throw new HttpError(404, "Artist not found.");
+  }
+
+  const type = normalizeReleaseType(payload.type);
+  if (!type) {
+    throw new HttpError(400, "Release type must be single, ep or album.");
+  }
+
+  const status = normalizeReleaseStatus(payload.status, "draft");
+  const year = normalizeReleaseYear(payload.year);
+  const description = normalizeTitle(payload.description);
+  const trackRows = await resolveReleaseTracks(client, payload.trackIds, artistId);
+  assertReleaseTrackCount(type, trackRows);
+  const cover = normalizeTitle(payload.cover) || trackRows[0]?.cover || "";
+
+  if (!cover) {
+    throw new HttpError(400, "Release cover is required.");
+  }
+
+  return {
+    artist,
+    artistId,
+    title,
+    type,
+    year,
+    cover,
+    description,
+    status,
+    trackIds: trackRows.map((row) => row.id),
+  };
+}
+
+export async function getAdminReleases({ limit = 20, offset = 0, query = "", status = "all" } = {}) {
+  const { whereClause, values } = buildReleaseFilters({ query, status });
+  values.push(limit, offset);
+  const result = await pool.query(
+    `
+    select
+      r.id,
+      r.artist_id as "artistId",
+      a.name as "artistName",
+      r.title,
+      r.type,
+      r.year,
+      r.cover,
+      coalesce(r.description, '') as description,
+      coalesce(nullif(r.status, ''), 'published') as status,
+      coalesce(r.created_at, 0) as "createdAt",
+      coalesce(r.published_at, 0) as "publishedAt",
+      coalesce(creator.username, '') as "createdByUsername",
+      coalesce(
+        (
+          select array_agg(rt.track_id order by rt.position)
+          from release_tracks rt
+          where rt.release_id = r.id
+        ),
+        array[]::text[]
+      ) as "trackIds",
+      coalesce(
+        (
+          select count(*)::int
+          from release_tracks rt
+          where rt.release_id = r.id
+        ),
+        0
+      ) as "trackCount"
+    from releases r
+    join artists a on a.id = r.artist_id
+    left join users creator on creator.id = r.created_by
+    ${whereClause}
+    order by
+      case when coalesce(nullif(r.status, ''), 'published') = 'published' then 0 else 1 end,
+      coalesce(r.published_at, r.created_at, 0) desc,
+      r.title asc
+    limit $${values.length - 1} offset $${values.length};
+    `,
+    values
+  );
+
+  return result.rows.map((row) => mapAdminReleaseRow(row));
+}
+
+export async function getAdminReleasesCount({ query = "", status = "all" } = {}) {
+  const { whereClause, values } = buildReleaseFilters({ query, status });
+  const result = await pool.query(
+    `
+    select count(*)::int as count
+    from releases r
+    join artists a on a.id = r.artist_id
+    ${whereClause};
+    `,
+    values
+  );
+  return result.rows[0]?.count || 0;
+}
+
+export async function getAdminReleaseFormOptions({ artistId = "" } = {}) {
+  const normalizedArtistId = String(artistId ?? "").trim();
+  const artists = await fetchArtists();
+  const { rows } = await pool.query(
+    `
+    select
+      t.id,
+      t.title,
+      t.cover,
+      t.duration_sec as "durationSec",
+      coalesce(t.created_at, 0) as "createdAt",
+      coalesce(t.audio_url, '') as "audioUrl",
+      coalesce(
+        (
+          select string_agg(a.name, ', ' order by ta.artist_order)
+          from track_artists ta
+          join artists a on a.id = ta.artist_id
+          where ta.track_id = t.id
+        ),
+        ''
+      ) as artists,
+      coalesce(
+        (
+          select array_agg(ta.artist_id order by ta.artist_order)
+          from track_artists ta
+          where ta.track_id = t.id
+        ),
+        array[]::text[]
+      ) as "artistIds"
+    from tracks t
+    where
+      coalesce(t.is_hidden, false) = false
+      and ($1 = '' or exists (
+        select 1
+        from track_artists ta
+        where ta.track_id = t.id
+          and ta.artist_id = $1
+      ))
+    order by coalesce(t.created_at, 0) desc, t.title asc;
+    `,
+    [normalizedArtistId]
+  );
+
+  const tracks = rows
+    .filter((row) => isTrackAudioAvailable(row.id, row.audioUrl))
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      cover: row.cover,
+      artists: row.artists,
+      durationSec: Number(row.durationSec ?? 0),
+      createdAt: Number(row.createdAt ?? 0),
+      artistIds: Array.isArray(row.artistIds) ? row.artistIds : [],
+    }));
+
+  return { artists, tracks };
+}
+
+export async function createAdminRelease(payload = {}, actorUserId = "") {
+  const normalizedActorUserId = String(actorUserId ?? "").trim() || null;
+
+  return withTransaction(async (client) => {
+    const release = await validateReleasePayload(client, payload);
+    const releaseId = createReleaseId();
+    const createdAt = Date.now();
+    const publishedAt = release.status === "published" ? createdAt : null;
+
+    await client.query(
+      `
+      insert into releases (
+        id,
+        artist_id,
+        title,
+        type,
+        year,
+        cover,
+        description,
+        status,
+        created_at,
+        published_at,
+        created_by
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+      `,
+      [
+        releaseId,
+        release.artistId,
+        release.title,
+        release.type,
+        release.year,
+        release.cover,
+        release.description || null,
+        release.status,
+        createdAt,
+        publishedAt,
+        normalizedActorUserId,
+      ]
+    );
+
+    for (let index = 0; index < release.trackIds.length; index += 1) {
+      await client.query(
+        `
+        insert into release_tracks (release_id, track_id, position)
+        values ($1, $2, $3);
+        `,
+        [releaseId, release.trackIds[index], index + 1]
+      );
+    }
+
+    return getAdminReleaseById(client, releaseId);
+  });
+}
+
+export async function updateAdminRelease(releaseId, payload = {}) {
+  const normalizedReleaseId = String(releaseId ?? "").trim();
+  if (!normalizedReleaseId) {
+    throw new HttpError(400, "Release id is required.");
+  }
+
+  return withTransaction(async (client) => {
+    const existing = await getAdminReleaseById(client, normalizedReleaseId);
+    if (!existing) {
+      throw new HttpError(404, "Release not found.");
+    }
+
+    const release = await validateReleasePayload(client, payload);
+    const publishedAt =
+      release.status === "published"
+        ? existing.isPublished && existing.publishedAt > 0
+          ? existing.publishedAt
+          : Date.now()
+        : null;
+
+    await client.query(
+      `
+      update releases
+      set artist_id = $2,
+          title = $3,
+          type = $4,
+          year = $5,
+          cover = $6,
+          description = $7,
+          status = $8,
+          published_at = $9
+      where id = $1;
+      `,
+      [
+        normalizedReleaseId,
+        release.artistId,
+        release.title,
+        release.type,
+        release.year,
+        release.cover,
+        release.description || null,
+        release.status,
+        publishedAt,
+      ]
+    );
+
+    await client.query("delete from release_tracks where release_id = $1;", [normalizedReleaseId]);
+    for (let index = 0; index < release.trackIds.length; index += 1) {
+      await client.query(
+        `
+        insert into release_tracks (release_id, track_id, position)
+        values ($1, $2, $3);
+        `,
+        [normalizedReleaseId, release.trackIds[index], index + 1]
+      );
+    }
+
+    return getAdminReleaseById(client, normalizedReleaseId);
+  });
+}
+
+export async function deleteAdminRelease(releaseId) {
+  const normalizedReleaseId = String(releaseId ?? "").trim();
+  if (!normalizedReleaseId) {
+    throw new HttpError(400, "Release id is required.");
+  }
+
+  return withTransaction(async (client) => {
+    const result = await client.query("delete from releases where id = $1;", [normalizedReleaseId]);
+    if (!result.rowCount) {
+      throw new HttpError(404, "Release not found.");
+    }
+  });
+}
+
 export async function getUsers({ limit = 20, offset = 0, query = "", status = "all" } = {}) {
   const { whereClause, values } = buildUserFilters({ query, status });
   values.push(limit, offset);
@@ -320,7 +838,7 @@ export async function getUsers({ limit = 20, offset = 0, query = "", status = "a
       u.id,
       u.username as username,
       u.display_name as "displayName",
-      coalesce(u.is_admin, false) as "isAdmin",
+      ${resolveAdminRoleSql("u")} as "adminRole",
       coalesce(u.is_banned, false) as "isBanned",
       coalesce(u.ban_reason, '') as "banReason",
       coalesce(u.created_at, 0) as "createdAt",
@@ -338,7 +856,7 @@ export async function getUsers({ limit = 20, offset = 0, query = "", status = "a
     `,
     values
   );
-  return result.rows;
+  return result.rows.map((row) => mapAdminUserRow(row));
 }
 
 export async function getUsersCount({ query = "", status = "all" } = {}) {
@@ -398,7 +916,7 @@ export async function banUser(userId, reason, adminUserId) {
   await withTransaction(async (client) => {
     const { rows } = await client.query(
       `
-      select id, is_admin
+      select id, ${resolveAdminRoleSql("users")} as admin_role
       from users
       where id = $1
       limit 1;
@@ -413,8 +931,8 @@ export async function banUser(userId, reason, adminUserId) {
     if (targetUser.id === adminUserId) {
       throw new HttpError(400, "You cannot ban your own account.");
     }
-    if (targetUser.is_admin) {
-      throw new HttpError(400, "Admin accounts cannot be banned.");
+    if (isElevatedAdminRole(targetUser.admin_role)) {
+      throw new HttpError(400, "Moderator and admin accounts cannot be banned.");
     }
 
     await client.query(
@@ -429,6 +947,102 @@ export async function banUser(userId, reason, adminUserId) {
 
     // Invalidate all sessions for banned user
     await client.query("delete from user_sessions where user_id = $1", [userId]);
+  });
+}
+
+export async function updateUserAdminRole(userId, nextRole, actorUserId) {
+  const normalizedUserId = String(userId ?? "").trim();
+  const normalizedActorUserId = String(actorUserId ?? "").trim();
+  const normalizedRole = normalizeAdminRole(nextRole, "");
+
+  if (!normalizedUserId) {
+    throw new HttpError(400, "User id is required.");
+  }
+  if (!normalizedActorUserId) {
+    throw new HttpError(401, "Authentication required.");
+  }
+  if (!normalizedRole) {
+    throw new HttpError(400, "Role must be one of: user, moderator, super_admin.");
+  }
+
+  return withTransaction(async (client) => {
+    const { rows: actorRows } = await client.query(
+      `
+      select id, ${resolveAdminRoleSql("users")} as admin_role
+      from users
+      where id = $1
+      limit 1;
+      `,
+      [normalizedActorUserId]
+    );
+    const actor = actorRows[0];
+    if (!actor) {
+      throw new HttpError(401, "Actor account not found.");
+    }
+    if (!isSuperAdminRole(actor.admin_role)) {
+      throw new HttpError(403, "Only super admins can update user roles.");
+    }
+
+    const { rows: targetRows } = await client.query(
+      `
+      select
+        id,
+        username,
+        display_name,
+        created_at,
+        is_admin,
+        admin_role,
+        is_banned,
+        ban_reason
+      from users
+      where id = $1
+      limit 1;
+      `,
+      [normalizedUserId]
+    );
+    const targetUser = targetRows[0];
+
+    if (!targetUser) {
+      throw new HttpError(404, "User not found.");
+    }
+    if (targetUser.id === normalizedActorUserId) {
+      throw new HttpError(400, "You cannot change your own admin role.");
+    }
+
+    const currentRole = normalizeAdminRole(targetUser.admin_role, targetUser.is_admin ? "super_admin" : "user");
+    if (currentRole === "super_admin" && normalizedRole !== "super_admin") {
+      const { rows: countRows } = await client.query(
+        `
+        select count(*)::int as count
+        from users
+        where admin_role = 'super_admin';
+        `
+      );
+      if (Number(countRows[0]?.count ?? 0) <= 1) {
+        throw new HttpError(400, "At least one super admin must remain in the system.");
+      }
+    }
+
+    const { rows: updatedRows } = await client.query(
+      `
+      update users
+      set is_admin = $2,
+          admin_role = $3
+      where id = $1
+      returning
+        id,
+        username,
+        display_name,
+        created_at,
+        is_admin,
+        admin_role,
+        is_banned,
+        ban_reason;
+      `,
+      [normalizedUserId, isElevatedAdminRole(normalizedRole), normalizedRole]
+    );
+
+    return mapAdminUserRow(updatedRows[0]);
   });
 }
 

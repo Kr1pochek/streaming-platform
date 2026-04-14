@@ -1,7 +1,7 @@
 ﻿import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
-import { FiChevronRight, FiExternalLink, FiMoreHorizontal, FiPlay, FiPlus } from "react-icons/fi";
+import { FiChevronRight, FiExternalLink, FiHeart, FiMoreHorizontal, FiPlay, FiPlus } from "react-icons/fi";
 import styles from "./LibraryPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -20,8 +20,9 @@ import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import useCardActionMenu from "../hooks/useCardActionMenu.js";
+import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
+import { formatDurationClock } from "../utils/formatters.js";
 
-const INITIAL_FOLLOWED_ARTISTS_LIMIT = 6;
 const INITIAL_MY_PLAYLISTS_LIMIT = 6;
 const INITIAL_SAVED_PLAYLISTS_LIMIT = 6;
 const DEFAULT_PLAYLIST_DESCRIPTION = "Custom playlist";
@@ -112,10 +113,10 @@ export default function LibraryPage() {
 
   const {
     trackMap,
-    followedArtistIds,
+    likedIds,
+    currentTrackId,
     playTrack,
     toggleLikeTrack,
-    toggleArtistFollow,
     togglePlaylistSave,
     notify,
   } = usePlayer();
@@ -126,7 +127,6 @@ export default function LibraryPage() {
     closeCardMenu,
   } = useCardActionMenu();
 
-  const [showAllArtists, setShowAllArtists] = useState(false);
   const [showAllPlaylists, setShowAllPlaylists] = useState(false);
   const [showAllSavedPlaylists, setShowAllSavedPlaylists] = useState(false);
 
@@ -166,19 +166,13 @@ export default function LibraryPage() {
       ? savedPlaylists.slice(0, INITIAL_SAVED_PLAYLISTS_LIMIT)
       : savedPlaylists;
 
-  const followedArtists = useMemo(() => {
-    const artistsById = new Map((data?.artists ?? []).map((artist) => [artist.id, artist]));
-    return followedArtistIds.map((id) => artistsById.get(id)).filter(Boolean);
-  }, [data?.artists, followedArtistIds]);
-
-  const canToggleArtists = followedArtists.length > INITIAL_FOLLOWED_ARTISTS_LIMIT;
-  const visibleFollowedArtists =
-    canToggleArtists && !showAllArtists
-      ? followedArtists.slice(0, INITIAL_FOLLOWED_ARTISTS_LIMIT)
-      : followedArtists;
-
-  const recommendations = useMemo(() => Object.values(trackMap).slice(0, 4), [trackMap]);
-  const isEmpty = status === "success" && !myPlaylists.length && !savedPlaylists.length && !followedArtists.length;
+  const likedTracks = useMemo(() => likedIds.map((id) => trackMap[id]).filter(Boolean), [likedIds, trackMap]);
+  const likedPreviewTracks = useMemo(() => likedTracks.slice(0, 6), [likedTracks]);
+  const recommendations = useMemo(
+    () => Object.values(trackMap).filter((track) => !likedIds.includes(track.id)).slice(0, 4),
+    [trackMap, likedIds]
+  );
+  const isEmpty = status === "success" && !myPlaylists.length && !savedPlaylists.length && !likedTracks.length;
 
   useEffect(() => {
     if (searchParams.get("createPlaylist") !== "1") {
@@ -386,7 +380,7 @@ export default function LibraryPage() {
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Моя музыка</h1>
-          <p className={styles.subtitle}>Свои плейлисты, сохраненные подборки и избранные исполнители в одном месте.</p>
+          <p className={styles.subtitle}>Любимые треки, свои плейлисты и сохраненные подборки в одном месте.</p>
         </div>
         <div className={styles.headerActions}>
           <button type="button" className={styles.primaryButton} onClick={openCreateDialog}>
@@ -400,7 +394,7 @@ export default function LibraryPage() {
       </header>
 
       {status === "loading" ? (
-        <ResourceState loading title="Загружаем библиотеку" description="Собираем плейлисты и подписки." />
+        <ResourceState loading title="Загружаем библиотеку" description="Собираем лайки, плейлисты и сохранения." />
       ) : null}
 
       {status === "error" ? (
@@ -416,7 +410,7 @@ export default function LibraryPage() {
         <>
           <ResourceState
             title="Библиотека пустая"
-            description="Создай первый плейлист или подпишись на исполнителей в поиске."
+            description="Лайкни трек, сохрани подборку или создай первый плейлист."
             actionLabel="Открыть поиск"
             onAction={() => navigate("/search")}
           />
@@ -432,6 +426,76 @@ export default function LibraryPage() {
 
       {status === "success" && !isEmpty ? (
         <>
+          <section className={styles.section}>
+            <div className={styles.sectionTitleRow}>
+              <h2 className={styles.sectionTitle}>Мне нравится</h2>
+              <span className={styles.playlistCountBadge}>{likedTracks.length}</span>
+              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+            </div>
+            {likedTracks.length ? (
+              <>
+                <ul className={styles.trackList}>
+                  {likedPreviewTracks.map((track) => (
+                    <li key={track.id} className={`${styles.trackRow} ${currentTrackId === track.id ? styles.trackRowActive : ""}`.trim()}>
+                      <button
+                        type="button"
+                        className={styles.trackMainButton}
+                        onClick={() => playTrack(track.id)}
+                        onContextMenu={(event) => openTrackMenu(event, track.id)}
+                      >
+                        <span className={styles.trackCover} style={{ background: track.cover }} />
+                        <span className={styles.trackMeta}>
+                          <span className={styles.trackTitle}>
+                            {track.title}
+                            {currentTrackId !== track.id ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
+                          </span>
+                          <ArtistInlineLinks
+                            artistLine={track.artist}
+                            className={styles.trackArtist}
+                            linkClassName={styles.trackArtistButton}
+                            textClassName={styles.trackArtist}
+                            onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                            stopPropagation
+                          />
+                        </span>
+                        <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.likeButton} ${styles.likeButtonActive}`.trim()}
+                        aria-label="Убрать из понравившихся"
+                        onClick={() => toggleLikeTrack(track.id)}
+                      >
+                        <FiHeart />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.queueButton}
+                        aria-label="Открыть меню трека"
+                        onClick={(event) => openTrackMenu(event, track.id)}
+                      >
+                        <FiMoreHorizontal />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+
+                <button type="button" className={styles.playlistToggleButton} onClick={() => navigate("/liked")}>
+                  Открыть весь список
+                </button>
+              </>
+            ) : (
+              <div className={styles.sectionState}>
+                <ResourceState
+                  title="Пока нет лайков"
+                  description="Отмечай треки сердцем, и они будут собираться здесь."
+                  actionLabel="Перейти в поиск"
+                  onAction={() => navigate("/search")}
+                />
+              </div>
+            )}
+          </section>
+
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
               <h2 className={styles.sectionTitle}>Мои плейлисты</h2>
@@ -657,101 +721,6 @@ export default function LibraryPage() {
             )}
           </section>
 
-          <section className={styles.section}>
-            <div className={styles.sectionTitleRow}>
-              <h2 className={styles.sectionTitle}>Мои исполнители</h2>
-              <span className={styles.artistCount}>{followedArtists.length}</span>
-              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
-            </div>
-            {followedArtists.length ? (
-              <>
-                <div className={styles.artistGrid}>
-                  {visibleFollowedArtists.map((artist) => (
-                    <article key={artist.id} className={styles.artistCard}>
-                      <button
-                        type="button"
-                        className={styles.artistMainButton}
-                        onClick={() => navigate(`/artist/${artist.id}`)}
-                      >
-                        <span className={styles.artistAvatar}>{artist.name.slice(0, 1).toUpperCase()}</span>
-                        <span className={styles.artistMeta}>
-                          <span className={styles.artistName}>{artist.name}</span>
-                          <span className={styles.artistFollowers}>{artist.followers} подписчиков</span>
-                        </span>
-                      </button>
-                      <div className={styles.cardActions}>
-                        <button
-                          type="button"
-                          className={styles.cardActionButton}
-                          aria-label="Открыть исполнителя"
-                          onClick={() => navigate(`/artist/${artist.id}`)}
-                        >
-                          <FiExternalLink />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.cardActionButton}
-                          aria-label="Меню исполнителя"
-                          onClick={(event) =>
-                            openCardMenu(event, {
-                              title: artist.name,
-                              subtitle: `${artist.followers} подписчиков`,
-                              actions: [
-                                {
-                                  id: `open-artist-${artist.id}`,
-                                  icon: "open",
-                                  label: "Открыть исполнителя",
-                                  onSelect: () => navigate(`/artist/${artist.id}`),
-                                },
-                                {
-                                  id: `share-artist-${artist.id}`,
-                                  icon: "share",
-                                  label: "Поделиться",
-                                  onSelect: () =>
-                                    copyEntityLink(
-                                      `/artist/${artist.id}`,
-                                      "Ссылка на исполнителя скопирована.",
-                                      "Скопируй ссылку на исполнителя:"
-                                    ),
-                                },
-                                {
-                                  id: `unfollow-artist-${artist.id}`,
-                                  icon: "unfollow",
-                                  label: "Отписаться",
-                                  tone: "danger",
-                                  onSelect: () => toggleArtistFollow(artist.id),
-                                },
-                              ],
-                            })
-                          }
-                        >
-                          <FiMoreHorizontal />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                {canToggleArtists ? (
-                  <button
-                    type="button"
-                    className={styles.artistToggleButton}
-                    onClick={() => setShowAllArtists((value) => !value)}
-                  >
-                    {showAllArtists ? "Свернуть" : "Показать всех"}
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <div className={styles.sectionState}>
-                <ResourceState
-                  title="Нет подписок"
-                  description="Подписывайся на исполнителей, и они будут отображаться здесь."
-                  actionLabel="Открыть поиск"
-                  onAction={() => navigate("/search")}
-                />
-              </div>
-            )}
-          </section>
         </>
       ) : null}
 

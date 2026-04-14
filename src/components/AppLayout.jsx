@@ -1,14 +1,19 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { useNavigate, Outlet } from "react-router-dom";
+import { NavLink, useNavigate, Outlet } from "react-router-dom";
 import {
   FiChevronDown,
   FiChevronUp,
+  FiHome,
   FiList,
+  FiMusic,
   FiRepeat,
+  FiSearch,
+  FiSettings,
   FiShuffle,
   FiSkipBack,
   FiSkipForward,
   FiTrash2,
+  FiUser,
   FiVolume2,
   FiVolumeX,
   FiX,
@@ -18,10 +23,12 @@ import { LuHeart, LuHeartOff } from "react-icons/lu";
 import Sidebar from "./Sidebar.jsx";
 import styles from "./AppLayout.module.css";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ArtistInlineLinks from "./ArtistInlineLinks.jsx";
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
   const {
     currentTrack,
     currentIndex,
@@ -62,6 +69,7 @@ export default function AppLayout() {
   const canLikeCurrent = Boolean(currentTrack && !isCurrentTrackLiked);
   const canUnlikeCurrent = Boolean(currentTrack && isCurrentTrackLiked);
   const repeatEnabled = repeatMode !== "off";
+  const accountInitial = (user?.displayName ?? user?.username ?? "Г").slice(0, 1).toUpperCase();
   const streamQualitySelected = streamQuality?.selected || "auto";
   const fallbackQualityLevelLabel =
     streamQualitySelected === "auto" ? "AUTO" : streamQualitySelected.toUpperCase();
@@ -71,6 +79,13 @@ export default function AppLayout() {
     ? streamQuality.level.toUpperCase()
     : fallbackQualityLevelLabel;
   const canControlStreamQuality = Boolean(streamQuality?.available && streamQuality?.canControl);
+  const mobileNavItems = [
+    { to: "/", label: "Главная", icon: FiHome, end: true },
+    { to: "/search", label: "Поиск", icon: FiSearch },
+    { to: "/library", label: "Моя музыка", icon: FiMusic },
+    { to: "/profile", label: "Профиль", icon: FiUser },
+    ...(user?.isAdmin ? [{ to: "/admin", label: "Админка", icon: FiSettings }] : []),
+  ];
 
   const repeatLabel =
     repeatMode === "one"
@@ -165,6 +180,45 @@ export default function AppLayout() {
       </div>
 
       <main className={styles.main}>
+        <div className={styles.mobileNavWrap}>
+          <div className={styles.mobileTopRow}>
+            <div className={styles.mobileBrand}>
+              <span className={styles.mobileBrandLogo}>♪</span>
+              <span className={styles.mobileBrandText}>
+                <span className={styles.mobileBrandTitle}>MusicApp</span>
+                <span className={styles.mobileBrandSub}>стриминг платформа</span>
+              </span>
+            </div>
+            <button
+              type="button"
+              className={styles.mobileAccountButton}
+              aria-label={isAuthenticated ? "Открыть профиль" : "Войти или зарегистрироваться"}
+              onClick={() => navigate("/profile")}
+            >
+              {isAuthenticated ? accountInitial : <FiUser />}
+            </button>
+          </div>
+          <nav className={styles.mobileNav} aria-label="Быстрая навигация">
+            {mobileNavItems.map((item) => {
+              const NavIcon = item.icon;
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `${styles.mobileNavItem} ${isActive ? styles.mobileNavItemActive : ""}`.trim()
+                  }
+                >
+                  <NavIcon />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+        </div>
+
         <div className={styles.content}>
           <Outlet />
         </div>

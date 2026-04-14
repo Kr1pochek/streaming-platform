@@ -165,6 +165,342 @@ function normalizeUserPlaylistPayload(payloadOrTitle) {
   return {};
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeIdList(values = []) {
+  const seen = new Set();
+  const ids = [];
+
+  for (const value of values) {
+    const id = String(value ?? "").trim();
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+
+  return ids;
+}
+
+function normalizeCover(value) {
+  const cover = asString(value);
+  if (!cover) {
+    return "";
+  }
+
+  if (/^(url\(|linear-gradient\(|radial-gradient\(|conic-gradient\()/i.test(cover)) {
+    return cover;
+  }
+
+  if (/^(data:image\/|https?:\/\/|\/)/i.test(cover)) {
+    return `url("${cover}") center / cover no-repeat`;
+  }
+
+  return cover;
+}
+
+function normalizeArtistLine(value, artists = []) {
+  const directValue = asString(value);
+  if (directValue) {
+    return directValue;
+  }
+
+  return artists
+    .map((artist) => asString(typeof artist === "string" ? artist : artist?.name))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function normalizeArtistSummary(artist = {}) {
+  return {
+    ...artist,
+    id: asString(artist.id),
+    name: asString(artist.name),
+    followers: asNumber(artist.followers, 0),
+  };
+}
+
+function normalizeTrack(track = {}) {
+  const artists = asArray(track.artists).map((artist) =>
+    typeof artist === "string"
+      ? { id: "", name: asString(artist) }
+      : {
+          ...artist,
+          id: asString(artist?.id),
+          name: asString(artist?.name),
+        }
+  );
+
+  const artistLine = normalizeArtistLine(track.artist ?? track.artistName, artists);
+  const artistIds = normalizeIdList(
+    asArray(track.artistIds).length
+      ? track.artistIds
+      : artists.map((artist) => artist.id)
+  );
+
+  return {
+    ...track,
+    id: asString(track.id),
+    title: asString(track.title),
+    artist: artistLine,
+    artistName: asString(track.artistName) || artistLine,
+    artistIds,
+    artists,
+    cover: normalizeCover(track.cover),
+    durationSec: asNumber(track.durationSec, 0),
+    explicit: Boolean(track.explicit),
+    tags: asArray(track.tags)
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean),
+    audioUrl: asString(track.audioUrl),
+    rawAudioUrl: asString(track.rawAudioUrl),
+    hlsUrl: asString(track.hlsUrl),
+  };
+}
+
+function normalizeTrackIds(trackIds = [], tracks = []) {
+  const normalizedTrackIds = normalizeIdList(trackIds);
+  if (normalizedTrackIds.length) {
+    return normalizedTrackIds;
+  }
+  return normalizeIdList(asArray(tracks).map((track) => track?.id));
+}
+
+function normalizePlaylistSummary(playlist = {}) {
+  const tracks = asArray(playlist.tracks).map(normalizeTrack);
+  const subtitle = asString(playlist.subtitle) || asString(playlist.artist) || asString(playlist.description);
+
+  return {
+    ...playlist,
+    id: asString(playlist.id),
+    title: asString(playlist.title),
+    subtitle,
+    artist: asString(playlist.artist) || subtitle,
+    description: asString(playlist.description) || subtitle,
+    cover: normalizeCover(playlist.cover),
+    trackIds: normalizeTrackIds(playlist.trackIds, tracks),
+    tracks,
+    isCustom: Boolean(playlist.isCustom),
+    isPublic: Boolean(playlist.isPublic),
+    userId: asString(playlist.userId),
+  };
+}
+
+function normalizeReleaseSummary(release = {}) {
+  const tracks = asArray(release.tracks).map(normalizeTrack);
+  const artists = asArray(release.artists);
+  const artistName = asString(release.artistName) || normalizeArtistLine(release.artist, artists);
+
+  return {
+    ...release,
+    id: asString(release.id),
+    title: asString(release.title),
+    type: asString(release.type) || "release",
+    artist: asString(release.artist) || artistName,
+    artistName,
+    cover: normalizeCover(release.cover),
+    year: asNumber(release.year, 0),
+    tracks,
+    trackIds: normalizeTrackIds(release.trackIds, tracks),
+  };
+}
+
+function normalizePagination(pagination = {}) {
+  return {
+    limit: asNumber(pagination.limit, 12),
+    offset: asNumber(pagination.offset, 0),
+    hasMore: Boolean(pagination.hasMore),
+    nextOffset: Number.isFinite(Number(pagination.nextOffset)) ? Number(pagination.nextOffset) : null,
+  };
+}
+
+function normalizeCollection(item = {}) {
+  return {
+    ...item,
+    id: asString(item.id),
+    title: asString(item.title),
+    subtitle: asString(item.subtitle),
+    gradient: asString(item.gradient),
+    type: asString(item.type),
+    targetId: asString(item.targetId),
+    query: asString(item.query),
+  };
+}
+
+function normalizeQuickAction(item = {}) {
+  return {
+    ...item,
+    id: asString(item.id),
+    title: asString(item.title),
+    subtitle: asString(item.subtitle),
+    accent: asString(item.accent),
+  };
+}
+
+function normalizeReleaseNotification(item = {}) {
+  return {
+    ...item,
+    id: asString(item.id),
+    releaseId: asString(item.releaseId),
+    artistId: asString(item.artistId),
+    title: asString(item.title),
+    artistName: asString(item.artistName),
+    type: asString(item.type),
+    year: asNumber(item.year, 0),
+    publishedAt: asNumber(item.publishedAt, 0),
+    cover: normalizeCover(item.cover),
+    trackIds: normalizeTrackIds(item.trackIds),
+  };
+}
+
+function normalizeSearchArtist(item = {}) {
+  return {
+    ...item,
+    id: asString(item.id),
+    name: asString(item.name),
+    followers: asNumber(item.followers, 0),
+  };
+}
+
+function normalizeCatalogMapPayload(payload = {}) {
+  return {
+    ...payload,
+    tracks: asArray(payload.tracks).map(normalizeTrack),
+    artists: asArray(payload.artists).map(normalizeArtistSummary),
+  };
+}
+
+function normalizeHomeFeedPayload(payload = {}) {
+  return {
+    ...payload,
+    quickActions: asArray(payload.quickActions).map(normalizeQuickAction),
+    showcases: asArray(payload.showcases).map((item) => ({
+      ...item,
+      id: asString(item.id),
+      title: asString(item.title),
+      subtitle: asString(item.subtitle),
+      cover: normalizeCover(item.cover),
+      playlistId: asString(item.playlistId),
+      trackIds: normalizeTrackIds(item.trackIds),
+    })),
+    releaseNotifications: asArray(payload.releaseNotifications).map(normalizeReleaseNotification),
+    freshTrackIds: normalizeIdList(payload.freshTrackIds),
+    vibeTags: asArray(payload.vibeTags)
+      .map((tag) => String(tag ?? "").trim())
+      .filter(Boolean),
+    catalogState:
+      payload.catalogState && typeof payload.catalogState === "object"
+        ? payload.catalogState
+        : {},
+  };
+}
+
+function normalizeSearchFeedPayload(payload = {}) {
+  return {
+    ...payload,
+    collections: asArray(payload.collections).map(normalizeCollection),
+    morePlaylists: asArray(payload.morePlaylists).map(normalizePlaylistSummary),
+    newTrackIds: normalizeIdList(payload.newTrackIds),
+    catalogState:
+      payload.catalogState && typeof payload.catalogState === "object"
+        ? payload.catalogState
+        : {},
+  };
+}
+
+function normalizeSearchResultPayload(payload = {}) {
+  return {
+    ...payload,
+    tracks: asArray(payload.tracks).map(normalizeTrack),
+    playlists: asArray(payload.playlists).map(normalizePlaylistSummary),
+    artists: asArray(payload.artists).map(normalizeSearchArtist),
+    albums: asArray(payload.albums).map(normalizeReleaseSummary),
+    pagination: normalizePagination(payload.pagination),
+  };
+}
+
+function normalizeLibraryFeedPayload(payload = {}) {
+  return {
+    ...payload,
+    playlists: asArray(payload.playlists).map(normalizePlaylistSummary),
+    savedPlaylists: asArray(payload.savedPlaylists).map(normalizePlaylistSummary),
+  };
+}
+
+function normalizePlaylistPagePayload(payload = {}) {
+  const playlist = normalizePlaylistSummary(payload.playlist);
+  const tracks = asArray(payload.tracks).map(normalizeTrack);
+
+  return {
+    ...payload,
+    playlist: {
+      ...playlist,
+      trackIds: playlist.trackIds.length ? playlist.trackIds : normalizeTrackIds([], tracks),
+    },
+    tracks,
+    relatedPlaylists: asArray(payload.relatedPlaylists).map(normalizePlaylistSummary),
+  };
+}
+
+function normalizeTrackPagePayload(payload = {}) {
+  return {
+    ...payload,
+    track: normalizeTrack(payload.track),
+    artist: payload.artist ? normalizeArtistSummary(payload.artist) : null,
+    inPlaylists: asArray(payload.inPlaylists).map(normalizePlaylistSummary),
+    playlistToggles: asArray(payload.playlistToggles).map((playlist) => ({
+      ...normalizePlaylistSummary(playlist),
+      hasTrack: Boolean(playlist?.hasTrack),
+    })),
+    relatedTracks: asArray(payload.relatedTracks).map(normalizeTrack),
+    moreByArtist: asArray(payload.moreByArtist).map(normalizeTrack),
+  };
+}
+
+function normalizeArtistPagePayload(payload = {}) {
+  return {
+    ...payload,
+    artist: normalizeArtistSummary(payload.artist),
+    topTracks: asArray(payload.topTracks).map(normalizeTrack),
+    latestRelease: payload.latestRelease ? normalizeReleaseSummary(payload.latestRelease) : null,
+    popularAlbums: asArray(payload.popularAlbums).map(normalizeReleaseSummary),
+    eps: asArray(payload.eps).map(normalizeReleaseSummary),
+    singles: asArray(payload.singles).map(normalizeReleaseSummary),
+  };
+}
+
+function normalizeReleasePagePayload(payload = {}) {
+  const tracks = asArray(payload.tracks).map(normalizeTrack);
+  const release = normalizeReleaseSummary(payload.release);
+
+  return {
+    ...payload,
+    release: {
+      ...release,
+      trackIds: release.trackIds.length ? release.trackIds : normalizeTrackIds([], tracks),
+    },
+    tracks,
+    totalDurationSec: asNumber(
+      payload.totalDurationSec,
+      tracks.reduce((sum, track) => sum + asNumber(track.durationSec, 0), 0)
+    ),
+    moreReleasesByArtist: asArray(payload.moreReleasesByArtist).map(normalizeReleaseSummary),
+    relatedPlaylists: asArray(payload.relatedPlaylists).map(normalizePlaylistSummary),
+  };
+}
+
 export async function createUserPlaylist(payloadOrTitle) {
   const payload = normalizeUserPlaylistPayload(payloadOrTitle);
   return request("/user-playlists", {
@@ -212,38 +548,40 @@ export async function reorderUserPlaylistTracks(playlistId, trackIds = []) {
 }
 
 export async function fetchHomeFeed() {
-  return request("/home-feed");
+  return normalizeHomeFeedPayload(await request("/home-feed"));
 }
 
 export async function fetchSearchFeed() {
-  return request("/search-feed");
+  return normalizeSearchFeedPayload(await request("/search-feed"));
 }
 
 export async function searchCatalog(query, options = {}) {
-  return request("/search", {
-    query: {
-      query,
-      filter: options.filter ?? "all",
-      limit: options.limit ?? 12,
-      offset: options.offset ?? 0,
-    },
-  });
+  return normalizeSearchResultPayload(
+    await request("/search", {
+      query: {
+        query,
+        filter: options.filter ?? "all",
+        limit: options.limit ?? 12,
+        offset: options.offset ?? 0,
+      },
+    })
+  );
 }
 
 export async function fetchLibraryFeed() {
-  return request("/library-feed");
+  return normalizeLibraryFeedPayload(await request("/library-feed"));
 }
 
 export async function fetchCatalogMap() {
-  return request("/catalog-map");
+  return normalizeCatalogMapPayload(await request("/catalog-map"));
 }
 
 export async function fetchPlaylistPage(playlistId) {
-  return request(`/playlists/${encodeURIComponent(playlistId)}`);
+  return normalizePlaylistPagePayload(await request(`/playlists/${encodeURIComponent(playlistId)}`));
 }
 
 export async function fetchTrackPage(trackId) {
-  return request(`/tracks/${encodeURIComponent(trackId)}`);
+  return normalizeTrackPagePayload(await request(`/tracks/${encodeURIComponent(trackId)}`));
 }
 
 export async function fetchTrackPlayback(trackId) {
@@ -251,11 +589,11 @@ export async function fetchTrackPlayback(trackId) {
 }
 
 export async function fetchArtistPage(artistId) {
-  return request(`/artists/${encodeURIComponent(artistId)}`);
+  return normalizeArtistPagePayload(await request(`/artists/${encodeURIComponent(artistId)}`));
 }
 
 export async function fetchReleasePage(releaseId) {
-  return request(`/releases/${encodeURIComponent(releaseId)}`);
+  return normalizeReleasePagePayload(await request(`/releases/${encodeURIComponent(releaseId)}`));
 }
 
 export async function fetchSmartRecommendations() {
@@ -390,7 +728,6 @@ export async function uploadTrack(payload = {}) {
   return responsePayload;
 }
 
-// Admin API functions
 export async function getAdminStats() {
   return request("/admin/stats");
 }
@@ -411,6 +748,50 @@ export async function getAdminTracks(optionsOrLimit = 20, offset = 0) {
   });
 }
 
+export async function getAdminReleases(optionsOrLimit = 20, offset = 0) {
+  const options =
+    typeof optionsOrLimit === "object" && optionsOrLimit !== null
+      ? optionsOrLimit
+      : { limit: optionsOrLimit, offset };
+
+  return request("/admin/releases", {
+    query: {
+      limit: options.limit ?? 20,
+      offset: options.offset ?? 0,
+      query: options.query ?? "",
+      status: options.status ?? "all",
+    },
+  });
+}
+
+export async function getAdminReleaseOptions(artistId = "") {
+  return request("/admin/release-options", {
+    query: {
+      artistId,
+    },
+  });
+}
+
+export async function createAdminRelease(payload = {}) {
+  return request("/admin/releases", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateAdminRelease(releaseId, payload = {}) {
+  return request(`/admin/releases/${encodeURIComponent(releaseId)}`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function deleteAdminRelease(releaseId) {
+  return request(`/admin/releases/${encodeURIComponent(releaseId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getAdminUsers(optionsOrLimit = 20, offset = 0) {
   const options =
     typeof optionsOrLimit === "object" && optionsOrLimit !== null
@@ -424,6 +805,13 @@ export async function getAdminUsers(optionsOrLimit = 20, offset = 0) {
       query: options.query ?? "",
       status: options.status ?? "all",
     },
+  });
+}
+
+export async function updateAdminUserRole(userId, role) {
+  return request(`/admin/users/${encodeURIComponent(userId)}/role`, {
+    method: "POST",
+    body: { role },
   });
 }
 

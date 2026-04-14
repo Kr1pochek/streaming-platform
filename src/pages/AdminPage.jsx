@@ -16,6 +16,7 @@ import useAsyncResource from "../hooks/useAsyncResource.js";
 import { getAdminStats } from "../api/musicApi.js";
 import ResourceState from "../components/ResourceState.jsx";
 import AdminStatsSection from "../components/AdminStatsSection.jsx";
+import AdminReleasesSection from "../components/AdminReleasesSection.jsx";
 import AdminTracksSection from "../components/AdminTracksSection.jsx";
 import AdminUsersSection from "../components/AdminUsersSection.jsx";
 import useAuth from "../hooks/useAuth.js";
@@ -228,6 +229,7 @@ export default function AdminPage() {
             </section>
 
             <AdminTracksSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
+            <AdminReleasesSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
             <AdminUsersSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
           </>
         ) : null}

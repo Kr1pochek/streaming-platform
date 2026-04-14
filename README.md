@@ -222,15 +222,23 @@ If these vars are not set, seed user creation is skipped. Set `SEED_IS_ADMIN=tru
 
 ## 12. Docker (PostgreSQL + API + Frontend)
 
+Before first start, copy `.env.example` to `.env` and set a real `PGPASSWORD`.
+`docker compose` now uses the same `PG*` variables from `.env`, so there is no hardcoded demo password in the compose file.
+
 ```bash
 docker compose up --build
 ```
 
 Services:
-- `db` (PostgreSQL on `5432`)
+- `db` (internal PostgreSQL service, not published to the host by default)
 - `app` (waits for DB, runs migrations + seed, then serves API + built frontend on `4000`)
 
 Open: `http://localhost:4000`.
+
+Notes:
+- uploaded/local audio is persisted in the named Docker volume `media_data`
+- runtime image includes `ffmpeg`, so upload transcoding and HLS generation can work inside the container
+- if you need direct access to PostgreSQL, prefer `docker compose exec db psql ...` instead of opening `5432` publicly
 
 Quick check after container startup:
 

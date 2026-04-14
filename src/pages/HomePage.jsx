@@ -28,10 +28,13 @@ import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 
 const actionIcons = {
   wave: FiRadio,
-  liked: FiHeart,
   new: FiTrendingUp,
   energy: FiZap,
 };
+const releaseDateFormatter = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "short",
+});
 
 function trackWord(count) {
   const safeCount = Math.max(0, Number(count ?? 0));
@@ -49,6 +52,30 @@ function trackWord(count) {
   return "треков";
 }
 
+function releaseWord(count) {
+  const safeCount = Math.max(0, Number(count ?? 0));
+  const remainder100 = safeCount % 100;
+  const remainder10 = safeCount % 10;
+  if (remainder100 >= 11 && remainder100 <= 14) {
+    return "релизов";
+  }
+  if (remainder10 === 1) {
+    return "релиз";
+  }
+  if (remainder10 >= 2 && remainder10 <= 4) {
+    return "релиза";
+  }
+  return "релизов";
+}
+
+function formatReleaseDateLabel(timestamp) {
+  const value = Number(timestamp ?? 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Свежий релиз";
+  }
+  return `Обновлено ${releaseDateFormatter.format(value)}`;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -62,6 +89,7 @@ export default function HomePage() {
     progressSec,
     durationLabel,
     playTrack,
+    playQueue,
     togglePlay,
     likedIds,
     isPlaying,
@@ -79,6 +107,7 @@ export default function HomePage() {
   const greetingName = user?.displayName ?? user?.username ?? "гость";
   const releaseNotifications = Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : [];
   const catalogState = data?.catalogState ?? {};
+  const updatedArtistCount = new Set(releaseNotifications.map((item) => item.artistId).filter(Boolean)).size;
 
   const freshTracks = useMemo(
     () => (data?.freshTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
@@ -126,7 +155,12 @@ export default function HomePage() {
 
             <div className={styles.vibeRow}>
               {(data?.vibeTags ?? []).map((tag) => (
-                <button key={tag} type="button" className={styles.vibeTag} onClick={() => navigate("/search")}>
+                <button
+                  key={tag}
+                  type="button"
+                  className={styles.vibeTag}
+                  onClick={() => navigate("/search", { state: { initialQuery: tag } })}
+                >
                   {tag}
                 </button>
               ))}
@@ -217,44 +251,81 @@ export default function HomePage() {
                   <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
                 </div>
                 {releaseNotifications.length ? (
-                  <div className={styles.notificationGrid}>
-                    {releaseNotifications.map((item) => (
-                      <article key={item.id} className={styles.notificationCard}>
-                        <button
-                          className={styles.notificationMainButton}
-                          type="button"
-                          onClick={() => navigate(`/release/${item.releaseId}`)}
+                  <div className={styles.releaseHub}>
+                    <div className={styles.releaseHubHeader}>
+                      <div className={styles.releaseHubCopy}>
+                        <p className={styles.releaseHubEyebrow}>
+                          <FiBell />
+                          Лента обновлений
+                        </p>
+                        <p className={styles.releaseHubText}>
+                          Свежие релизы от артистов, на которых ты подписан. Новые карточки будут просто докидываться в
+                          этот блок без развала всей секции.
+                        </p>
+                      </div>
+                      <div className={styles.releaseHubStats}>
+                        <span className={styles.releaseHubStat}>
+                          <strong>{releaseNotifications.length}</strong> {releaseWord(releaseNotifications.length)}
+                        </span>
+                        <span className={styles.releaseHubStat}>
+                          <strong>{updatedArtistCount}</strong> артистов обновились
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.releaseCardGrid}>
+                      {releaseNotifications.map((item) => (
+                        <article
+                          key={item.id}
+                          className={styles.releaseFeedCard}
+                          style={{ "--release-cover": item.cover }}
                         >
-                          <span className={styles.notificationCover} style={{ background: item.cover }} />
-                          <span className={styles.notificationMeta}>
-                            <span className={styles.notificationTitle}>{item.title}</span>
-                            <span className={styles.notificationSubtitle}>
-                              {item.artistName} • {String(item.type ?? "").toUpperCase()} • {item.year}
+                          <button
+                            className={styles.releaseFeedMainButton}
+                            type="button"
+                            onClick={() => navigate(`/release/${item.releaseId}`)}
+                          >
+                            <span className={styles.releaseFeedVisual}>
+                              <span className={styles.releaseFeedGlow} aria-hidden="true" />
+                              <span className={styles.releaseFeedCover} style={{ background: item.cover }} />
                             </span>
-                          </span>
-                        </button>
-                        <span className={styles.notificationActions}>
-                          {item.trackIds?.[0] ? (
+                            <span className={styles.releaseFeedMeta}>
+                              <span className={styles.releaseFeedBadgeRow}>
+                                <span className={styles.releaseFeedBadge}>{String(item.type ?? "").toUpperCase()}</span>
+                                <span className={styles.releaseFeedBadge}>{formatReleaseDateLabel(item.publishedAt)}</span>
+                              </span>
+                              <span className={styles.releaseFeedTitle}>{item.title}</span>
+                              <span className={styles.releaseFeedSubtitle}>
+                                {item.artistName} • {item.year}
+                              </span>
+                              <span className={styles.releaseFeedCaption}>
+                                {item.trackIds?.length ?? 0} {trackWord(item.trackIds?.length ?? 0)}
+                              </span>
+                            </span>
+                          </button>
+                          <div className={styles.releaseFeedActions}>
+                            {item.trackIds?.length ? (
+                              <button
+                                type="button"
+                                className={styles.releaseFeedPrimaryButton}
+                                onClick={() => playQueue(item.trackIds, 0)}
+                              >
+                                <FiPlay />
+                                Слушать
+                              </button>
+                            ) : null}
                             <button
                               type="button"
-                              className={styles.notificationActionButton}
-                              aria-label="Слушать релиз"
-                              onClick={() => playTrack(item.trackIds[0])}
+                              className={styles.releaseFeedSecondaryButton}
+                              onClick={() => navigate(`/artist/${item.artistId}`)}
                             >
-                              <FiPlay />
+                              <FiArrowRight />
+                              К артисту
                             </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className={styles.notificationActionButton}
-                            aria-label="Открыть исполнителя"
-                            onClick={() => navigate(`/artist/${item.artistId}`)}
-                          >
-                            <FiBell />
-                          </button>
-                        </span>
-                      </article>
-                    ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <ResourceState
@@ -281,13 +352,11 @@ export default function HomePage() {
                         : BsFillPlayFill
                       : actionIcons[item.id] ?? FiMusic;
                   const onClick =
-                    item.id === "liked"
-                      ? () => navigate("/liked")
-                      : item.id === "new"
-                        ? () => navigate("/search")
-                        : item.id === "energy"
-                          ? () => freshTracks[0] && playTrack(freshTracks[0].id)
-                          : togglePlay;
+                    item.id === "new"
+                      ? () => navigate("/search")
+                      : item.id === "energy"
+                        ? () => freshTracks[0] && playTrack(freshTracks[0].id)
+                        : togglePlay;
 
                   return (
                     <button key={item.id} className={styles.actionCard} type="button" onClick={onClick}>

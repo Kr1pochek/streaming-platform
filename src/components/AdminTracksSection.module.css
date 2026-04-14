@@ -374,6 +374,7 @@
 .dialogField {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .dialogField span {
@@ -383,7 +384,10 @@
 }
 
 .dialogTextarea {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   resize: vertical;
   min-height: 108px;
   padding: 12px 14px;

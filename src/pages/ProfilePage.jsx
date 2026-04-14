@@ -24,7 +24,6 @@ import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import { confirmPasswordReset, requestPasswordReset, uploadTrack } from "../api/musicApi.js";
 import ModalDialog from "../components/ModalDialog.jsx";
 
-const UPLOADED_GENRES_STORAGE_PREFIX = "music.profile.uploadedGenres.v1";
 const DEFAULT_UPLOAD_TRACK_COVER = "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)";
 const MAX_TRACK_COVER_FILE_SIZE = 5 * 1024 * 1024;
 const TRACK_COVER_MAX_SIDE = 640;
@@ -78,24 +77,6 @@ async function buildTrackCoverFromFile(file) {
   }
 
   return `url("${optimizedDataUrl}") center / cover no-repeat`;
-}
-
-function getTopGenres(genres = []) {
-  const scoreMap = new Map();
-  const displayByNormalized = new Map();
-  for (const item of genres) {
-    const display = String(item ?? "").trim();
-    if (!display) continue;
-    const normalized = display.toLowerCase();
-    if (!displayByNormalized.has(normalized)) {
-      displayByNormalized.set(normalized, display);
-    }
-    scoreMap.set(normalized, (scoreMap.get(normalized) ?? 0) + 1);
-  }
-  return [...scoreMap.entries()]
-    .sort((first, second) => second[1] - first[1] || first[0].localeCompare(second[0], "ru"))
-    .slice(0, 8)
-    .map(([normalized]) => displayByNormalized.get(normalized) ?? normalized);
 }
 
 export default function ProfilePage() {
@@ -174,66 +155,11 @@ export default function ProfilePage() {
   const [uploadCoverFileName, setUploadCoverFileName] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadedTrackId, setUploadedTrackId] = useState("");
-  const [uploadedGenres, setUploadedGenres] = useState([]);
-
   useEffect(() => {
     setProfileDisplayName(user?.displayName ?? user?.username ?? "");
   }, [user?.displayName, user?.username]);
 
   const historyTracks = useMemo(() => historyIds.map((id) => trackMap[id]).filter(Boolean), [historyIds, trackMap]);
-  const uploadedGenresStorageKey = useMemo(() => {
-    const userId = String(user?.id ?? "").trim();
-    if (!userId) {
-      return "";
-    }
-    return `${UPLOADED_GENRES_STORAGE_PREFIX}.${userId}`;
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!uploadedGenresStorageKey) {
-      setUploadedGenres([]);
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(uploadedGenresStorageKey);
-      if (!raw) {
-        setUploadedGenres([]);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        setUploadedGenres([]);
-        return;
-      }
-      setUploadedGenres(
-        parsed
-          .map((item) => String(item ?? "").trim())
-          .filter(Boolean)
-          .slice(0, 400)
-      );
-    } catch {
-      setUploadedGenres([]);
-    }
-  }, [uploadedGenresStorageKey]);
-
-  useEffect(() => {
-    if (!uploadedGenresStorageKey || typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(uploadedGenresStorageKey, JSON.stringify(uploadedGenres.slice(0, 400)));
-    } catch {
-      // noop
-    }
-  }, [uploadedGenresStorageKey, uploadedGenres]);
-
-  const favoriteGenres = useMemo(() => getTopGenres(uploadedGenres), [uploadedGenres]);
 
   const followedArtists = useMemo(() => {
     const followedSet = new Set(followedArtistIds);
@@ -531,7 +457,6 @@ export default function ProfilePage() {
       });
 
       const nextTrackId = String(response?.track?.id ?? "").trim();
-      setUploadedGenres((prev) => [genre, ...prev].slice(0, 400));
       setUploadForm({
         audio: null,
         title: "",
@@ -924,23 +849,6 @@ export default function ProfilePage() {
             actionLabel="Открыть поиск"
             onAction={() => navigate("/search")}
           />
-        )}
-      </section>
-
-      <section className={styles.section}>
-        <div className={styles.sectionTitleRow}>
-          <h2 className={styles.sectionTitle}>Любимые жанры</h2>
-        </div>
-        {favoriteGenres.length ? (
-          <div className={styles.genreRow}>
-            {favoriteGenres.map((genre) => (
-              <span key={genre} className={styles.genreChip}>
-                {genre}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className={styles.emptyText}>Жанры появятся после загрузки треков с указанным жанром.</p>
         )}
       </section>
 

@@ -19,6 +19,15 @@ const DEFAULT_DURATION_SEC = 180;
 const MIN_DURATION_SEC = 1;
 const MAX_DURATION_SEC = 60 * 60 * 4;
 const allowedAudioExtensions = new Set([".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".opus"]);
+const audioContentTypeByExtension = new Map([
+  [".mp3", "audio/mpeg"],
+  [".wav", "audio/wav"],
+  [".ogg", "audio/ogg"],
+  [".m4a", "audio/mp4"],
+  [".flac", "audio/flac"],
+  [".aac", "audio/aac"],
+  [".opus", "audio/ogg"],
+]);
 const ffmpegBinaryPath = String(process.env.FFMPEG_PATH ?? "ffmpeg").trim() || "ffmpeg";
 const ffprobeBinaryPath = String(process.env.FFPROBE_PATH ?? "ffprobe").trim() || "ffprobe";
 const hlsAudioProfiles = [
@@ -198,6 +207,52 @@ function ensureAudioFileLooksSupported(filePath, originalName, mimetype) {
   }
 }
 
+function resolveUploadAudioExtension(filePath, originalName, mimetype) {
+  const extensionFromName = path.extname(String(originalName ?? filePath)).toLowerCase();
+  if (allowedAudioExtensions.has(extensionFromName)) {
+    return extensionFromName;
+  }
+
+  const normalizedMime = String(mimetype ?? "").trim().toLowerCase();
+  for (const [extension, contentType] of audioContentTypeByExtension.entries()) {
+    if (contentType === normalizedMime) {
+      return extension;
+    }
+  }
+
+  if (normalizedMime === "audio/opus") {
+    return ".opus";
+  }
+  if (normalizedMime === "audio/x-m4a") {
+    return ".m4a";
+  }
+
+  return ".mp3";
+}
+
+function resolveAudioContentType(extension, mimetype = "") {
+  const normalizedExtension = String(extension ?? "").trim().toLowerCase();
+  if (audioContentTypeByExtension.has(normalizedExtension)) {
+    return audioContentTypeByExtension.get(normalizedExtension);
+  }
+
+  const normalizedMime = String(mimetype ?? "").trim().toLowerCase();
+  if (normalizedMime.startsWith("audio/")) {
+    return normalizedMime;
+  }
+
+  return "application/octet-stream";
+}
+
+function shouldFallbackToOriginalAudio(error) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return message.includes("spawnsync ffmpeg eperm") || message.includes("spawnsync ffmpeg enoent");
+}
+
+function copyAudioSource(inputFilePath, outputFilePath) {
+  fs.copyFileSync(inputFilePath, outputFilePath);
+}
+
 function generateLocalHlsFromAudio(trackId, inputAudioPath) {
   const outputDirectory = path.resolve(hlsDirectory, trackId);
   fs.rmSync(outputDirectory, { recursive: true, force: true });
@@ -374,34 +429,54 @@ export async function ingestUploadedTrack({
   const safeTags = normalizeTags(tags);
   const explicitFlag = parseBoolean(explicit, false);
   const requestedDurationSec = parseDurationSec(durationSec);
+  const originalExtension = resolveUploadAudioExtension(uploadFilePath, originalFileName, mimetype);
+  const originalContentType = resolveAudioContentType(originalExtension, mimetype);
 
   fs.mkdirSync(uploadProcessingRoot, { recursive: true });
   const workDirectory = fs.mkdtempSync(path.join(uploadProcessingRoot, `${normalizedTrackId}-`));
   const transcodedAudioPath = path.resolve(workDirectory, `${normalizedTrackId}.mp3`);
+  const originalAudioPath = path.resolve(workDirectory, `${normalizedTrackId}${originalExtension}`);
 
   let hlsGenerated = false;
+  let persistedSourcePath = transcodedAudioPath;
+  let persistedRelativePath = `tracks/${normalizedTrackId}.mp3`;
+  let persistedContentType = "audio/mpeg";
 
   try {
     ensureAudioFileLooksSupported(uploadFilePath, originalFileName, mimetype);
-    transcodeToMp3(uploadFilePath, transcodedAudioPath);
+    try {
+      transcodeToMp3(uploadFilePath, transcodedAudioPath);
+    } catch (error) {
+      if (!shouldFallbackToOriginalAudio(error)) {
+        throw error;
+      }
+
+      copyAudioSource(uploadFilePath, originalAudioPath);
+      persistedSourcePath = originalAudioPath;
+      persistedRelativePath = `tracks/${normalizedTrackId}${originalExtension}`;
+      persistedContentType = originalContentType;
+      console.warn(
+        `[upload] ffmpeg is unavailable for "${normalizedTrackId}", storing original audio as ${originalExtension}.`
+      );
+    }
 
     const persisted = await persistMediaFile({
-      sourceFilePath: transcodedAudioPath,
-      relativePath: `tracks/${normalizedTrackId}.mp3`,
-      contentType: "audio/mpeg",
+      sourceFilePath: persistedSourcePath,
+      relativePath: persistedRelativePath,
+      contentType: persistedContentType,
       env,
     });
 
     if (shouldGenerateHlsOnUpload(env)) {
       try {
-        generateLocalHlsFromAudio(normalizedTrackId, transcodedAudioPath);
+        generateLocalHlsFromAudio(normalizedTrackId, persistedSourcePath);
         hlsGenerated = true;
       } catch (error) {
         console.warn(`[upload] HLS generation skipped for "${normalizedTrackId}": ${error.message}`);
       }
     }
 
-    const finalDurationSec = requestedDurationSec ?? probeDurationInSeconds(transcodedAudioPath) ?? DEFAULT_DURATION_SEC;
+    const finalDurationSec = requestedDurationSec ?? probeDurationInSeconds(persistedSourcePath) ?? DEFAULT_DURATION_SEC;
     await upsertTrackMetadata({
       trackId: normalizedTrackId,
       title: safeTitle,

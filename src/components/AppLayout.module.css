@@ -1,5 +1,6 @@
 ﻿.appShell {
-  height: 100vh;
+  min-height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: 228px minmax(0, 1fr);
   background: #0f0f10;
@@ -19,6 +20,107 @@
   overflow: hidden;
   padding: 24px 28px 32px;
   min-height: 0;
+}
+
+.mobileNavWrap {
+  display: none;
+}
+
+.mobileTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobileBrand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobileBrandLogo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 18px;
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.mobileBrandText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobileBrandTitle {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.mobileBrandSub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.2;
+}
+
+.mobileAccountButton {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.mobileNav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobileNavItem {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.72);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.mobileNavItem svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mobileNavItemActive {
+  color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(245, 204, 70, 0.42);
+  background: rgba(245, 204, 70, 0.14);
 }
 
 .content {
@@ -608,6 +710,8 @@
 
 .trackTitleButton:focus-visible,
 .trackArtistButton:focus-visible,
+.mobileAccountButton:focus-visible,
+.mobileNavItem:focus-visible,
 .queueCloseButton:focus-visible,
 .queueClearButton:focus-visible,
 .queueItem:focus-visible,
@@ -619,6 +723,32 @@
   outline-offset: 2px;
 }
 
+@media (max-width: 1280px) {
+  .main {
+    gap: 18px;
+    padding: 20px 22px 28px;
+  }
+
+  .queuePanel {
+    right: 22px;
+    bottom: 142px;
+  }
+
+  .player {
+    gap: 14px;
+    padding: 14px 18px;
+  }
+
+  .volume {
+    width: 96px;
+  }
+
+  .toastStack {
+    right: 22px;
+    width: min(320px, calc(100% - 44px));
+  }
+}
+
 @media (max-width: 900px) {
   .appShell {
     grid-template-columns: 1fr;
@@ -628,26 +758,203 @@
     display: none;
   }
 
+  .main {
+    gap: 14px;
+    padding: 14px 14px 18px;
+  }
+
+  .mobileNavWrap {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobileNav {
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .mobileNav::-webkit-scrollbar {
+    display: none;
+  }
+
   .queuePanel {
-    right: 14px;
-    left: 14px;
+    right: 0;
+    left: 0;
     width: auto;
-    bottom: 140px;
+    bottom: 214px;
+    max-height: min(46vh, 430px);
   }
 
   .player {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 12px;
+    margin-bottom: 0;
+    padding: 16px;
+    border-radius: 20px;
   }
 
   .toastStack {
-    right: 14px;
-    left: 14px;
+    right: 0;
+    left: 0;
     width: auto;
+    bottom: 228px;
+  }
+
+  .playerLeft,
+  .playerCenter,
+  .playerRight {
+    width: 100%;
+  }
+
+  .playerCenter {
+    align-items: stretch;
   }
 
   .playerRight {
     justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .streamQualityWrap {
+    display: flex;
+    flex: 1 1 auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .volume {
+    flex: 1 1 148px;
+    width: auto;
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: 12px 12px 16px;
+  }
+
+  .mobileNavItem {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .queuePanel {
+    bottom: 224px;
+    border-radius: 16px;
+  }
+
+  .queueRow {
+    grid-template-columns: 1fr;
+  }
+
+  .queueItemActions {
+    justify-content: flex-end;
+  }
+
+  .player {
+    gap: 10px;
+    padding: 14px 12px 16px;
+  }
+
+  .trackArt {
+    width: 46px;
+    height: 46px;
+  }
+
+  .controls {
+    gap: 8px;
+  }
+
+  .iconButton {
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+  }
+
+  .playButton {
+    width: 52px;
+    height: 52px;
+  }
+
+  .streamQualityControl,
+  .streamQualityBadge {
+    height: 30px;
+  }
+
+  .time {
+    font-size: 10px;
+  }
+
+  .toastStack {
+    bottom: 238px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mobileTopRow {
+    align-items: flex-start;
+  }
+
+  .mobileBrand {
+    gap: 10px;
+  }
+
+  .mobileBrandSub {
+    display: none;
+  }
+
+  .mobileAccountButton {
+    width: 40px;
+    height: 40px;
+  }
+
+  .queuePanel {
+    bottom: 238px;
+    max-height: min(50vh, 380px);
+  }
+
+  .playerLeft {
+    align-items: flex-start;
+  }
+
+  .trackTitleButton {
+    font-size: 13px;
+  }
+
+  .trackArtist,
+  .trackArtistButton,
+  .trackArtistText {
+    font-size: 11px;
+  }
+
+  .controls {
+    gap: 6px;
+  }
+
+  .progressRow {
+    grid-template-columns: 32px 1fr 32px;
+    gap: 6px;
+  }
+
+  .playerRight {
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .streamQualityWrap {
+    justify-content: center;
+  }
+
+  .volume {
+    max-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .toastStack {
+    bottom: 252px;
   }
 }
 

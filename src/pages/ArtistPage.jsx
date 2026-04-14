@@ -168,34 +168,47 @@ export default function ArtistPage() {
                 <h2 className={styles.sectionTitle}>Новый релиз</h2>
               </div>
               {data.latestRelease ? (
-                <article className={styles.latestReleaseCard}>
+                <article
+                  className={styles.latestReleaseCard}
+                  style={{ "--latest-release-cover": data.latestRelease.cover }}
+                >
                   <button
                     type="button"
                     className={styles.latestReleaseMainButton}
                     onClick={() => navigate(`/release/${data.latestRelease.id}`)}
                   >
-                    <span className={styles.latestReleaseCover} style={{ background: data.latestRelease.cover }} />
-                    <p className={styles.latestReleaseType}>{data.latestRelease.type.toUpperCase()}</p>
-                    <h3 className={styles.latestReleaseTitle}>{data.latestRelease.title}</h3>
-                    <p className={styles.latestReleaseMeta}>
-                      {data.latestRelease.year} • {data.latestRelease.tracks.length} треков
-                    </p>
+                    <span className={styles.latestReleaseVisual}>
+                      <span className={styles.latestReleaseGlow} aria-hidden="true" />
+                      <span className={styles.latestReleaseCover} style={{ background: data.latestRelease.cover }} />
+                    </span>
+                    <span className={styles.latestReleaseContent}>
+                      <span className={styles.latestReleaseEyebrow}>Свежее у автора</span>
+                      <span className={styles.latestReleaseType}>{data.latestRelease.type.toUpperCase()}</span>
+                      <span className={styles.latestReleaseTitle}>{data.latestRelease.title}</span>
+                      <span className={styles.latestReleaseMeta}>
+                        {data.latestRelease.year} • {data.latestRelease.tracks.length} треков
+                      </span>
+                    </span>
                   </button>
-                  <span className={styles.latestReleaseActions}>
+                  <div className={styles.latestReleaseActions}>
                     <button
                       type="button"
-                      className={styles.latestReleaseButton}
+                      className={styles.latestReleasePrimaryButton}
                       aria-label="Слушать релиз"
                       onClick={() => playQueue(data.latestRelease.trackIds, 0)}
                     >
                       <FiPlay />
                       Слушать
                     </button>
-                    <span className={styles.latestReleaseOpen}>
+                    <button
+                      type="button"
+                      className={styles.latestReleaseSecondaryButton}
+                      onClick={() => navigate(`/release/${data.latestRelease.id}`)}
+                    >
                       <FiExternalLink />
                       Открыть
-                    </span>
-                  </span>
+                    </button>
+                  </div>
                 </article>
               ) : (
                 <p className={styles.emptyText}>У автора пока нет новых релизов.</p>

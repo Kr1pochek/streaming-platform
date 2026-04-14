@@ -225,6 +225,36 @@
   color: rgba(255, 170, 170, 0.9);
 }
 
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  justify-self: start;
+  align-items: stretch;
+  gap: 10px;
+  margin-left: 6px;
+}
+
+.cardActionButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 15, 18, 0.86);
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.cardActionButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
+
 .artistGrid {
   margin-top: 14px;
   display: grid;
@@ -367,7 +397,7 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px 28px 28px;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
   align-items: center;
   gap: 8px;
 }
@@ -414,13 +444,11 @@
   text-overflow: ellipsis;
 }
 
-.currentDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f5cc46;
-  box-shadow: 0 0 10px rgba(245, 204, 70, 0.72);
-  animation: pulse 1s ease-in-out infinite;
+.trackLikedHeart {
+  width: 11px;
+  height: 11px;
+  color: #f5cc46;
+  flex: 0 0 auto;
 }
 
 .trackArtist {
@@ -454,8 +482,7 @@
 }
 
 .likeButton,
-.queueButton,
-.trackOpenButton {
+.queueButton {
   width: 28px;
   height: 28px;
   border: none;
@@ -481,6 +508,7 @@
 .secondaryButton:focus-visible,
 .playlistMainButton:focus-visible,
 .playlistGhostButton:focus-visible,
+.cardActionButton:focus-visible,
 .artistButton:focus-visible,
 .artistToggleButton:focus-visible,
 .playlistToggleButton:focus-visible,
@@ -488,7 +516,6 @@
 .trackMainButton:focus-visible,
 .likeButton:focus-visible,
 .queueButton:focus-visible,
-.trackOpenButton:focus-visible,
 .dialogPrimaryButton:focus-visible,
 .dialogGhostButton:focus-visible,
 .dialogDangerButton:focus-visible,
@@ -648,6 +675,12 @@
   .playlistGrid,
   .artistGrid {
     grid-template-columns: 1fr;
+  }
+
+  .cardActions {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 0;
   }
 
   .playlistMainButton {

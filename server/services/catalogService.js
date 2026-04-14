@@ -142,6 +142,10 @@ export function createAutoArtistId() {
   return `a-auto-${crypto.randomUUID()}`;
 }
 
+export function createReleaseId() {
+  return `rel-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
 export function resolveMediaFilePath(audioUrl) {
   const url = String(audioUrl ?? "").trim();
   if (!url.startsWith(mediaRoutePrefix)) {
@@ -737,16 +741,19 @@ export async function seedReleasesIfEmpty() {
 
   await withTransaction(async (client) => {
     for (const release of artistReleases) {
+      const releaseTimestamp = Date.UTC(Number(release.year ?? new Date().getUTCFullYear()), 0, 1);
       await client.query(
-        `insert into releases (id, artist_id, title, type, year, cover)
-         values ($1, $2, $3, $4, $5, $6)
+        `insert into releases (id, artist_id, title, type, year, cover, status, created_at, published_at)
+         values ($1, $2, $3, $4, $5, $6, 'published', $7, $8)
          on conflict (id) do update
            set artist_id = excluded.artist_id,
                title = excluded.title,
                type = excluded.type,
                year = excluded.year,
-               cover = excluded.cover;`,
-        [release.id, release.artistId, release.title, release.type, release.year, release.cover]
+               cover = excluded.cover,
+               status = 'published',
+               published_at = excluded.published_at;`,
+        [release.id, release.artistId, release.title, release.type, release.year, release.cover, releaseTimestamp, releaseTimestamp]
       );
 
       for (let index = 0; index < release.trackIds.length; index += 1) {
@@ -845,7 +852,7 @@ export async function fetchPlaylists() {
   return sortPlaylists(playlists);
 }
 
-export async function fetchReleases() {
+export async function fetchReleases({ includeDrafts = false } = {}) {
   const { rows } = await pool.query(`
     select
       r.id,
@@ -854,6 +861,10 @@ export async function fetchReleases() {
       r.type,
       r.year,
       r.cover,
+      coalesce(r.description, '') as description,
+      coalesce(nullif(r.status, ''), 'published') as status,
+      coalesce(r.created_at, 0) as "createdAt",
+      coalesce(r.published_at, 0) as "publishedAt",
       coalesce(
         (
           select array_agg(rt.track_id order by rt.position)
@@ -865,15 +876,27 @@ export async function fetchReleases() {
     from releases r;
   `);
 
-  return rows.map((row) => ({
+  return rows
+    .map((row) => ({
     id: row.id,
     artistId: row.artistId,
     title: row.title,
     type: row.type,
     year: Number(row.year),
     cover: row.cover,
+    description: row.description,
+    status: row.status,
+    createdAt: Number(row.createdAt ?? 0),
+    publishedAt: Number(row.publishedAt ?? 0),
     trackIds: Array.isArray(row.trackIds) ? row.trackIds : [],
-  }));
+  }))
+    .filter((release) => includeDrafts || release.status === "published")
+    .sort(
+      (first, second) =>
+        Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
+        Number(second.year ?? 0) - Number(first.year ?? 0) ||
+        String(first.title ?? "").localeCompare(String(second.title ?? ""), "ru")
+    );
 }
 
 function clampInteger(value, fallback, min, max) {
@@ -1065,7 +1088,9 @@ export async function searchCatalogInDatabase({
       from releases r
       join artists a on a.id = r.artist_id
       where
-        lower(r.title) like $1
+        coalesce(nullif(r.status, ''), 'published') = 'published'
+        and (
+          lower(r.title) like $1
         or lower(a.name) like $1
         or exists (
           select 1
@@ -1074,7 +1099,8 @@ export async function searchCatalogInDatabase({
           where rt.release_id = r.id
             and lower(tt.tag) like $1
         )
-      order by r.year desc, r.title
+        )
+      order by coalesce(r.published_at, r.created_at, 0) desc, r.year desc, r.title
       limit $2
       offset $3;
     `,

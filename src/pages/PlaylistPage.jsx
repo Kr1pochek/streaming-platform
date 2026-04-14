@@ -338,125 +338,133 @@ export default function PlaylistPage() {
                 {reorderSaving ? " Сохраняем..." : ""}
               </p>
             ) : null}
-            <ul className={styles.trackList}>
-              {orderedTracks.map((track, index) => {
-                const liked = likedIds.includes(track.id);
-                const isActive = currentTrackId === track.id;
-                return (
-                  <li
-                    key={track.id}
-                    className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""} ${
-                      isCustomPlaylist ? styles.trackRowDraggable : ""
-                    } ${dragFromIndex === index ? styles.trackRowDragging : ""} ${
-                      dragOverIndex === index && dragFromIndex !== index ? styles.trackRowDropTarget : ""
-                    }`.trim()}
-                    draggable={isCustomPlaylist}
-                    onDragStart={() => handleTrackDragStart(index)}
-                    onDragOver={(event) => handleTrackDragOver(event, index)}
-                    onDrop={(event) => void handleTrackDrop(event, index)}
-                    onDragEnd={resetDragState}
-                  >
-                    <button
-                      type="button"
-                      className={styles.trackMain}
-                      onClick={() => playTrack(track.id)}
-                      onContextMenu={(event) => openTrackMenu(event, track.id)}
+            {orderedTracks.length ? (
+              <ul className={styles.trackList}>
+                {orderedTracks.map((track, index) => {
+                  const liked = likedIds.includes(track.id);
+                  const isActive = currentTrackId === track.id;
+                  return (
+                    <li
+                      key={track.id}
+                      className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""} ${
+                        isCustomPlaylist ? styles.trackRowDraggable : ""
+                      } ${dragFromIndex === index ? styles.trackRowDragging : ""} ${
+                        dragOverIndex === index && dragFromIndex !== index ? styles.trackRowDropTarget : ""
+                      }`.trim()}
+                      draggable={isCustomPlaylist}
+                      onDragStart={() => handleTrackDragStart(index)}
+                      onDragOver={(event) => handleTrackDragOver(event, index)}
+                      onDrop={(event) => void handleTrackDrop(event, index)}
+                      onDragEnd={resetDragState}
                     >
-                      <span className={styles.trackIndex}>{index + 1}</span>
-                      <span className={styles.trackCover} style={{ background: track.cover }} />
-                      <span className={styles.trackMeta}>
-                        <span className={styles.trackTitle}>
-                          {track.title}
-                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
-                        </span>
-                        <ArtistInlineLinks
-                          artistLine={track.artist}
-                          className={styles.trackArtist}
-                          linkClassName={styles.trackArtistButton}
-                          textClassName={styles.trackArtist}
-                          onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                          stopPropagation
-                        />
-                      </span>
-                      <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Открыть меню трека"
-                      onClick={(event) => openTrackMenu(event, track.id)}
-                    >
-                      <FiMoreHorizontal />
-                    </button>
-                    {isCustomPlaylist ? (
                       <button
                         type="button"
-                        className={`${styles.iconButton} ${styles.removeTrackButton}`.trim()}
-                        aria-label="Удалить трек из плейлиста"
-                        onClick={() => handleRemoveTrack(track.id)}
+                        className={styles.trackMain}
+                        onClick={() => playTrack(track.id)}
+                        onContextMenu={(event) => openTrackMenu(event, track.id)}
                       >
-                        <FiTrash2 />
+                        <span className={styles.trackIndex}>{index + 1}</span>
+                        <span className={styles.trackCover} style={{ background: track.cover }} />
+                        <span className={styles.trackMeta}>
+                          <span className={styles.trackTitle}>
+                            {track.title}
+                            {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
+                          </span>
+                          <ArtistInlineLinks
+                            artistLine={track.artist}
+                            className={styles.trackArtist}
+                            linkClassName={styles.trackArtistButton}
+                            textClassName={styles.trackArtist}
+                            onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                            stopPropagation
+                          />
+                        </span>
+                        <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
                       </button>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+                      <button
+                        type="button"
+                        className={styles.iconButton}
+                        aria-label="Открыть меню трека"
+                        onClick={(event) => openTrackMenu(event, track.id)}
+                      >
+                        <FiMoreHorizontal />
+                      </button>
+                      {isCustomPlaylist ? (
+                        <button
+                          type="button"
+                          className={`${styles.iconButton} ${styles.removeTrackButton}`.trim()}
+                          aria-label="Удалить трек из плейлиста"
+                          onClick={() => handleRemoveTrack(track.id)}
+                        >
+                          <FiTrash2 />
+                        </button>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className={styles.emptyText}>В этом плейлисте пока нет треков.</p>
+            )}
           </section>
 
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Похожие плейлисты</h2>
-            <div className={styles.relatedGrid}>
-              {data.relatedPlaylists.map((playlist) => {
-                const firstTrackId = playlist.trackIds?.[0] ?? null;
-                return (
-                  <button
-                    key={playlist.id}
-                    type="button"
-                    className={styles.relatedCard}
-                    onClick={() => navigate(`/playlist/${playlist.id}`)}
-                  >
-                    <span className={styles.relatedCover} style={{ background: playlist.cover }} />
-                    <span className={styles.relatedTitle}>{playlist.title}</span>
-                    <span className={styles.relatedSubtitle}>{playlist.subtitle}</span>
-                    {firstTrackId ? (
-                      <span className={styles.relatedActions}>
-                        <button
-                          type="button"
-                          className={styles.relatedActionButton}
-                          aria-label="Слушать"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            playTrack(firstTrackId);
-                          }}
-                        >
-                          <FiPlay />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.relatedActionButton}
-                          aria-label="Лайк"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleLikeTrack(firstTrackId);
-                          }}
-                        >
-                          <FiHeart />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.relatedActionButton}
-                          aria-label="Открыть меню трека"
-                          onClick={(event) => openTrackMenu(event, firstTrackId)}
-                        >
-                          <FiMoreHorizontal />
-                        </button>
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
+            {data.relatedPlaylists.length ? (
+              <div className={styles.relatedGrid}>
+                {data.relatedPlaylists.map((playlist) => {
+                  const firstTrackId = playlist.trackIds?.[0] ?? null;
+                  return (
+                    <button
+                      key={playlist.id}
+                      type="button"
+                      className={styles.relatedCard}
+                      onClick={() => navigate(`/playlist/${playlist.id}`)}
+                    >
+                      <span className={styles.relatedCover} style={{ background: playlist.cover }} />
+                      <span className={styles.relatedTitle}>{playlist.title}</span>
+                      <span className={styles.relatedSubtitle}>{playlist.subtitle}</span>
+                      {firstTrackId ? (
+                        <span className={styles.relatedActions}>
+                          <button
+                            type="button"
+                            className={styles.relatedActionButton}
+                            aria-label="Слушать"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              playTrack(firstTrackId);
+                            }}
+                          >
+                            <FiPlay />
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.relatedActionButton}
+                            aria-label="Лайк"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleLikeTrack(firstTrackId);
+                            }}
+                          >
+                            <FiHeart />
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.relatedActionButton}
+                            aria-label="Открыть меню трека"
+                            onClick={(event) => openTrackMenu(event, firstTrackId)}
+                          >
+                            <FiMoreHorizontal />
+                          </button>
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className={styles.emptyText}>Похожие плейлисты пока не найдены.</p>
+            )}
           </section>
         </>
       ) : null}

@@ -1766,7 +1766,17 @@ export function PlayerProvider({ children }) {
       likeTrack: (trackId) => dispatch({ type: "like_track", trackId }),
       unlikeTrack: (trackId) => dispatch({ type: "unlike_track", trackId }),
       toggleLikeTrack: (trackId) => dispatch({ type: "toggle_like_track", trackId }),
-      toggleArtistFollow: (artistId) => dispatch({ type: "toggle_follow_artist", artistId }),
+      toggleArtistFollow: async (artistId) => {
+        const normalizedArtistId = String(artistId ?? "").trim();
+        if (!normalizedArtistId || !artistMap[normalizedArtistId]) {
+          return false;
+        }
+        const nextFollowedArtistIds = state.followedArtistIds.includes(normalizedArtistId)
+          ? state.followedArtistIds.filter((id) => id !== normalizedArtistId)
+          : [normalizedArtistId, ...state.followedArtistIds];
+        dispatch({ type: "toggle_follow_artist", artistId: normalizedArtistId });
+        return persistRemoteStateNow({ followedArtistIds: nextFollowedArtistIds });
+      },
       togglePlaylistSave: async (playlistId) => {
         const normalizedPlaylistId = String(playlistId ?? "").trim();
         if (!normalizedPlaylistId) {

@@ -159,12 +159,6 @@ export const quickActions = [
     accent: "linear-gradient(135deg, #ffe192 0%, #dd8b42 100%)",
   },
   {
-    id: "liked",
-    title: "Любимые треки",
-    subtitle: "Синхронизировано с плеером",
-    accent: "linear-gradient(135deg, #f58ba8 0%, #93426c 100%)",
-  },
-  {
     id: "new",
     title: "Новые релизы",
     subtitle: "37 сегодня",

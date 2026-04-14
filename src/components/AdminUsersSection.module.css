@@ -41,9 +41,12 @@
 .refreshButton,
 .filterButton,
 .actionPrimaryButton,
+.actionSecondaryButton,
+.actionWarningButton,
 .actionDangerButton,
 .paginationButton,
 .dialogGhostButton,
+.dialogPrimaryButton,
 .dialogDangerButton {
   display: inline-flex;
   align-items: center;
@@ -77,6 +80,19 @@
   color: #9ee37d;
 }
 
+.actionSecondaryButton,
+.dialogPrimaryButton {
+  background: rgba(112, 174, 255, 0.15);
+  border-color: rgba(112, 174, 255, 0.28);
+  color: #c7ddff;
+}
+
+.actionWarningButton {
+  background: rgba(255, 211, 93, 0.14);
+  border-color: rgba(255, 211, 93, 0.26);
+  color: #ffd978;
+}
+
 .actionDangerButton,
 .dialogDangerButton {
   background: rgba(255, 111, 101, 0.16);
@@ -87,9 +103,12 @@
 .refreshButton:hover,
 .filterButton:hover,
 .actionPrimaryButton:hover,
+.actionSecondaryButton:hover,
+.actionWarningButton:hover,
 .actionDangerButton:hover,
 .paginationButton:hover,
 .dialogGhostButton:hover,
+.dialogPrimaryButton:hover,
 .dialogDangerButton:hover {
   transform: translateY(-1px);
 }
@@ -97,9 +116,12 @@
 .refreshButton:disabled,
 .filterButton:disabled,
 .actionPrimaryButton:disabled,
+.actionSecondaryButton:disabled,
+.actionWarningButton:disabled,
 .actionDangerButton:disabled,
 .paginationButton:disabled,
 .dialogGhostButton:disabled,
+.dialogPrimaryButton:disabled,
 .dialogDangerButton:disabled {
   opacity: 0.58;
   cursor: not-allowed;
@@ -314,6 +336,21 @@
   color: #d1ddff;
 }
 
+.badgeRoleUser {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(246, 250, 248, 0.88);
+}
+
+.badgeRoleModerator {
+  background: rgba(106, 214, 129, 0.14);
+  color: #9ee37d;
+}
+
+.badgeRoleSuperAdmin {
+  background: rgba(179, 202, 255, 0.16);
+  color: #d1ddff;
+}
+
 .details {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -354,6 +391,26 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.roleActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selfPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 211, 93, 0.22);
+  background: rgba(255, 211, 93, 0.1);
+  color: #ffd978;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .pagination {
@@ -397,6 +454,36 @@
   border-color: rgba(179, 202, 255, 0.48);
 }
 
+.roleDialogPreview {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.roleDialogLabel {
+  color: rgba(236, 242, 238, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.roleDialogValue {
+  color: #f7faf8;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.roleDialogHint {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.74);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 @media (max-width: 640px) {
   .section {
     padding: 18px;
@@ -410,6 +497,17 @@
 
   .refreshButton,
   .paginationButton {
+    width: 100%;
+  }
+
+  .roleActions {
+    width: 100%;
+  }
+
+  .actionPrimaryButton,
+  .actionSecondaryButton,
+  .actionWarningButton,
+  .actionDangerButton {
     width: 100%;
   }
 

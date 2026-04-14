@@ -6,9 +6,12 @@ import {
   FiSearch,
   FiShield,
   FiSlash,
+  FiStar,
   FiUserCheck,
+  FiUserPlus,
 } from "react-icons/fi";
-import { banAdminUser, getAdminUsers, unbanAdminUser } from "../api/musicApi.js";
+import { banAdminUser, getAdminUsers, unbanAdminUser, updateAdminUserRole } from "../api/musicApi.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "./ResourceState.jsx";
 import ModalDialog from "./ModalDialog.jsx";
 import styles from "./AdminUsersSection.module.css";
@@ -20,9 +23,11 @@ const dateTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
 });
 const statusOptions = [
   { id: "all", label: "Все" },
-  { id: "active", label: "Активные" },
-  { id: "banned", label: "Забаненные" },
-  { id: "admin", label: "Админы" },
+  { id: "active", label: "Обычные" },
+  { id: "moderator", label: "Модераторы" },
+  { id: "super_admin", label: "Главные админы" },
+  { id: "admin", label: "Все админы" },
+  { id: "banned", label: "Заблокированные" },
 ];
 
 function formatDateTime(value) {
@@ -33,7 +38,52 @@ function formatDateTime(value) {
   return dateTimeFormatter.format(timestamp);
 }
 
+function formatAdminRoleLabel(role) {
+  switch (role) {
+    case "super_admin":
+      return "Главный админ";
+    case "moderator":
+      return "Модератор";
+    default:
+      return "Обычный пользователь";
+  }
+}
+
+function formatRoleActionLabel(role) {
+  switch (role) {
+    case "super_admin":
+      return "Назначить главным админом";
+    case "moderator":
+      return "Выдать модератора";
+    default:
+      return "Снять админку";
+  }
+}
+
+function buildRoleChangeHint(role) {
+  switch (role) {
+    case "super_admin":
+      return "Пользователь получит полный доступ к админке, включая управление ролями других администраторов.";
+    case "moderator":
+      return "Пользователь сможет работать в админ-панели и модерировать контент, но не сможет выдавать роли.";
+    default:
+      return "Доступ к админке будет снят, аккаунт останется обычным пользовательским профилем.";
+  }
+}
+
+function resolveRoleBadgeClass(role) {
+  switch (role) {
+    case "super_admin":
+      return styles.badgeRoleSuperAdmin;
+    case "moderator":
+      return styles.badgeRoleModerator;
+    default:
+      return styles.badgeRoleUser;
+  }
+}
+
 export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
+  const { user: currentUser } = useAuth();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [offset, setOffset] = useState(0);
@@ -48,6 +98,14 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
     reason: "Нарушение правил платформы",
     submitting: false,
   });
+  const [roleDialog, setRoleDialog] = useState({
+    open: false,
+    user: null,
+    role: "moderator",
+    submitting: false,
+  });
+
+  const canManageRoles = Boolean(currentUser?.isSuperAdmin);
 
   const loadUsers = useCallback(
     async ({ nextOffset = 0, nextQuery = query, nextStatus = statusFilter } = {}) => {
@@ -97,8 +155,10 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
 
   const summary = useMemo(() => {
     const admins = usersData.users.filter((user) => user.isAdmin).length;
+    const moderators = usersData.users.filter((user) => user.adminRole === "moderator").length;
+    const superAdmins = usersData.users.filter((user) => user.adminRole === "super_admin").length;
     const banned = usersData.users.filter((user) => user.isBanned).length;
-    return { admins, banned };
+    return { admins, moderators, superAdmins, banned };
   }, [usersData.users]);
 
   const openBanDialog = (user) => {
@@ -115,6 +175,24 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
       open: false,
       user: null,
       reason: "Нарушение правил платформы",
+      submitting: false,
+    });
+  };
+
+  const openRoleDialog = (user, role) => {
+    setRoleDialog({
+      open: true,
+      user,
+      role,
+      submitting: false,
+    });
+  };
+
+  const closeRoleDialog = () => {
+    setRoleDialog({
+      open: false,
+      user: null,
+      role: "moderator",
       submitting: false,
     });
   };
@@ -158,6 +236,29 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
     }
   };
 
+  const handleRoleChange = async () => {
+    if (!roleDialog.user?.id) {
+      return;
+    }
+
+    const targetUser = roleDialog.user;
+    const nextRole = roleDialog.role;
+    setRoleDialog((current) => ({ ...current, submitting: true }));
+    setError("");
+    setFeedback("");
+
+    try {
+      await updateAdminUserRole(targetUser.id, nextRole);
+      closeRoleDialog();
+      await loadUsers({ nextOffset: offset });
+      setFeedback(`Для пользователя "${targetUser.username}" установлен статус "${formatAdminRoleLabel(nextRole)}".`);
+      await onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось изменить роль пользователя.");
+      setRoleDialog((current) => ({ ...current, submitting: false }));
+    }
+  };
+
   return (
     <section className={styles.section}>
       <header className={styles.header}>
@@ -165,7 +266,8 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
           <p className={styles.eyebrow}>Аккаунты и доступ</p>
           <h2 className={styles.title}>Пользователи</h2>
           <p className={styles.description}>
-            Здесь видны роли, блокировки и вклад пользователей в наполнение каталога через загрузку собственных треков.
+            Здесь видны роли, блокировки и вклад пользователей в наполнение каталога. Главный админ может прямо отсюда
+            выдавать роль модератора, повышать до главного админа и снимать админку.
           </p>
         </div>
         <button type="button" className={styles.refreshButton} onClick={() => void loadUsers({ nextOffset: offset })}>
@@ -201,18 +303,29 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
 
       <div className={styles.summaryBar}>
         <span>Всего в выборке: {usersData.total}</span>
-        <span>Админов на странице: {summary.admins}</span>
-        <span>Забаненных на странице: {summary.banned}</span>
+        <span>Все админы: {summary.admins}</span>
+        <span>Модераторы: {summary.moderators}</span>
+        <span>Главные админы: {summary.superAdmins}</span>
+        <span>Заблокированные: {summary.banned}</span>
       </div>
 
       {feedback ? <p className={styles.feedback}>{feedback}</p> : null}
 
       {loading && !usersData.users.length ? (
-        <ResourceState loading title="Загружаем пользователей" description="Собираем роли, статусы и статистику загрузок." />
+        <ResourceState
+          loading
+          title="Загружаем пользователей"
+          description="Собираем роли, статусы и статистику загрузок."
+        />
       ) : null}
 
       {error && !usersData.users.length ? (
-        <ResourceState title="Не удалось загрузить пользователей" description={error} actionLabel="Повторить" onAction={() => void loadUsers({ nextOffset: offset })} />
+        <ResourceState
+          title="Не удалось загрузить пользователей"
+          description={error}
+          actionLabel="Повторить"
+          onAction={() => void loadUsers({ nextOffset: offset })}
+        />
       ) : null}
 
       {!loading && !error && !usersData.users.length ? (
@@ -225,10 +338,7 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
       {usersData.users.length ? (
         <div className={styles.cardList}>
           {usersData.users.map((user) => (
-            <article
-              key={user.id}
-              className={`${styles.card} ${user.isBanned ? styles.cardBanned : ""}`.trim()}
-            >
+            <article key={user.id} className={`${styles.card} ${user.isBanned ? styles.cardBanned : ""}`.trim()}>
               <div className={styles.cardHeader}>
                 <div className={styles.identity}>
                   <span className={styles.avatar}>{String(user.username ?? "?").slice(0, 1).toUpperCase()}</span>
@@ -240,13 +350,14 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
 
                 <div className={styles.badges}>
                   <span
-                    className={`${styles.badge} ${
-                      user.isAdmin ? styles.badgeAdmin : user.isBanned ? styles.badgeBanned : styles.badgeActive
-                    }`.trim()}
+                    className={`${styles.badge} ${user.isBanned ? styles.badgeBanned : styles.badgeActive}`.trim()}
                   >
-                    {user.isAdmin ? "Admin" : user.isBanned ? "Banned" : "Active"}
+                    {user.isBanned ? "Blocked" : "Active"}
                   </span>
-                  <span className={styles.badge}>Uploads: {user.uploaded_tracks_count ?? 0}</span>
+                  <span className={`${styles.badge} ${resolveRoleBadgeClass(user.adminRole)}`.trim()}>
+                    {formatAdminRoleLabel(user.adminRole)}
+                  </span>
+                  <span className={styles.badge}>Uploads: {user.uploadedTracksCount ?? user.uploaded_tracks_count ?? 0}</span>
                 </div>
               </div>
 
@@ -261,13 +372,11 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>Загружено треков</span>
-                  <span className={styles.detailValue}>{user.uploaded_tracks_count ?? 0}</span>
+                  <span className={styles.detailValue}>{user.uploadedTracksCount ?? user.uploaded_tracks_count ?? 0}</span>
                 </div>
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>Статус роли</span>
-                  <span className={styles.detailValue}>
-                    {user.isAdmin ? "Администратор" : user.isBanned ? "Заблокирован" : "Обычный пользователь"}
-                  </span>
+                  <span className={styles.detailLabel}>Роль</span>
+                  <span className={styles.detailValue}>{formatAdminRoleLabel(user.adminRole)}</span>
                 </div>
               </div>
 
@@ -278,12 +387,56 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
               ) : null}
 
               <div className={styles.cardActions}>
-                {user.isAdmin ? (
+                {canManageRoles ? (
+                  user.id === currentUser?.id ? (
+                    <span className={styles.selfPill}>
+                      <FiShield />
+                      Твой главный аккаунт
+                    </span>
+                  ) : (
+                    <div className={styles.roleActions}>
+                      {user.adminRole !== "moderator" ? (
+                        <button
+                          type="button"
+                          className={styles.actionSecondaryButton}
+                          onClick={() => openRoleDialog(user, "moderator")}
+                        >
+                          <FiUserPlus />
+                          Модератор
+                        </button>
+                      ) : null}
+
+                      {user.adminRole !== "super_admin" ? (
+                        <button
+                          type="button"
+                          className={styles.actionPrimaryButton}
+                          onClick={() => openRoleDialog(user, "super_admin")}
+                        >
+                          <FiStar />
+                          Главный админ
+                        </button>
+                      ) : null}
+
+                      {user.adminRole !== "user" ? (
+                        <button
+                          type="button"
+                          className={styles.actionWarningButton}
+                          onClick={() => openRoleDialog(user, "user")}
+                        >
+                          <FiShield />
+                          Снять админку
+                        </button>
+                      ) : null}
+                    </div>
+                  )
+                ) : user.isAdmin ? (
                   <span className={styles.adminPill}>
                     <FiShield />
-                    Служебный аккаунт
+                    Управление ролями доступно только главному админу
                   </span>
-                ) : user.isBanned ? (
+                ) : null}
+
+                {user.isBanned ? (
                   <button
                     type="button"
                     className={styles.actionPrimaryButton}
@@ -293,12 +446,12 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
                     <FiUserCheck />
                     Снять блокировку
                   </button>
-                ) : (
+                ) : !user.isAdmin ? (
                   <button type="button" className={styles.actionDangerButton} onClick={() => openBanDialog(user)}>
                     <FiSlash />
                     Заблокировать
                   </button>
-                )}
+                ) : null}
               </div>
             </article>
           ))}
@@ -308,15 +461,25 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
       {error && usersData.users.length ? <p className={styles.inlineError}>{error}</p> : null}
 
       <footer className={styles.pagination}>
-        <button type="button" className={styles.paginationButton} disabled={!canGoBack} onClick={() => void loadUsers({ nextOffset: Math.max(0, offset - USERS_LIMIT) })}>
+        <button
+          type="button"
+          className={styles.paginationButton}
+          disabled={!canGoBack}
+          onClick={() => void loadUsers({ nextOffset: Math.max(0, offset - USERS_LIMIT) })}
+        >
           <FiChevronLeft />
           Назад
         </button>
         <span className={styles.paginationLabel}>
           {usersData.total ? `${offset + 1}-${Math.min(offset + USERS_LIMIT, usersData.total)} из ${usersData.total}` : "0 результатов"}
         </span>
-        <button type="button" className={styles.paginationButton} disabled={!hasMore} onClick={() => void loadUsers({ nextOffset: offset + USERS_LIMIT })}>
-          Вперед
+        <button
+          type="button"
+          className={styles.paginationButton}
+          disabled={!hasMore}
+          onClick={() => void loadUsers({ nextOffset: offset + USERS_LIMIT })}
+        >
+          Вперёд
           <FiChevronRight />
         </button>
       </footer>
@@ -358,6 +521,39 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
             placeholder="Например: спам, тестовый аккаунт, нарушение правил"
           />
         </label>
+      </ModalDialog>
+
+      <ModalDialog
+        open={roleDialog.open}
+        title="Изменить роль пользователя"
+        description={
+          roleDialog.user
+            ? `Пользователь "${roleDialog.user.username}" получит статус "${formatAdminRoleLabel(roleDialog.role)}".`
+            : ""
+        }
+        onClose={closeRoleDialog}
+        actions={
+          <>
+            <button type="button" className={styles.dialogGhostButton} onClick={closeRoleDialog}>
+              Отмена
+            </button>
+            <button
+              type="button"
+              className={styles.dialogPrimaryButton}
+              onClick={() => void handleRoleChange()}
+              disabled={roleDialog.submitting}
+            >
+              <FiShield />
+              {formatRoleActionLabel(roleDialog.role)}
+            </button>
+          </>
+        }
+      >
+        <div className={styles.roleDialogPreview}>
+          <span className={styles.roleDialogLabel}>Новая роль</span>
+          <strong className={styles.roleDialogValue}>{formatAdminRoleLabel(roleDialog.role)}</strong>
+          <p className={styles.roleDialogHint}>{buildRoleChangeHint(roleDialog.role)}</p>
+        </div>
       </ModalDialog>
     </section>
   );

@@ -9,7 +9,7 @@ import {
   vibeTags,
 } from "../../shared/musicData.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
-import { requireAdmin } from "../middleware/adminAuth.js";
+import { requireAdmin, requireSuperAdmin } from "../middleware/adminAuth.js";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { createRateLimiter, resolveRequestIp } from "../middleware/rateLimit.js";
 import {
@@ -55,6 +55,9 @@ import { fetchUserState, updateUserState } from "../services/userStateService.js
 import { ingestUploadedTrack } from "../services/trackUploadService.js";
 import {
   getAdminStats,
+  getAdminReleaseFormOptions,
+  getAdminReleases,
+  getAdminReleasesCount,
   getUploadedTracks,
   getUploadedTracksCount,
   getUsers,
@@ -63,8 +66,12 @@ import {
   unhideTrack,
   banUser,
   unbanUser,
+  createAdminRelease,
+  deleteAdminRelease,
+  updateAdminRelease,
+  updateUserAdminRole,
 } from "../services/adminService.js";
-import { buildCatalogState, buildSearchCollections } from "../services/feedService.js";
+import { buildCatalogState, buildHomeGenreTags, buildSearchCollections } from "../services/feedService.js";
 
 const authRateLimiter = createRateLimiter({
   windowMs: 60_000,
@@ -84,6 +91,8 @@ const mimeTypeByExtension = new Map([
   [".ogg", "audio/ogg"],
   [".m4a", "audio/mp4"],
   [".flac", "audio/flac"],
+  [".aac", "audio/aac"],
+  [".opus", "audio/ogg"],
 ]);
 const TRACK_UPLOAD_MAX_BYTES = Number(process.env.TRACK_UPLOAD_MAX_BYTES ?? 80 * 1024 * 1024);
 const trackUploadTempDirectory = path.resolve(
@@ -289,7 +298,7 @@ function playlistsWithTracks(playlists = []) {
 }
 
 function buildHomeShowcases(playlists = []) {
-  const availablePlaylists = playlistsWithTracks(playlists);
+  const availablePlaylists = playlistsWithTracks(playlists).filter((playlist) => !isCustomPlaylist(playlist));
   if (!availablePlaylists.length) {
     return [];
   }
@@ -920,7 +929,9 @@ export function createApiRouter({
           .filter((release) => followedArtistIdSet.has(release.artistId))
           .sort(
             (first, second) =>
-              Number(second.year ?? 0) - Number(first.year ?? 0) || String(second.id).localeCompare(String(first.id))
+              Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
+              Number(second.year ?? 0) - Number(first.year ?? 0) ||
+              String(second.id).localeCompare(String(first.id))
           )
           .slice(0, 8)
           .map((release) => ({
@@ -932,6 +943,7 @@ export function createApiRouter({
             type: release.type,
             year: Number(release.year ?? 0),
             cover: release.cover,
+            publishedAt: Number(release.publishedAt ?? 0),
             trackIds: Array.isArray(release.trackIds) ? release.trackIds : [],
           }));
       }
@@ -939,7 +951,7 @@ export function createApiRouter({
       res.json({
         quickActions,
         showcases: enrichedShowcases,
-        vibeTags,
+        vibeTags: buildHomeGenreTags({ tracks, fallbackTags: vibeTags }),
         freshTrackIds: freshTrackIds.length ? freshTrackIds : fallbackFreshTrackIds,
         releaseNotifications,
         catalogState,
@@ -1244,7 +1256,11 @@ export function createApiRouter({
           artistName: artist.name,
           tracks: release.trackIds.map((trackId) => trackMap[trackId]).filter(Boolean),
         }))
-        .sort((first, second) => second.year - first.year);
+        .sort(
+          (first, second) =>
+            Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
+            Number(second.year ?? 0) - Number(first.year ?? 0)
+        );
 
       const albums = artistReleasesEnriched.filter((release) => release.type === "album");
       const eps = artistReleasesEnriched.filter((release) => release.type === "ep");
@@ -1299,7 +1315,11 @@ export function createApiRouter({
 
       const moreReleasesByArtist = releases
         .filter((item) => item.artistId === release.artistId && item.id !== release.id)
-        .sort((first, second) => second.year - first.year)
+        .sort(
+          (first, second) =>
+            Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
+            Number(second.year ?? 0) - Number(first.year ?? 0)
+        )
         .map((item) => ({
           ...item,
           artistName: artist?.name ?? "",
@@ -1369,6 +1389,67 @@ export function createApiRouter({
   );
 
   router.get(
+    "/admin/release-options",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const artistId = String(req.query.artistId ?? "").trim();
+      const options = await getAdminReleaseFormOptions({ artistId });
+      res.json(options);
+    })
+  );
+
+  router.get(
+    "/admin/releases",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const limit = parseLimit(req.query.limit, 20);
+      const offset = parseOffset(req.query.offset, 0);
+      const query = normalizeTitle(req.query.query);
+      const status = normalizeTitle(req.query.status).toLowerCase() || "all";
+      const releases = await getAdminReleases({ limit, offset, query, status });
+      const count = await getAdminReleasesCount({ query, status });
+      res.json({ releases, total: count, limit, offset });
+    })
+  );
+
+  router.post(
+    "/admin/releases",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const release = await createAdminRelease(req.body ?? {}, req.auth.userId);
+      await invalidateCatalogCache();
+      res.json({ success: true, release, message: "Release created" });
+    })
+  );
+
+  router.put(
+    "/admin/releases/:id",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const releaseId = String(req.params.id ?? "").trim();
+      const release = await updateAdminRelease(releaseId, req.body ?? {});
+      await invalidateCatalogCache();
+      res.json({ success: true, release, message: "Release updated" });
+    })
+  );
+
+  router.delete(
+    "/admin/releases/:id",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const releaseId = String(req.params.id ?? "").trim();
+      await deleteAdminRelease(releaseId);
+      await invalidateCatalogCache();
+      res.json({ success: true, message: "Release deleted" });
+    })
+  );
+
+  router.get(
     "/admin/users",
     requireAuth,
     requireAdmin,
@@ -1405,6 +1486,18 @@ export function createApiRouter({
       await unhideTrack(trackId);
       await invalidateCatalogCache();
       res.json({ success: true, message: "Track unhidden" });
+    })
+  );
+
+  router.post(
+    "/admin/users/:id/role",
+    requireAuth,
+    requireSuperAdmin,
+    asyncHandler(async (req, res) => {
+      const userId = String(req.params.id ?? "").trim();
+      const role = String(req.body?.role ?? "").trim().toLowerCase();
+      const updatedUser = await updateUserAdminRole(userId, role, req.auth.userId);
+      res.json({ success: true, user: updatedUser, message: "User role updated" });
     })
   );
 

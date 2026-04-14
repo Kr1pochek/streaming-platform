@@ -113,7 +113,15 @@
 .showcaseMainButton:focus-visible,
 .trackMainButton:focus-visible,
 .notificationMainButton:focus-visible,
-.notificationActionButton:focus-visible {
+.notificationActionButton:focus-visible,
+.releaseFeedMainButton:focus-visible,
+.releaseFeedPrimaryButton:focus-visible,
+.releaseFeedSecondaryButton:focus-visible,
+.releaseHeroMainButton:focus-visible,
+.releaseHeroPrimaryButton:focus-visible,
+.releaseHeroSecondaryButton:focus-visible,
+.releaseMiniMainButton:focus-visible,
+.releaseMiniActionButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }
@@ -296,6 +304,661 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
+}
+
+.releaseHub {
+  margin-top: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(245, 204, 70, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+    rgba(14, 16, 21, 0.98);
+}
+
+.releaseHubHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.releaseHubCopy {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.releaseHubEyebrow {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 204, 70, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.releaseHubText {
+  margin: 0;
+  max-width: 68ch;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.releaseHubStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.releaseHubStat {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.74);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.releaseHubStat strong {
+  color: #f7faf8;
+  font-size: 15px;
+}
+
+.releaseCardGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.releaseFeedCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)),
+    rgba(18, 20, 26, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 14px 30px rgba(0, 0, 0, 0.18);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.releaseFeedCard::before {
+  content: "";
+  position: absolute;
+  inset: auto -10% -34% 44%;
+  height: 180px;
+  background: var(--release-cover);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.16;
+  filter: blur(44px) saturate(1.14);
+  pointer-events: none;
+}
+
+.releaseFeedMainButton {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.releaseFeedVisual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  min-height: 82px;
+  border-radius: 16px;
+  overflow: visible;
+  background: transparent;
+}
+
+.releaseFeedGlow {
+  position: absolute;
+  inset: 18%;
+  background: var(--release-cover);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.24;
+  filter: blur(36px);
+  transform: scale(1.08);
+}
+
+.releaseFeedCover {
+  position: relative;
+  z-index: 1;
+  width: 82px;
+  height: 82px;
+  border-radius: 16px;
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.releaseFeedMainButton:hover .releaseFeedCover {
+  transform: translateY(-2px) rotate(-2deg);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.36);
+}
+
+.releaseFeedMeta {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.releaseFeedBadgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.releaseFeedBadge {
+  min-height: 25px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.releaseFeedTitle {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #f7faf8;
+}
+
+.releaseFeedSubtitle {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.releaseFeedCaption {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.releaseFeedActions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.releaseFeedPrimaryButton,
+.releaseFeedSecondaryButton {
+  min-height: 40px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.releaseFeedPrimaryButton {
+  background: #f5cc46;
+  color: #1a1206;
+}
+
+.releaseFeedSecondaryButton {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.releaseFeedPrimaryButton:hover,
+.releaseFeedSecondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.releaseShowcase {
+  margin-top: 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.releaseShowcaseSplit {
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
+}
+
+.releaseShowcaseSingle {
+  grid-template-columns: minmax(0, 980px);
+  justify-content: start;
+}
+
+.releaseHeroCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at top right, rgba(245, 204, 70, 0.12), transparent 28%),
+    linear-gradient(150deg, rgba(28, 29, 33, 0.98), rgba(16, 17, 21, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 38px rgba(0, 0, 0, 0.22);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.releaseHeroCardSolo {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  grid-template-areas:
+    "main side"
+    "actions side";
+  align-items: stretch;
+}
+
+.releaseHeroCard::before {
+  content: "";
+  position: absolute;
+  inset: auto -8% -26% 44%;
+  height: 240px;
+  background: var(--release-cover);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.18;
+  filter: blur(54px) saturate(1.15);
+  pointer-events: none;
+}
+
+.releaseHeroMainButton {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.releaseHeroCardSolo .releaseHeroMainButton {
+  grid-area: main;
+}
+
+.releaseHeroVisual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  padding: 20px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.releaseHeroGlow {
+  position: absolute;
+  inset: 16%;
+  background: var(--release-cover);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.26;
+  filter: blur(46px) saturate(1.16);
+  transform: scale(1.08);
+}
+
+.releaseHeroCover {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 194px);
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.releaseHeroMainButton:hover .releaseHeroCover {
+  transform: translateY(-3px) rotate(-2deg);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.48);
+}
+
+.releaseHeroContent {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  align-content: center;
+}
+
+.releaseHeroEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.releaseHeroTitle {
+  font-size: 31px;
+  line-height: 0.98;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: #f7faf8;
+}
+
+.releaseHeroSubtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.releaseHeroMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.releaseHeroPill {
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.releaseHeroActions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.releaseHeroCardSolo .releaseHeroActions {
+  grid-area: actions;
+}
+
+.releaseHeroPrimaryButton,
+.releaseHeroSecondaryButton {
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.releaseHeroPrimaryButton {
+  background: #f5cc46;
+  color: #1a1206;
+}
+
+.releaseHeroSecondaryButton {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.releaseHeroPrimaryButton:hover,
+.releaseHeroSecondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.releaseHeroSoloPanel {
+  grid-area: side;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.releaseHeroSoloLabel {
+  color: rgba(245, 204, 70, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.releaseHeroSoloStats {
+  display: grid;
+  gap: 8px;
+}
+
+.releaseHeroSoloStat {
+  display: grid;
+  gap: 4px;
+  padding: 12px 12px 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.releaseHeroSoloStat strong {
+  color: #f7faf8;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.releaseHeroSoloText {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.releaseRail {
+  display: grid;
+  gap: 12px;
+}
+
+.releaseMiniCard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
+    rgba(15, 17, 23, 0.96);
+  padding: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.releaseMiniCard::before {
+  content: "";
+  position: absolute;
+  inset: auto -10% -34% 48%;
+  height: 140px;
+  background: var(--release-cover);
+  background-position: center;
+  background-size: cover;
+  opacity: 0.14;
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.releaseMiniMainButton {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.releaseMiniCover {
+  width: 68px;
+  height: 68px;
+  border-radius: 14px;
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.28);
+}
+
+.releaseMiniMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.releaseMiniTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #f7faf8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.releaseMiniSubtitle,
+.releaseMiniCaption {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.releaseMiniActions {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.releaseMiniActionButton {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(12, 12, 14, 0.88);
+  color: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.releaseMiniActionButton:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.releaseRailMore {
+  min-height: 44px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.68);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .notificationCard {
@@ -819,6 +1482,30 @@
     grid-template-columns: 1fr;
   }
 
+  .releaseHubHeader {
+    flex-direction: column;
+  }
+
+  .releaseCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .releaseShowcaseSplit {
+    grid-template-columns: 1fr;
+  }
+
+  .releaseShowcaseSingle {
+    grid-template-columns: 1fr;
+  }
+
+  .releaseHeroCardSolo {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "main"
+      "side"
+      "actions";
+  }
+
   .actionGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -862,6 +1549,65 @@
 
   .sectionHeading {
     font-size: 22px;
+  }
+
+  .releaseHub {
+    padding: 14px;
+  }
+
+  .releaseFeedMainButton {
+    grid-template-columns: 1fr;
+  }
+
+  .releaseFeedVisual {
+    width: 96px;
+    height: 96px;
+    min-height: 96px;
+  }
+
+  .releaseFeedCover {
+    width: 96px;
+    height: 96px;
+  }
+
+  .releaseFeedTitle {
+    font-size: 22px;
+  }
+
+  .releaseFeedActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .releaseHeroMainButton {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .releaseHeroVisual {
+    min-height: 184px;
+    padding: 14px;
+  }
+
+  .releaseHeroCover {
+    width: min(100%, 160px);
+  }
+
+  .releaseHeroTitle {
+    font-size: 24px;
+  }
+
+  .releaseHeroActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .releaseMiniCard {
+    grid-template-columns: 1fr;
+  }
+
+  .releaseMiniActions {
+    justify-content: flex-end;
   }
 
   .showcaseGrid {

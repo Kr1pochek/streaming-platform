@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isElevatedAdminRole,
   isUsernameUniqueViolation,
+  normalizeAdminRole,
   resolveSeedUserConfig,
 } from "../server/services/authService.js";
 
@@ -21,6 +23,7 @@ test("resolveSeedUserConfig normalizes username and display name", () => {
     username: "demo.user",
     password: "secret-123",
     displayName: "Demo Name",
+    adminRole: "super_admin",
     isAdmin: true,
   });
 });
@@ -32,6 +35,18 @@ test("resolveSeedUserConfig keeps seed admin disabled by default", () => {
   });
 
   assert.equal(result?.isAdmin, false);
+  assert.equal(result?.adminRole, "user");
+});
+
+test("resolveSeedUserConfig supports explicit moderator seed role", () => {
+  const result = resolveSeedUserConfig({
+    SEED_USERNAME: "demo",
+    SEED_PASSWORD: "secret-123",
+    SEED_ADMIN_ROLE: "moderator",
+  });
+
+  assert.equal(result?.adminRole, "moderator");
+  assert.equal(result?.isAdmin, true);
 });
 
 test("resolveSeedUserConfig requires username and password together", () => {
@@ -43,6 +58,23 @@ test("resolveSeedUserConfig requires username and password together", () => {
     () => resolveSeedUserConfig({ SEED_PASSWORD: "secret" }),
     /SEED_USERNAME and SEED_PASSWORD must be provided together/
   );
+  assert.throws(
+    () =>
+      resolveSeedUserConfig({
+        SEED_USERNAME: "demo",
+        SEED_PASSWORD: "secret",
+        SEED_ADMIN_ROLE: "owner",
+      }),
+    /SEED_ADMIN_ROLE must be one of/
+  );
+});
+
+test("admin role helpers normalize and detect elevated permissions", () => {
+  assert.equal(normalizeAdminRole(" moderator "), "moderator");
+  assert.equal(normalizeAdminRole("unknown"), "user");
+  assert.equal(isElevatedAdminRole("moderator"), true);
+  assert.equal(isElevatedAdminRole("super_admin"), true);
+  assert.equal(isElevatedAdminRole("user"), false);
 });
 
 test("isUsernameUniqueViolation detects postgres unique violation by code and constraint", () => {

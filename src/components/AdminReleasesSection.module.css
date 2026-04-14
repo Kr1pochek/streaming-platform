@@ -1,0 +1,778 @@
+.section {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(18, 20, 24, 0.95), rgba(14, 16, 20, 0.92));
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: rgba(255, 220, 149, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.description {
+  margin: 0;
+  max-width: 760px;
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.refreshButton,
+.filterButton,
+.actionGhostButton,
+.actionPrimaryButton,
+.actionDangerButton,
+.paginationButton,
+.dialogGhostButton,
+.dialogPrimaryButton,
+.dialogDangerButton,
+.segmentedButton,
+.iconGhostButton,
+.iconDangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.refreshButton,
+.actionGhostButton,
+.paginationButton,
+.dialogGhostButton,
+.segmentedButton,
+.iconGhostButton {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f5faf7;
+}
+
+.actionPrimaryButton,
+.dialogPrimaryButton {
+  background: rgba(106, 214, 129, 0.14);
+  border-color: rgba(106, 214, 129, 0.24);
+  color: #9ee37d;
+}
+
+.actionDangerButton,
+.dialogDangerButton,
+.iconDangerButton {
+  background: rgba(255, 111, 101, 0.16);
+  border-color: rgba(255, 111, 101, 0.24);
+  color: #ffb0ab;
+}
+
+.refreshButton:hover,
+.filterButton:hover,
+.actionGhostButton:hover,
+.actionPrimaryButton:hover,
+.actionDangerButton:hover,
+.paginationButton:hover,
+.dialogGhostButton:hover,
+.dialogPrimaryButton:hover,
+.dialogDangerButton:hover,
+.segmentedButton:hover,
+.iconGhostButton:hover,
+.iconDangerButton:hover {
+  transform: translateY(-1px);
+}
+
+.refreshButton:disabled,
+.filterButton:disabled,
+.actionGhostButton:disabled,
+.actionPrimaryButton:disabled,
+.actionDangerButton:disabled,
+.paginationButton:disabled,
+.dialogGhostButton:disabled,
+.dialogPrimaryButton:disabled,
+.dialogDangerButton:disabled,
+.segmentedButton:disabled,
+.iconGhostButton:disabled,
+.iconDangerButton:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.searchField,
+.trackSearch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(240, 245, 242, 0.65);
+}
+
+.searchField input,
+.trackSearch input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f7faf8;
+  font-size: 14px;
+}
+
+.searchField input::placeholder,
+.trackSearch input::placeholder {
+  color: rgba(236, 242, 238, 0.42);
+}
+
+.filters,
+.segmentedRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterButton {
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(240, 245, 242, 0.82);
+}
+
+.filterButtonActive,
+.segmentedButtonActive {
+  background: rgba(255, 220, 149, 0.14);
+  border-color: rgba(255, 220, 149, 0.28);
+  color: #ffe6a3;
+}
+
+.summaryBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: rgba(236, 242, 238, 0.66);
+  font-size: 12px;
+}
+
+.summaryBar span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.feedback,
+.inlineError {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.feedback {
+  background: rgba(106, 214, 129, 0.12);
+  border: 1px solid rgba(106, 214, 129, 0.18);
+  color: #a8ebb5;
+}
+
+.inlineError {
+  background: rgba(255, 111, 101, 0.12);
+  border: 1px solid rgba(255, 111, 101, 0.18);
+  color: #ffb4af;
+}
+
+.emptyState {
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.emptyDescription {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.cardList {
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cardDraft {
+  border-color: rgba(255, 220, 149, 0.18);
+  background: linear-gradient(140deg, rgba(255, 220, 149, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.cardMain {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.cover {
+  width: 104px;
+  height: 104px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meta {
+  display: grid;
+  gap: 10px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.releaseTitle {
+  margin: 0;
+  color: #f7faf8;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.statusBadge,
+.smallBadge,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(240, 245, 242, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.statusBadgePublished {
+  background: rgba(106, 214, 129, 0.12);
+  border-color: rgba(106, 214, 129, 0.24);
+  color: #a2ebb2;
+}
+
+.statusBadgeDraft {
+  background: rgba(255, 220, 149, 0.12);
+  border-color: rgba(255, 220, 149, 0.24);
+  color: #ffe1a1;
+}
+
+.releaseArtist {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.78);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.releaseDescription {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.detailItem {
+  display: grid;
+  gap: 4px;
+}
+
+.detailLabel {
+  color: rgba(236, 242, 238, 0.5);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detailValue {
+  color: #f7faf8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.paginationLabel {
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 13px;
+}
+
+.editorDialog {
+  width: min(1120px, 100%);
+}
+
+.editorDialogContent {
+  padding-right: 6px;
+}
+
+.editorLayout {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.35fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.editorSidebar,
+.editorTracks {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.releasePreview {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(255, 220, 149, 0.14), transparent 42%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+}
+
+.releasePreviewCover {
+  width: 148px;
+  min-height: 148px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-position: center;
+  background-size: cover;
+}
+
+.releasePreviewMeta {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.releasePreviewBadges,
+.releasePreviewFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.releasePreviewTitle {
+  margin: 0;
+  color: #f7faf8;
+  font-size: 24px;
+  line-height: 1.08;
+  font-weight: 850;
+}
+
+.releasePreviewArtist {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.78);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.releasePreviewDescription {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dialogField {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dialogField span {
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dialogFieldFull {
+  grid-column: 1 / -1;
+}
+
+.dialogInput,
+.dialogSelect,
+.dialogTextarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7faf8;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.dialogSelect {
+  appearance: none;
+  color-scheme: dark;
+  cursor: pointer;
+  padding-right: 40px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(247, 250, 248, 0.74) 50%),
+    linear-gradient(135deg, rgba(247, 250, 248, 0.74) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.dialogSelect option {
+  background: #ffffff;
+  color: #16181d;
+}
+
+.dialogSelect option:checked {
+  background: #f5cc46;
+  color: #171105;
+}
+
+.dialogTextarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.trackBuilder {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.trackBuilderHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.builderTitle {
+  margin: 0 0 4px;
+  color: #f7faf8;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.builderText {
+  margin: 0;
+  max-width: 620px;
+  color: rgba(236, 242, 238, 0.66);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.builderGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.trackPool,
+.selectedTracks {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.builderSubtitle {
+  margin: 0;
+  color: #f7faf8;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.trackPoolList,
+.selectedTrackList {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.trackPoolItem,
+.selectedTrackItem {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.trackPoolItem {
+  cursor: pointer;
+  text-align: left;
+}
+
+.trackPoolItemSelected {
+  border-color: rgba(255, 220, 149, 0.28);
+  background: rgba(255, 220, 149, 0.08);
+}
+
+.trackPoolCover {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.trackPoolMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.trackPoolTitle {
+  color: #f7faf8;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackPoolArtist {
+  color: rgba(236, 242, 238, 0.64);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackPoolAction {
+  color: rgba(255, 220, 149, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.selectedTrackItem {
+  grid-template-columns: 24px 42px minmax(0, 1fr) auto;
+}
+
+.selectedTrackIndex {
+  color: rgba(236, 242, 238, 0.54);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.selectedTrackActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconGhostButton,
+.iconDangerButton {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+}
+
+.builderEmpty {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.62);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.refreshButton:focus-visible,
+.filterButton:focus-visible,
+.actionGhostButton:focus-visible,
+.actionPrimaryButton:focus-visible,
+.actionDangerButton:focus-visible,
+.paginationButton:focus-visible,
+.dialogGhostButton:focus-visible,
+.dialogPrimaryButton:focus-visible,
+.dialogDangerButton:focus-visible,
+.dialogInput:focus-visible,
+.dialogSelect:focus-visible,
+.dialogTextarea:focus-visible,
+.segmentedButton:focus-visible,
+.searchField input:focus-visible,
+.trackSearch input:focus-visible,
+.trackPoolItem:focus-visible,
+.iconGhostButton:focus-visible,
+.iconDangerButton:focus-visible {
+  outline: 2px solid rgba(255, 220, 149, 0.96);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1180px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .builderGrid,
+  .formGrid,
+  .editorLayout,
+  .cardMain {
+    grid-template-columns: 1fr;
+  }
+
+  .trackBuilderHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trackSearch {
+    width: 100%;
+  }
+
+  .cover {
+    width: 100%;
+    max-width: 180px;
+    height: 180px;
+  }
+}
+
+@media (max-width: 760px) {
+  .section {
+    padding: 18px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .releasePreview {
+    grid-template-columns: 1fr;
+  }
+
+  .releasePreviewCover {
+    width: 100%;
+    min-height: 220px;
+  }
+
+  .headerActions,
+  .cardActions,
+  .details,
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .refreshButton,
+  .actionGhostButton,
+  .actionPrimaryButton,
+  .actionDangerButton,
+  .paginationButton {
+    width: 100%;
+  }
+}

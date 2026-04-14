@@ -1,6 +1,8 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiChevronRight, FiHeart, FiMoreHorizontal, FiPlay, FiSearch } from "react-icons/fi";
+import { useRef } from "react";
+import { useLocation } from "react-router-dom";
 import styles from "./SearchPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -67,6 +69,7 @@ function mergeById(currentItems = [], nextItems = []) {
 
 export default function SearchPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const loadSearchFeed = useCallback(() => fetchSearchFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadSearchFeed);
 
@@ -81,14 +84,36 @@ export default function SearchPage() {
   } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
+  const initialQueryFromNavigation =
+    typeof location.state?.initialQuery === "string" ? location.state.initialQuery.trim() : "";
+  const appliedInitialQueryRef = useRef("");
 
   const [activeTab, setActiveTab] = useState("popular");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQueryFromNavigation);
   const [resultFilter, setResultFilter] = useState("all");
   const [searchOffset, setSearchOffset] = useState(0);
   const [searchState, setSearchState] = useState(emptySearchState);
 
   const normalizedQuery = query.trim();
+
+  useEffect(() => {
+    if (!initialQueryFromNavigation || appliedInitialQueryRef.current === initialQueryFromNavigation) {
+      return;
+    }
+
+    appliedInitialQueryRef.current = initialQueryFromNavigation;
+    setActiveTab("popular");
+    setQuery(initialQueryFromNavigation);
+    setResultFilter("all");
+    setSearchOffset(0);
+    setSearchState({
+      status: "loading",
+      data: { tracks: [], playlists: [], artists: [], albums: [] },
+      error: "",
+      pagination: defaultPagination,
+      loadingMore: false,
+    });
+  }, [initialQueryFromNavigation]);
 
   const resetSearch = () => {
     setQuery("");

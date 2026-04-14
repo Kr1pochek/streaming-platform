@@ -31,6 +31,12 @@ export default function ReleasePage() {
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const artistLine = useMemo(() => data?.release?.artistName ?? "", [data?.release?.artistName]);
+  const releaseTrackIds =
+    Array.isArray(data?.release?.trackIds) && data.release.trackIds.length
+      ? data.release.trackIds
+      : Array.isArray(data?.tracks)
+        ? data.tracks.map((track) => track.id).filter(Boolean)
+        : [];
 
   return (
     <PageShell>
@@ -67,14 +73,20 @@ export default function ReleasePage() {
                 <span>{formatDurationClock(data.totalDurationSec)}</span>
               </div>
               <div className={styles.heroActions}>
-                <button type="button" className={styles.primaryButton} onClick={() => playQueue(data.release.trackIds, 0)}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  disabled={!releaseTrackIds.length}
+                  onClick={() => playQueue(releaseTrackIds, 0)}
+                >
                   <FiPlay />
                   Слушать
                 </button>
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  onClick={() => playQueue(shuffleTrackIds(data.release.trackIds), 0)}
+                  disabled={!releaseTrackIds.length}
+                  onClick={() => playQueue(shuffleTrackIds(releaseTrackIds), 0)}
                 >
                   <FiShuffle />
                   Перемешать
@@ -85,48 +97,76 @@ export default function ReleasePage() {
 
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Треки релиза</h2>
-            <ul className={styles.trackList}>
-              {data.tracks.map((track, index) => {
-                const liked = likedIds.includes(track.id);
-                const isActive = currentTrackId === track.id;
-                return (
-                  <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
-                    <button
-                      type="button"
-                      className={styles.trackMain}
-                      onClick={() => playTrack(track.id)}
-                      onContextMenu={(event) => openTrackMenu(event, track.id)}
-                    >
-                      <span className={styles.trackIndex}>{index + 1}</span>
-                      <span className={styles.trackCover} style={{ background: track.cover }} />
-                      <span className={styles.trackMeta}>
-                        <span className={styles.trackTitle}>
-                          {track.title}
-                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
+            {data.tracks.length ? (
+              <ul className={styles.trackList}>
+                {data.tracks.map((track, index) => {
+                  const liked = likedIds.includes(track.id);
+                  const isActive = currentTrackId === track.id;
+                  return (
+                    <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
+                      <button
+                        type="button"
+                        className={styles.trackMain}
+                        onClick={() => playTrack(track.id)}
+                        onContextMenu={(event) => openTrackMenu(event, track.id)}
+                      >
+                        <span className={styles.trackIndex}>{index + 1}</span>
+                        <span className={styles.trackCover} style={{ background: track.cover }} />
+                        <span className={styles.trackMeta}>
+                          <span className={styles.trackTitle}>
+                            {track.title}
+                            {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
+                          </span>
+                          <ArtistInlineLinks
+                            artistLine={track.artist}
+                            className={styles.trackArtist}
+                            linkClassName={styles.trackArtistButton}
+                            textClassName={styles.trackArtist}
+                            onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                            stopPropagation
+                          />
                         </span>
-                        <ArtistInlineLinks
-                          artistLine={track.artist}
-                          className={styles.trackArtist}
-                          linkClassName={styles.trackArtistButton}
-                          textClassName={styles.trackArtist}
-                          onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                          stopPropagation
-                        />
-                      </span>
-                      <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Открыть меню трека"
-                      onClick={(event) => openTrackMenu(event, track.id)}
-                    >
-                      <FiMoreHorizontal />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                        <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.iconButton}
+                        aria-label="Открыть меню трека"
+                        onClick={(event) => openTrackMenu(event, track.id)}
+                      >
+                        <FiMoreHorizontal />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className={styles.emptyText}>В этом релизе пока нет доступных треков.</p>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Плейлисты с этим релизом</h2>
+            {data.relatedPlaylists.length ? (
+              <div className={styles.releaseGrid}>
+                {data.relatedPlaylists.map((playlist) => (
+                  <button
+                    key={playlist.id}
+                    type="button"
+                    className={styles.releaseCard}
+                    onClick={() => navigate(`/playlist/${playlist.id}`)}
+                  >
+                    <span className={styles.releaseCover} style={{ background: playlist.cover }} />
+                    <span className={styles.releaseTitle}>{playlist.title}</span>
+                    <span className={styles.releaseMeta}>
+                      {playlist.subtitle || `${playlist.trackIds.length} треков`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className={styles.emptyText}>Этот релиз пока не входит в готовые подборки.</p>
+            )}
           </section>
 
           <section className={styles.section}>
