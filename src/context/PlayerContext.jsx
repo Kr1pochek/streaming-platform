@@ -13,6 +13,7 @@ const repeatModes = ["off", "all", "one"];
 const REMOTE_STATE_PROGRESS_STEP_SEC = 15;
 const REMOTE_STATE_SAVE_DELAY_IDLE_MS = 450;
 const REMOTE_STATE_SAVE_DELAY_PLAYING_MS = 1_200;
+const TRAILER_STOP_TOLERANCE_SEC = 0.08;
 let runtimeTracks = [];
 let runtimeArtists = [];
 let trackMap = Object.create(null);
@@ -38,7 +39,7 @@ const defaultState = {
   streamQualityMode: "off",
   streamQualityLevel: "",
   seekVersion: 0,
-  previewSession: null,
+  trailerSession: null,
   toastSeq: 0,
   toastItems: [],
   catalogVersion: 0,
@@ -102,7 +103,7 @@ function addHistory(historyIds, trackId) {
   return [trackId, ...filtered].slice(0, 24);
 }
 
-function resolvePreviewSession(track, requestedDurationSec = 18) {
+function resolveTrailerSession(track, requestedDurationSec = 18) {
   const trackDuration = Math.max(0, Number(track?.durationSec ?? 0));
   const safeDuration = clamp(Number(requestedDurationSec) || 18, 15, 20);
   if (!trackDuration) {
@@ -113,24 +114,37 @@ function resolvePreviewSession(track, requestedDurationSec = 18) {
     };
   }
 
-  const previewDuration = Math.min(safeDuration, trackDuration);
-  if (trackDuration <= previewDuration + 6) {
+  const trailerDuration = Math.min(safeDuration, trackDuration);
+  if (trackDuration <= trailerDuration + 6) {
     return {
       trackId: track.id,
       startSec: 0,
-      endSec: previewDuration,
+      endSec: trailerDuration,
     };
   }
 
-  const maxStartSec = Math.max(trackDuration - previewDuration - 4, 0);
+  const maxStartSec = Math.max(trackDuration - trailerDuration - 4, 0);
   const preferredStartSec = Math.max(Math.floor(trackDuration * 0.22), 12);
   const startSec = clamp(preferredStartSec, 0, maxStartSec);
 
   return {
     trackId: track.id,
     startSec,
-    endSec: Math.min(trackDuration, startSec + previewDuration),
+    endSec: Math.min(trackDuration, startSec + trailerDuration),
   };
+}
+
+function shouldStopTrailerPlayback(trailerSession, trackId, currentTimeSec) {
+  const activeTrackId = String(trackId ?? "").trim();
+  const trailerTrackId = String(trailerSession?.trackId ?? "").trim();
+  const trailerEndSec = Number(trailerSession?.endSec);
+  if (!activeTrackId || !trailerTrackId || trailerTrackId !== activeTrackId) {
+    return false;
+  }
+  if (!Number.isFinite(trailerEndSec)) {
+    return false;
+  }
+  return Number(currentTimeSec) + TRAILER_STOP_TOLERANCE_SEC >= trailerEndSec;
 }
 
 function pickRandomIndex(currentIndex, length) {
@@ -243,7 +257,7 @@ function playerReducer(state, action) {
       return {
         ...state,
         isPlaying: !state.isPlaying,
-        previewSession: state.isPlaying ? null : state.previewSession,
+        trailerSession: state.isPlaying ? null : state.trailerSession,
       };
     }
 
@@ -289,7 +303,7 @@ function playerReducer(state, action) {
         currentIndex: nextCurrentIndex,
         progressSec: nextProgress,
         isPlaying: false,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: hasRemoteQueue ? state.seekVersion + 1 : state.seekVersion,
         likedIds: uniqueTrackIds(action.likedIds ?? []),
         followedArtistIds: uniqueArtistIds(action.followedArtistIds ?? []),
@@ -298,7 +312,7 @@ function playerReducer(state, action) {
       };
     }
 
-    case "play_preview": {
+    case "play_trailer": {
       const track = trackMap[action.trackId];
       if (!track) {
         return state;
@@ -307,15 +321,15 @@ function playerReducer(state, action) {
       const existingIndex = state.queue.indexOf(action.trackId);
       const nextQueue = existingIndex >= 0 ? state.queue : [action.trackId, ...state.queue.filter(Boolean)];
       const nextIndex = existingIndex >= 0 ? existingIndex : 0;
-      const previewSession = resolvePreviewSession(track, action.durationSec);
+      const trailerSession = resolveTrailerSession(track, action.durationSec);
 
       return {
         ...state,
         queue: nextQueue,
         currentIndex: nextIndex,
         isPlaying: true,
-        progressSec: previewSession.startSec,
-        previewSession,
+        progressSec: trailerSession.startSec,
+        trailerSession,
         seekVersion: state.seekVersion + 1,
         historyIds: addHistory(state.historyIds, action.trackId),
       };
@@ -336,7 +350,7 @@ function playerReducer(state, action) {
         currentIndex: nextIndex,
         isPlaying: true,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         historyIds: addHistory(state.historyIds, action.trackId),
       };
@@ -357,7 +371,7 @@ function playerReducer(state, action) {
         currentIndex: startIndex,
         isPlaying: true,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         historyIds: addHistory(state.historyIds, nextTrackId),
       };
@@ -375,7 +389,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: index,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, trackId),
@@ -394,7 +408,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: nextIndex,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, nextTrackId),
@@ -410,7 +424,7 @@ function playerReducer(state, action) {
         return {
           ...state,
           progressSec: 0,
-          previewSession: null,
+          trailerSession: null,
           seekVersion: state.seekVersion + 1,
         };
       }
@@ -422,7 +436,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: prevIndex,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, prevTrackId),
@@ -437,7 +451,7 @@ function playerReducer(state, action) {
           ...state,
           isPlaying: false,
           progressSec: 0,
-          previewSession: null,
+          trailerSession: null,
         };
       }
 
@@ -445,7 +459,7 @@ function playerReducer(state, action) {
         return {
           ...state,
           progressSec: 0,
-          previewSession: null,
+          trailerSession: null,
           seekVersion: state.seekVersion + 1,
           isPlaying: true,
           historyIds: addHistory(state.historyIds, currentTrackId),
@@ -458,7 +472,7 @@ function playerReducer(state, action) {
           ...state,
           isPlaying: false,
           progressSec: currentTrack.durationSec,
-          previewSession: null,
+          trailerSession: null,
         };
       }
 
@@ -467,7 +481,7 @@ function playerReducer(state, action) {
         ...state,
         currentIndex: nextIndex,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
         isPlaying: true,
         historyIds: addHistory(state.historyIds, nextTrackId),
@@ -484,7 +498,7 @@ function playerReducer(state, action) {
       return {
         ...state,
         progressSec,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
       };
     }
@@ -495,16 +509,12 @@ function playerReducer(state, action) {
       if (!track) return state;
 
       const nextValue = clamp(action.progressSec, 0, track.durationSec);
-      if (
-        state.previewSession?.trackId === trackId &&
-        Number.isFinite(Number(state.previewSession?.endSec)) &&
-        nextValue >= Number(state.previewSession.endSec)
-      ) {
+      if (shouldStopTrailerPlayback(state.trailerSession, trackId, nextValue)) {
         return {
           ...state,
           isPlaying: false,
-          progressSec: Number(state.previewSession.endSec),
-          previewSession: null,
+          progressSec: Number(state.trailerSession.endSec),
+          trailerSession: null,
         };
       }
 
@@ -515,6 +525,20 @@ function playerReducer(state, action) {
       return {
         ...state,
         progressSec: nextValue,
+      };
+    }
+
+    case "finish_trailer": {
+      const trackId = state.queue[state.currentIndex];
+      if (!shouldStopTrailerPlayback(state.trailerSession, trackId, action.endSec)) {
+        return state;
+      }
+
+      return {
+        ...state,
+        isPlaying: false,
+        progressSec: Number(state.trailerSession.endSec),
+        trailerSession: null,
       };
     }
 
@@ -577,7 +601,7 @@ function playerReducer(state, action) {
           currentIndex: 0,
           isPlaying: false,
           progressSec: 0,
-          previewSession: null,
+          trailerSession: null,
           seekVersion: state.seekVersion + 1,
         };
       }
@@ -599,7 +623,7 @@ function playerReducer(state, action) {
         queue: nextQueue,
         currentIndex: nextIndex,
         progressSec: nextProgress,
-        previewSession: index === state.currentIndex ? null : state.previewSession,
+        trailerSession: index === state.currentIndex ? null : state.trailerSession,
         seekVersion: state.seekVersion + (index === state.currentIndex ? 1 : 0),
         historyIds: nextHistory,
       };
@@ -612,7 +636,7 @@ function playerReducer(state, action) {
         currentIndex: 0,
         isPlaying: false,
         progressSec: 0,
-        previewSession: null,
+        trailerSession: null,
         seekVersion: state.seekVersion + 1,
       };
       return state.queue.length ? enqueueToast(nextState, "Очередь очищена") : nextState;
@@ -1070,6 +1094,7 @@ export function PlayerProvider({ children }) {
   const loadedTrackIdRef = useRef(null);
   const loadedSourceKeyRef = useRef("");
   const seekVersionRef = useRef(0);
+  const trailerSessionRef = useRef(defaultState.trailerSession);
 
   const updateStreamQuality = useCallback((nextState) => {
     dispatch({
@@ -1108,6 +1133,10 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     streamQualitySelectionRef.current = normalizeStreamQualitySelection(state.streamQualitySelected);
   }, [state.streamQualitySelected]);
+
+  useEffect(() => {
+    trailerSessionRef.current = state.trailerSession;
+  }, [state.trailerSession]);
 
   const applyCatalogPayload = useCallback((data) => {
     const nextTracks = Array.isArray(data?.tracks) ? data.tracks : [];
@@ -1479,6 +1508,31 @@ export function PlayerProvider({ children }) {
   const clampedProgress = clamp(state.progressSec, 0, currentDuration || state.progressSec);
   const progressPercent = currentDuration ? Math.round((clampedProgress / currentDuration) * 100) : 0;
 
+  const stopTrailerPlayback = useCallback(
+    (audio, trailerSession = trailerSessionRef.current) => {
+      const activeTrackId = loadedTrackIdRef.current;
+      if (!audio || !shouldStopTrailerPlayback(trailerSession, activeTrackId, audio.currentTime)) {
+        return false;
+      }
+
+      const endSec = Number(trailerSession.endSec);
+      trailerSessionRef.current = null;
+      audio.pause();
+      try {
+        audio.currentTime = endSec;
+      } catch {
+        // noop
+      }
+      dispatch({
+        type: "finish_trailer",
+        trackId: trailerSession.trackId,
+        endSec,
+      });
+      return true;
+    },
+    []
+  );
+
   useEffect(() => {
     if (!currentTrackId || !currentTrack || !shouldRefreshPlayback(currentTrack)) {
       return;
@@ -1530,6 +1584,15 @@ export function PlayerProvider({ children }) {
     if (!audio) return undefined;
 
     const handleTimeUpdate = () => {
+      if (stopTrailerPlayback(audio)) {
+        return;
+      }
+      dispatch({ type: "sync_progress_sec", progressSec: audio.currentTime });
+    };
+    const handleSeeked = () => {
+      if (stopTrailerPlayback(audio)) {
+        return;
+      }
       dispatch({ type: "sync_progress_sec", progressSec: audio.currentTime });
     };
     const handleEnded = () => {
@@ -1537,13 +1600,15 @@ export function PlayerProvider({ children }) {
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("seeked", handleSeeked);
     audio.addEventListener("ended", handleEnded);
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("seeked", handleSeeked);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [ensureAudioElement]);
+  }, [ensureAudioElement, stopTrailerPlayback]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1745,8 +1810,8 @@ export function PlayerProvider({ children }) {
         }
         dispatch({ type: "play_track", trackId });
       },
-      playTrackPreview: (trackId, durationSec = 18) =>
-        dispatch({ type: "play_preview", trackId, durationSec }),
+      playTrackTrailer: (trackId, durationSec = 18) =>
+        dispatch({ type: "play_trailer", trackId, durationSec }),
       playQueue: (trackIds, startIndex = 0) => dispatch({ type: "play_queue", trackIds, startIndex }),
       jumpToQueueIndex: (index) => dispatch({ type: "jump_to_index", index }),
       nextTrack: () => dispatch({ type: "next_track" }),

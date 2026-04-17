@@ -38,7 +38,7 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
     toggleLikeTrack,
     addTrackNext,
     addTrackLast,
-    playTrackPreview,
+    playTrackTrailer,
     notify,
   } = usePlayer();
 
@@ -177,7 +177,7 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
     if (!trackId) {
       return;
     }
-    playTrackPreview(trackId, 18);
+    playTrackTrailer(trackId, 18);
     handleClose();
   };
 

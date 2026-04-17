@@ -136,6 +136,11 @@ async function main() {
     console.log("Skipping default catalog seed because snapshot data is already loaded.");
   } else {
     console.log(`Portable snapshot restore skipped: ${snapshotRestore.reason}.`);
+    if (Number(snapshotRestore.mediaFileCount ?? 0) > 0) {
+      console.log(
+        `Portable snapshot media synced into local storage (${snapshotRestore.mediaFileCount} files).`
+      );
+    }
     console.log("Seeding catalog data...");
     await runNodeScript("scripts/db/seed.mjs", "Database seed");
   }

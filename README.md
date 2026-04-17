@@ -261,18 +261,38 @@ If `.env` is missing, Docker falls back to local-safe defaults such as `PGPASSWO
 Create `.env` only when you want to override DB credentials, CORS, storage, or other runtime settings.
 
 ```bash
-docker compose up --build
+docker compose up --build -d
+```
+
+Windows note:
+- start Docker Desktop first, otherwise `docker compose` will fail before containers are even created
+
+Or simply use:
+
+```bash
+npm run docker:up
+```
+
+On Windows this command now tries to launch Docker Desktop automatically, waits for the Docker engine, and then runs `docker compose up --build -d`.
+
+Open: `http://localhost:4000`.
+
+Useful follow-up commands:
+
+```bash
+docker compose logs -f app
+docker compose down
+docker compose down -v
 ```
 
 Services:
 - `db` (internal PostgreSQL service, not published to the host by default)
 - `app` (waits for DB, runs migrations, restores portable snapshot when available, otherwise runs seed, then serves API + built frontend on `4000`)
 
-Open: `http://localhost:4000`.
-
 Notes:
 - uploaded/local audio is persisted in the named Docker volume `media_data`
 - runtime image includes `ffmpeg`, so upload transcoding and HLS generation can work inside the container
+- container always uses bundled Linux `ffmpeg/ffprobe`, so host Windows paths from local `.env` do not break Docker startup
 - if you need direct access to PostgreSQL, prefer `docker compose exec db psql ...` instead of opening `5432` publicly
 - committed portable snapshots are copied into the runtime image and restored only when the database is empty
 
@@ -310,6 +330,10 @@ npm run build
 - `npm run audio:import` - import audio into `public/audio/tracks`
 - `npm run stream:hls` - generate HLS manifests/segments into `public/audio/hls`
 - `npm run media:migrate:s3` - upload local audio to S3 and rewrite DB `tracks.audio_url`
+- `npm run docker:up` - start Docker Desktop on Windows when needed, then run `docker compose up --build -d`
+- `npm run docker:down` - stop Docker services
+- `npm run docker:logs` - follow app container logs
+- `npm run docker:reset` - stop Docker services and remove named volumes
 - `npm run test` - tests (`node:test`)
 - `npm run lint` - eslint
 - `npm run build` - frontend production build

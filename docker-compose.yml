@@ -31,7 +31,7 @@ services:
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: 4000
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4000,http://127.0.0.1:4000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4000,http://127.0.0.1:4000,http://localhost:5173,http://127.0.0.1:5173}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       SERVE_CLIENT: ${SERVE_CLIENT:-true}
       PASSWORD_RESET_RETURN_TOKEN: ${PASSWORD_RESET_RETURN_TOKEN:-false}
@@ -54,8 +54,8 @@ services:
       MEDIA_S3_PUBLIC_BASE_URL: ${MEDIA_S3_PUBLIC_BASE_URL:-}
       MEDIA_S3_ACL: ${MEDIA_S3_ACL:-}
       GENERATE_HLS_ON_UPLOAD: ${GENERATE_HLS_ON_UPLOAD:-true}
-      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
-      FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
+      FFMPEG_PATH: ffmpeg
+      FFPROBE_PATH: ffprobe
       PORTABLE_SNAPSHOT_FORCE_RESTORE: ${PORTABLE_SNAPSHOT_FORCE_RESTORE:-false}
       PORTABLE_SNAPSHOT_RESTORE_MEDIA: ${PORTABLE_SNAPSHOT_RESTORE_MEDIA:-true}
     command: ["node", "scripts/start-app.mjs"]

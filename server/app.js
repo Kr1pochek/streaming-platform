@@ -29,13 +29,30 @@ function createCorsOptions() {
   const allowAnyOrigin = configuredOrigins.includes("*");
 
   return {
-    origin(origin, callback) {
-      if (!origin || allowAnyOrigin || configuredOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error("CORS policy violation"));
-    },
+    configuredOrigins,
+    allowAnyOrigin,
+  };
+}
+
+function createCorsOptionsDelegate() {
+  const { configuredOrigins, allowAnyOrigin } = createCorsOptions();
+
+  return (req, callback) => {
+    const requestOrigin = String(req.header("origin") ?? "").trim();
+    const requestHost = String(req.header("host") ?? "").trim();
+    const requestProtocol = String(req.protocol ?? "http").trim() || "http";
+    const sameOrigin = Boolean(
+      requestOrigin &&
+      requestHost &&
+      requestOrigin === `${requestProtocol}://${requestHost}`
+    );
+
+    if (!requestOrigin || allowAnyOrigin || sameOrigin || configuredOrigins.includes(requestOrigin)) {
+      callback(null, { origin: true });
+      return;
+    }
+
+    callback(new Error("CORS policy violation"));
   };
 }
 
@@ -72,11 +89,12 @@ export function createApp({ apiRouterOptions = {}, apiRateLimitOptions = {} } = 
   const app = express();
   const serveClientBuild = shouldServeClientBuild();
   const jsonLimit = String(process.env.API_JSON_LIMIT ?? "4mb");
+  const corsOptionsDelegate = createCorsOptionsDelegate();
 
   app.set("trust proxy", parseTrustProxySetting());
   app.use(requestLogger);
-  app.use(cors(createCorsOptions()));
   app.use(express.json({ limit: jsonLimit }));
+  app.use("/api", cors(corsOptionsDelegate));
   app.use(
     "/api",
     createRateLimiter({

@@ -171,12 +171,49 @@ function copyDirectoryRecursive(sourceRoot, destinationRoot) {
 }
 
 function replaceDirectoryContents(sourceRoot, destinationRoot) {
-  fs.rmSync(destinationRoot, { recursive: true, force: true });
   fs.mkdirSync(destinationRoot, { recursive: true });
+  const existingEntries = fs.readdirSync(destinationRoot, { withFileTypes: true });
+  for (const entry of existingEntries) {
+    fs.rmSync(path.resolve(destinationRoot, entry.name), { recursive: true, force: true });
+  }
   if (!fs.existsSync(sourceRoot)) {
     return 0;
   }
   return copyDirectoryRecursive(sourceRoot, destinationRoot);
+}
+
+export function syncDirectoryMissingFiles(sourceRoot, destinationRoot) {
+  if (!fs.existsSync(sourceRoot)) {
+    return 0;
+  }
+
+  fs.mkdirSync(destinationRoot, { recursive: true });
+  const stack = [{ sourcePath: sourceRoot, destinationPath: destinationRoot }];
+  let copiedFileCount = 0;
+
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current.sourcePath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const sourcePath = path.resolve(current.sourcePath, entry.name);
+      const destinationPath = path.resolve(current.destinationPath, entry.name);
+
+      if (entry.isDirectory()) {
+        fs.mkdirSync(destinationPath, { recursive: true });
+        stack.push({ sourcePath, destinationPath });
+        continue;
+      }
+
+      if (entry.isFile() && !fs.existsSync(destinationPath)) {
+        fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+        fs.copyFileSync(sourcePath, destinationPath);
+        copiedFileCount += 1;
+      }
+    }
+  }
+
+  return copiedFileCount;
 }
 
 function loadSnapshotFromDisk() {
@@ -324,13 +361,19 @@ export async function restorePortableSnapshotIfNeeded({ env = process.env } = {}
       };
     }
 
+    const restoreMedia = parseBoolean(env.PORTABLE_SNAPSHOT_RESTORE_MEDIA, true);
     const forceRestore = parseBoolean(env.PORTABLE_SNAPSHOT_FORCE_RESTORE, false);
     const dataCheck = await detectApplicationData(pool, existingTables);
     if (!forceRestore && dataCheck.hasData) {
+      const mediaFileCount = restoreMedia
+        ? syncDirectoryMissingFiles(snapshotMediaRoot, localMediaRoot)
+        : 0;
       return {
         restored: false,
         reason: "database-not-empty",
         details: dataCheck.details,
+        mediaFileCount,
+        mediaSynchronized: mediaFileCount > 0,
       };
     }
 
@@ -354,7 +397,6 @@ export async function restorePortableSnapshotIfNeeded({ env = process.env } = {}
       client.release();
     }
 
-    const restoreMedia = parseBoolean(env.PORTABLE_SNAPSHOT_RESTORE_MEDIA, true);
     const mediaFileCount = restoreMedia
       ? replaceDirectoryContents(snapshotMediaRoot, localMediaRoot)
       : 0;
