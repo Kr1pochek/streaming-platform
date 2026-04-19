@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
+import { splitArtistNames } from "../../shared/artistNameParsing.js";
 import {
   artistReleases,
   artists as seedArtists,
@@ -14,6 +15,9 @@ import {
   getEmbeddedPlaybackUrlTtlMs,
   shouldEmbedSignedPlaybackUrl,
 } from "./playbackService.js";
+
+export { splitArtistNames };
+
 export const USER_PLAYLIST_ID_PREFIX = "upl-";
 export const SYSTEM_PLAYLIST_ID_PREFIX = "sys-";
 export const DEFAULT_ERROR_MESSAGE = "Failed to load data. Please refresh the page.";
@@ -36,6 +40,10 @@ export const streamRoutePrefix = "/api/stream/";
 export const hlsDirectory = path.resolve(mediaDirectory, "hls");
 export const hlsRoutePrefix = `${mediaRoutePrefix}hls/`;
 const hlsManifestCandidates = ["master.m3u8", "index.m3u8"];
+const defaultSeedTrackIds = seedTracks.map((item) => String(item?.id ?? "").trim()).filter(Boolean);
+const defaultSeedPlaylistIds = seedPlaylists.map((item) => String(item?.id ?? "").trim()).filter(Boolean);
+const defaultSeedArtistIds = seedArtists.map((item) => String(item?.id ?? "").trim()).filter(Boolean);
+const defaultSeedReleaseIds = artistReleases.map((item) => String(item?.id ?? "").trim()).filter(Boolean);
 
 const trackOrderMap = new Map(seedTracks.map((item, index) => [item.id, index]));
 const playlistOrderMap = new Map(seedPlaylists.map((item, index) => [item.id, index]));
@@ -85,19 +93,16 @@ export function parseBooleanFlag(value, fallback = false) {
   return fallback;
 }
 
+export function isDefaultCatalogSeedEnabled(env = process.env) {
+  return parseBooleanFlag(env?.ENABLE_DEFAULT_CATALOG_SEED, false);
+}
+
 export function normalizePlaylistSubtitle(value = "") {
   const subtitle = normalizeTitle(value);
   if (LEGACY_CUSTOM_PLAYLIST_SUBTITLES.has(subtitle)) {
     return CUSTOM_PLAYLIST_SUBTITLE;
   }
   return subtitle;
-}
-
-export function splitArtistNames(value = "") {
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 export function includesText(text = "", query = "") {
@@ -736,7 +741,7 @@ export async function validateCatalogAudioFiles({
 export async function seedReleasesIfEmpty() {
   const { rows } = await pool.query("select count(*)::int as count from releases;");
   if (Number(rows[0]?.count ?? 0) > 0) {
-    return;
+    return false;
   }
 
   await withTransaction(async (client) => {
@@ -767,6 +772,8 @@ export async function seedReleasesIfEmpty() {
       }
     }
   });
+
+  return true;
 }
 
 export async function fetchArtists() {
@@ -1298,11 +1305,78 @@ export async function assertCatalogSchemaReady() {
 }
 
 export async function runCatalogSeed() {
-  await seedCatalogIfEmpty();
-  await syncTrackAudioUrls();
-  await syncTrackArtists();
-  await seedReleasesIfEmpty();
+  const defaultCatalogSeedEnabled = isDefaultCatalogSeedEnabled();
+  if (defaultCatalogSeedEnabled) {
+    await seedCatalogIfEmpty();
+    await syncTrackAudioUrls();
+    await syncTrackArtists();
+    await seedReleasesIfEmpty();
+  }
   invalidateCatalogCache();
+  return {
+    defaultCatalogSeedEnabled,
+  };
+}
+
+export async function cleanupDefaultCatalogSeed() {
+  const cleanupSummary = await withTransaction(async (client) => {
+    const deletedReleases = await client.query(
+      `
+      delete from releases
+      where id = any($1::text[])
+      returning id;
+    `,
+      [defaultSeedReleaseIds]
+    );
+
+    const deletedPlaylists = await client.query(
+      `
+      delete from playlists
+      where id = any($1::text[])
+        and coalesce(is_custom, false) = false
+      returning id;
+    `,
+      [defaultSeedPlaylistIds]
+    );
+
+    const deletedTracks = await client.query(
+      `
+      delete from tracks
+      where id = any($1::text[])
+      returning id;
+    `,
+      [defaultSeedTrackIds]
+    );
+
+    const deletedArtists = await client.query(
+      `
+      delete from artists
+      where id = any($1::text[])
+        and not exists (
+          select 1
+          from track_artists
+          where track_artists.artist_id = artists.id
+        )
+        and not exists (
+          select 1
+          from releases
+          where releases.artist_id = artists.id
+        )
+      returning id;
+    `,
+      [defaultSeedArtistIds]
+    );
+
+    return {
+      deletedReleases: deletedReleases.rowCount,
+      deletedPlaylists: deletedPlaylists.rowCount,
+      deletedTracks: deletedTracks.rowCount,
+      deletedArtists: deletedArtists.rowCount,
+    };
+  });
+
+  invalidateCatalogCache();
+  return cleanupSummary;
 }
 
 export async function closePool() {

@@ -79,6 +79,7 @@ function toPublicUser(row) {
     id: row.id,
     username: row.username,
     displayName: row.display_name ?? row.displayName ?? row.username,
+    avatarUrl: String(row.avatar_url ?? row.avatarUrl ?? "").trim(),
     createdAt: Number(row.created_at ?? row.createdAt ?? 0),
     adminRole,
     isAdmin: isElevatedAdminRole(adminRole),
@@ -206,7 +207,7 @@ export async function createUserAccount({ username, password, displayName, isAdm
       `
       insert into users (id, username, display_name, password_hash, password_salt, created_at, is_admin, admin_role)
       values ($1, $2, $3, $4, $5, $6, $7, $8)
-      returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
+      returning id, username, display_name, avatar_url, created_at, is_admin, admin_role, is_banned;
     `,
       [userId, normalizedUsername, normalizedDisplayName, passwordHash, salt, createdAt, elevatedAdmin, normalizedAdminRole]
     );
@@ -244,6 +245,7 @@ export async function verifyUserCredentials({ username, password }) {
       id,
       username,
       display_name,
+      avatar_url,
       password_hash,
       password_salt,
       is_admin,
@@ -321,10 +323,38 @@ export async function updateUserProfile({ userId, displayName }) {
     update users
     set display_name = $2
     where id = $1
-    returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
+    returning id, username, display_name, avatar_url, created_at, is_admin, admin_role, is_banned;
   `,
     [normalizedUserId, displayNameValidation.value]
   );
+
+  return toPublicUser(rows[0]);
+}
+
+export async function setUserAvatarUrl({ userId, avatarUrl } = {}) {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    const error = new Error("User is not authenticated.");
+    error.status = 401;
+    throw error;
+  }
+
+  const normalizedAvatarUrl = String(avatarUrl ?? "").trim() || null;
+  const { rows } = await pool.query(
+    `
+    update users
+    set avatar_url = $2
+    where id = $1
+    returning id, username, display_name, avatar_url, created_at, is_admin, admin_role, is_banned;
+  `,
+    [normalizedUserId, normalizedAvatarUrl]
+  );
+
+  if (!rows[0]) {
+    const error = new Error("User not found.");
+    error.status = 404;
+    throw error;
+  }
 
   return toPublicUser(rows[0]);
 }
@@ -548,6 +578,7 @@ export async function resolveSession(token) {
       u.id,
       u.username,
       u.display_name,
+      u.avatar_url,
       u.is_admin,
       u.admin_role,
       u.is_banned,
@@ -602,7 +633,7 @@ export async function ensureSeedUser() {
 
   const { rows } = await pool.query(
     `
-    select id, username, display_name, created_at, is_admin, admin_role, is_banned
+    select id, username, display_name, avatar_url, created_at, is_admin, admin_role, is_banned
     from users
     where lower(username) = lower($1)
     limit 1;
@@ -622,7 +653,7 @@ export async function ensureSeedUser() {
         set is_admin = $2,
             admin_role = $3
         where id = $1
-        returning id, username, display_name, created_at, is_admin, admin_role, is_banned;
+        returning id, username, display_name, avatar_url, created_at, is_admin, admin_role, is_banned;
       `,
         [rows[0].id, isElevatedAdminRole(seedConfig.adminRole), seedConfig.adminRole]
       );

@@ -6,6 +6,42 @@
   flex-wrap: wrap;
 }
 
+.headerIdentity {
+  min-width: min(420px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.headerCopy {
+  min-width: 0;
+}
+
+.profileAvatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(241, 189, 74, 0.28), rgba(110, 162, 255, 0.22));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
+  font-size: 32px;
+  font-weight: 900;
+  flex: 0 0 auto;
+}
+
+.profileHandle {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+}
+
 .title {
   margin: 0;
   font-size: 38px;
@@ -126,6 +162,48 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.accountAvatarCard {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.accountAvatarPreview {
+  width: 88px;
+  height: 88px;
+  border-radius: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(241, 189, 74, 0.22), rgba(110, 162, 255, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.accountAvatarMeta {
+  display: grid;
+  gap: 10px;
+}
+
+.accountAvatarTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.accountAvatarHint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .uploadGrid {
@@ -609,6 +687,10 @@
 }
 
 @media (max-width: 1220px) {
+  .headerIdentity {
+    width: 100%;
+  }
+
   .headerRight {
     min-width: 0;
     width: 100%;
@@ -629,9 +711,28 @@
   .sectionTitle {
     font-size: 24px;
   }
+
+  .profileAvatar {
+    width: 78px;
+    height: 78px;
+    border-radius: 24px;
+    font-size: 28px;
+  }
 }
 
 @media (max-width: 760px) {
+  .headerIdentity {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .profileAvatar {
+    width: 70px;
+    height: 70px;
+    border-radius: 20px;
+    font-size: 24px;
+  }
+
   .statsRow {
     grid-template-columns: 1fr;
   }
@@ -651,6 +752,15 @@
   }
 
   .coverPreview {
+    width: 96px;
+    height: 96px;
+  }
+
+  .accountAvatarCard {
+    grid-template-columns: 1fr;
+  }
+
+  .accountAvatarPreview {
     width: 96px;
     height: 96px;
   }

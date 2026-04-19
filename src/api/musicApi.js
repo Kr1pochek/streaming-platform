@@ -148,6 +148,37 @@ async function request(path, options = {}) {
   throw new Error("Не удалось загрузить данные. Обнови страницу и попробуй снова.");
 }
 
+async function requestMultipart(path, { method = "POST", formData, fallbackMessage } = {}) {
+  let response;
+  try {
+    const headers = {};
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
+    response = await fetch(buildUrl(path), {
+      method: String(method ?? "POST").toUpperCase(),
+      headers,
+      body: formData,
+    });
+  } catch {
+    throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє СЃРµСЂРІРµСЂСѓ. РџСЂРѕРІРµСЂСЊ РёРЅС‚РµСЂРЅРµС‚ Рё РїРѕРІС‚РѕСЂРё РїРѕРїС‹С‚РєСѓ.");
+  }
+
+  const responsePayload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      resolveApiErrorMessage(
+        response.status,
+        responsePayload,
+        fallbackMessage || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С„Р°Р№Р». РџРѕРїСЂРѕР±СѓР№ СЃРЅРѕРІР°."
+      )
+    );
+  }
+
+  return responsePayload;
+}
+
 function normalizeUserPlaylistPayload(payloadOrTitle) {
   if (typeof payloadOrTitle === "string") {
     return { title: payloadOrTitle };
@@ -371,6 +402,29 @@ function normalizeSearchArtist(item = {}) {
     id: asString(item.id),
     name: asString(item.name),
     followers: asNumber(item.followers, 0),
+  };
+}
+
+function normalizeUser(user = {}) {
+  const username = asString(user.username);
+  return {
+    ...user,
+    id: asString(user.id),
+    username,
+    displayName: asString(user.displayName ?? user.display_name) || username,
+    avatarUrl: asString(user.avatarUrl ?? user.avatar_url),
+    createdAt: asNumber(user.createdAt ?? user.created_at, 0),
+    adminRole: asString(user.adminRole ?? user.admin_role) || "user",
+    isAdmin: Boolean(user.isAdmin ?? user.is_admin),
+    isSuperAdmin: Boolean(user.isSuperAdmin),
+    isBanned: Boolean(user.isBanned ?? user.is_banned),
+  };
+}
+
+function normalizeAuthPayload(payload = {}) {
+  return {
+    ...payload,
+    user: payload?.user ? normalizeUser(payload.user) : null,
   };
 }
 
@@ -601,10 +655,12 @@ export async function fetchSmartRecommendations() {
 }
 
 export async function registerAuth(payload) {
-  const response = await request("/auth/register", {
-    method: "POST",
-    body: payload,
-  });
+  const response = normalizeAuthPayload(
+    await request("/auth/register", {
+      method: "POST",
+      body: payload,
+    })
+  );
   if (response?.token) {
     setAuthToken(response.token);
   }
@@ -612,10 +668,12 @@ export async function registerAuth(payload) {
 }
 
 export async function loginAuth(payload) {
-  const response = await request("/auth/login", {
-    method: "POST",
-    body: payload,
-  });
+  const response = normalizeAuthPayload(
+    await request("/auth/login", {
+      method: "POST",
+      body: payload,
+    })
+  );
   if (response?.token) {
     setAuthToken(response.token);
   }
@@ -631,14 +689,43 @@ export async function logoutAuth() {
 }
 
 export async function fetchCurrentUser() {
-  return request("/auth/me");
+  return normalizeAuthPayload(await request("/auth/me"));
 }
 
 export async function updateAuthProfile(payload) {
-  return request("/auth/profile", {
-    method: "PATCH",
-    body: payload,
-  });
+  return normalizeAuthPayload(
+    await request("/auth/profile", {
+      method: "PATCH",
+      body: payload,
+    })
+  );
+}
+
+export async function uploadAuthAvatar(file) {
+  const canCheckBlob = typeof Blob !== "undefined";
+  if (!file || (canCheckBlob && !(file instanceof Blob))) {
+    throw new Error("Р’С‹Р±РµСЂРё РёР·РѕР±СЂР°Р¶РµРЅРёРµ РґР»СЏ Р°РІР°С‚Р°СЂР°.");
+  }
+
+  const formData = new FormData();
+  const fileName = typeof file?.name === "string" && file.name.trim() ? file.name.trim() : "avatar.jpg";
+  formData.append("avatar", file, fileName);
+
+  return normalizeAuthPayload(
+    await requestMultipart("/auth/avatar", {
+      method: "POST",
+      formData,
+      fallbackMessage: "РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ Р°РІР°С‚Р°СЂ. РџРѕРїСЂРѕР±СѓР№ СЃРЅРѕРІР°.",
+    })
+  );
+}
+
+export async function removeAuthAvatar() {
+  return normalizeAuthPayload(
+    await request("/auth/avatar", {
+      method: "DELETE",
+    })
+  );
 }
 
 export async function changeAuthPassword(payload) {
@@ -704,28 +791,11 @@ export async function uploadTrack(payload = {}) {
     formData.append(key, String(value));
   }
 
-  let response;
-  try {
-    const headers = {};
-    if (authToken) {
-      headers.Authorization = `Bearer ${authToken}`;
-    }
-    response = await fetch(buildUrl("/tracks/upload"), {
-      method: "POST",
-      headers,
-      body: formData,
-    });
-  } catch {
-    throw new Error("Не удалось подключиться к серверу. Проверь интернет и повтори попытку.");
-  }
-
-  const responsePayload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(
-      resolveApiErrorMessage(response.status, responsePayload, "Не удалось загрузить трек. Попробуй снова.")
-    );
-  }
-  return responsePayload;
+  return requestMultipart("/tracks/upload", {
+    method: "POST",
+    formData,
+    fallbackMessage: "Не удалось загрузить трек. Попробуй снова.",
+  });
 }
 
 export async function getAdminStats() {

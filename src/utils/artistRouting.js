@@ -1,12 +1,7 @@
+import { splitArtistNames } from "../../shared/artistNameParsing.js";
+
 function normalizeName(value = "") {
   return String(value).toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function splitArtistNames(value = "") {
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function artistNameToIdMap(artists = []) {

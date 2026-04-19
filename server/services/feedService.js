@@ -1,3 +1,5 @@
+import { splitArtistNames } from "../../shared/artistNameParsing.js";
+
 const SYSTEM_PLAYLIST_ID_PREFIX = "sys-";
 const MIN_TRACKS_FOR_FULL_CATALOG = 6;
 const MAX_COLLECTIONS = 5;
@@ -20,13 +22,6 @@ const excludedHomeGenreTags = new Set([
 
 function normalizeArtistName(value = "") {
   return String(value ?? "").trim().toLowerCase();
-}
-
-function splitArtistNames(value = "") {
-  return String(value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function isSystemPlaylist(playlist) {

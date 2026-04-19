@@ -27,8 +27,13 @@ async function printSummary() {
 
 async function main() {
   await assertCatalogSchemaReady();
-  await runCatalogSeed();
+  const seedResult = await runCatalogSeed();
   const seedUser = await ensureSeedUser();
+  if (seedResult.defaultCatalogSeedEnabled) {
+    console.log("default catalog seed: enabled");
+  } else {
+    console.log("default catalog seed: skipped (ENABLE_DEFAULT_CATALOG_SEED=false)");
+  }
   await printSummary();
   const validation = await validateCatalogAudioFiles();
   const warningSuffix = validation.hasWarnings

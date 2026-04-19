@@ -244,99 +244,97 @@ export default function HomePage() {
 
         {status === "success" && !sectionsEmpty ? (
           <>
-            {user?.id ? (
-              <section className={styles.section}>
-                <div className={styles.sectionTitleRow}>
-                  <h2 className={styles.sectionHeading}>Новые релизы по подпискам</h2>
-                  <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
-                </div>
-                {releaseNotifications.length ? (
-                  <div className={styles.releaseHub}>
-                    <div className={styles.releaseHubHeader}>
-                      <div className={styles.releaseHubCopy}>
-                        <p className={styles.releaseHubEyebrow}>
-                          <FiBell />
-                          Лента обновлений
-                        </p>
-                        <p className={styles.releaseHubText}>
-                          Свежие релизы от артистов, на которых ты подписан. Новые карточки будут просто докидываться в
-                          этот блок без развала всей секции.
-                        </p>
-                      </div>
-                      <div className={styles.releaseHubStats}>
-                        <span className={styles.releaseHubStat}>
-                          <strong>{releaseNotifications.length}</strong> {releaseWord(releaseNotifications.length)}
-                        </span>
-                        <span className={styles.releaseHubStat}>
-                          <strong>{updatedArtistCount}</strong> артистов обновились
-                        </span>
-                      </div>
+            <section className={styles.section}>
+              <div className={styles.sectionTitleRow}>
+                <h2 className={styles.sectionHeading}>Новые релизы</h2>
+                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+              </div>
+              {releaseNotifications.length ? (
+                <div className={styles.releaseHub}>
+                  <div className={styles.releaseHubHeader}>
+                    <div className={styles.releaseHubCopy}>
+                      <p className={styles.releaseHubEyebrow}>
+                        <FiBell />
+                        Лента обновлений
+                      </p>
+                      <p className={styles.releaseHubText}>
+                        Здесь показываются свежие опубликованные релизы каталога. Если ты подписан на артистов, их
+                        релизы поднимаются выше в этом блоке.
+                      </p>
                     </div>
-
-                    <div className={styles.releaseCardGrid}>
-                      {releaseNotifications.map((item) => (
-                        <article
-                          key={item.id}
-                          className={styles.releaseFeedCard}
-                          style={{ "--release-cover": item.cover }}
-                        >
-                          <button
-                            className={styles.releaseFeedMainButton}
-                            type="button"
-                            onClick={() => navigate(`/release/${item.releaseId}`)}
-                          >
-                            <span className={styles.releaseFeedVisual}>
-                              <span className={styles.releaseFeedGlow} aria-hidden="true" />
-                              <span className={styles.releaseFeedCover} style={{ background: item.cover }} />
-                            </span>
-                            <span className={styles.releaseFeedMeta}>
-                              <span className={styles.releaseFeedBadgeRow}>
-                                <span className={styles.releaseFeedBadge}>{String(item.type ?? "").toUpperCase()}</span>
-                                <span className={styles.releaseFeedBadge}>{formatReleaseDateLabel(item.publishedAt)}</span>
-                              </span>
-                              <span className={styles.releaseFeedTitle}>{item.title}</span>
-                              <span className={styles.releaseFeedSubtitle}>
-                                {item.artistName} • {item.year}
-                              </span>
-                              <span className={styles.releaseFeedCaption}>
-                                {item.trackIds?.length ?? 0} {trackWord(item.trackIds?.length ?? 0)}
-                              </span>
-                            </span>
-                          </button>
-                          <div className={styles.releaseFeedActions}>
-                            {item.trackIds?.length ? (
-                              <button
-                                type="button"
-                                className={styles.releaseFeedPrimaryButton}
-                                onClick={() => playQueue(item.trackIds, 0)}
-                              >
-                                <FiPlay />
-                                Слушать
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className={styles.releaseFeedSecondaryButton}
-                              onClick={() => navigate(`/artist/${item.artistId}`)}
-                            >
-                              <FiArrowRight />
-                              К артисту
-                            </button>
-                          </div>
-                        </article>
-                      ))}
+                    <div className={styles.releaseHubStats}>
+                      <span className={styles.releaseHubStat}>
+                        <strong>{releaseNotifications.length}</strong> {releaseWord(releaseNotifications.length)}
+                      </span>
+                      <span className={styles.releaseHubStat}>
+                        <strong>{updatedArtistCount}</strong> артистов обновились
+                      </span>
                     </div>
                   </div>
-                ) : (
-                  <ResourceState
-                    title="Пока нет новых релизов"
-                    description="Подпишись на артистов, чтобы получать обновления прямо на главной."
-                    actionLabel="Перейти в поиск"
-                    onAction={() => navigate("/search")}
-                  />
-                )}
-              </section>
-            ) : null}
+
+                  <div className={styles.releaseCardGrid}>
+                    {releaseNotifications.map((item) => (
+                      <article
+                        key={item.id}
+                        className={styles.releaseFeedCard}
+                        style={{ "--release-cover": item.cover }}
+                      >
+                        <button
+                          className={styles.releaseFeedMainButton}
+                          type="button"
+                          onClick={() => navigate(`/release/${item.releaseId}`)}
+                        >
+                          <span className={styles.releaseFeedVisual}>
+                            <span className={styles.releaseFeedGlow} aria-hidden="true" />
+                            <span className={styles.releaseFeedCover} style={{ background: item.cover }} />
+                          </span>
+                          <span className={styles.releaseFeedMeta}>
+                            <span className={styles.releaseFeedBadgeRow}>
+                              <span className={styles.releaseFeedBadge}>{String(item.type ?? "").toUpperCase()}</span>
+                              <span className={styles.releaseFeedBadge}>{formatReleaseDateLabel(item.publishedAt)}</span>
+                            </span>
+                            <span className={styles.releaseFeedTitle}>{item.title}</span>
+                            <span className={styles.releaseFeedSubtitle}>
+                              {item.artistName} • {item.year}
+                            </span>
+                            <span className={styles.releaseFeedCaption}>
+                              {item.trackIds?.length ?? 0} {trackWord(item.trackIds?.length ?? 0)}
+                            </span>
+                          </span>
+                        </button>
+                        <div className={styles.releaseFeedActions}>
+                          {item.trackIds?.length ? (
+                            <button
+                              type="button"
+                              className={styles.releaseFeedPrimaryButton}
+                              onClick={() => playQueue(item.trackIds, 0)}
+                            >
+                              <FiPlay />
+                              Слушать
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={styles.releaseFeedSecondaryButton}
+                            onClick={() => navigate(`/artist/${item.artistId}`)}
+                          >
+                            <FiArrowRight />
+                            К артисту
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <ResourceState
+                  title="Пока нет опубликованных релизов"
+                  description="Когда в каталоге появятся опубликованные релизы, они сразу покажутся в этом блоке."
+                  actionLabel="Перейти в поиск"
+                  onAction={() => navigate("/search")}
+                />
+              )}
+            </section>
 
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>

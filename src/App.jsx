@@ -1,18 +1,20 @@
-import { Suspense, lazy } from "react";
+import { Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout.jsx";
+import RouteErrorBoundary from "./components/RouteErrorBoundary.jsx";
+import { lazyWithRecovery } from "./utils/lazyWithRecovery.js";
 
-const HomePage = lazy(() => import("./pages/HomePage.jsx"));
-const SearchPage = lazy(() => import("./pages/SearchPage.jsx"));
-const LibraryPage = lazy(() => import("./pages/LibraryPage.jsx"));
-const LikedPage = lazy(() => import("./pages/LikedPage.jsx"));
-const PlaylistPage = lazy(() => import("./pages/PlaylistPage.jsx"));
-const TrackPage = lazy(() => import("./pages/TrackPage.jsx"));
-const ArtistPage = lazy(() => import("./pages/ArtistPage.jsx"));
-const ReleasePage = lazy(() => import("./pages/ReleasePage.jsx"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage.jsx"));
-const AdminPage = lazy(() => import("./pages/AdminPage.jsx"));
-const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
+const HomePage = lazyWithRecovery(() => import("./pages/HomePage.jsx"), "home");
+const SearchPage = lazyWithRecovery(() => import("./pages/SearchPage.jsx"), "search");
+const LibraryPage = lazyWithRecovery(() => import("./pages/LibraryPage.jsx"), "library");
+const LikedPage = lazyWithRecovery(() => import("./pages/LikedPage.jsx"), "liked");
+const PlaylistPage = lazyWithRecovery(() => import("./pages/PlaylistPage.jsx"), "playlist");
+const TrackPage = lazyWithRecovery(() => import("./pages/TrackPage.jsx"), "track");
+const ArtistPage = lazyWithRecovery(() => import("./pages/ArtistPage.jsx"), "artist");
+const ReleasePage = lazyWithRecovery(() => import("./pages/ReleasePage.jsx"), "release");
+const ProfilePage = lazyWithRecovery(() => import("./pages/ProfilePage.jsx"), "profile");
+const AdminPage = lazyWithRecovery(() => import("./pages/AdminPage.jsx"), "admin");
+const NotFoundPage = lazyWithRecovery(() => import("./pages/NotFoundPage.jsx"), "not-found");
 
 function RouteFallback() {
   return (
@@ -23,7 +25,11 @@ function RouteFallback() {
 }
 
 function withSuspense(element) {
-  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+  return (
+    <RouteErrorBoundary>
+      <Suspense fallback={<RouteFallback />}>{element}</Suspense>
+    </RouteErrorBoundary>
+  );
 }
 
 export default function App() {

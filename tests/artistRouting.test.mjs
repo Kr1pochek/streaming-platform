@@ -24,6 +24,13 @@ test("findArtistIdByTrackArtist picks first matched artist", () => {
   assert.equal(findArtistIdByTrackArtist("Nope, Nada", artists), null);
 });
 
+test("resolveArtistLine supports feat separators", () => {
+  assert.deepEqual(resolveArtistLine("Joji feat. J. Cole", artists), [
+    { name: "Joji", id: "a-1" },
+    { name: "J. Cole", id: "a-2" },
+  ]);
+});
+
 test("resolveArtistLine maps names to ids", () => {
   assert.deepEqual(resolveArtistLine("Joji, Unknown, СИМОЧКА", artists), [
     { name: "Joji", id: "a-1" },
@@ -34,4 +41,8 @@ test("resolveArtistLine maps names to ids", () => {
 
 test("resolveArtistIds returns unique ids in order", () => {
   assert.deepEqual(resolveArtistIds("Joji, J. Cole, Joji", artists), ["a-1", "a-2"]);
+});
+
+test("resolveArtistIds deduplicates artists from feat and comma formats", () => {
+  assert.deepEqual(resolveArtistIds("Joji feat. J. Cole, Joji", artists), ["a-1", "a-2"]);
 });

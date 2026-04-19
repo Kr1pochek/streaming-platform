@@ -5,7 +5,9 @@ import {
   getAuthToken,
   loginAuth,
   logoutAuth,
+  removeAuthAvatar,
   registerAuth,
+  uploadAuthAvatar,
   updateAuthProfile,
 } from "../api/musicApi.js";
 import AuthContext from "./authContext.js";
@@ -117,6 +119,26 @@ export function AuthProvider({ children }) {
     return response;
   }, []);
 
+  const uploadAvatar = useCallback(async (file) => {
+    const response = await uploadAuthAvatar(file);
+    const nextUser = response?.user ?? null;
+    if (nextUser?.id) {
+      setUser(nextUser);
+      setStatus("authenticated");
+    }
+    return response;
+  }, []);
+
+  const removeAvatar = useCallback(async () => {
+    const response = await removeAuthAvatar();
+    const nextUser = response?.user ?? null;
+    if (nextUser?.id) {
+      setUser(nextUser);
+      setStatus("authenticated");
+    }
+    return response;
+  }, []);
+
   const changePassword = useCallback(async (payload) => {
     return changeAuthPassword(payload);
   }, []);
@@ -131,9 +153,11 @@ export function AuthProvider({ children }) {
       signUp,
       signOut,
       updateProfile,
+      uploadAvatar,
+      removeAvatar,
       changePassword,
     }),
-    [status, user, refreshCurrentUser, signIn, signUp, signOut, updateProfile, changePassword]
+    [status, user, refreshCurrentUser, signIn, signUp, signOut, updateProfile, uploadAvatar, removeAvatar, changePassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

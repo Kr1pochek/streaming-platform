@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import styles from "./Sidebar.module.css";
 import useAuth from "../hooks/useAuth.js";
+import UserAvatar from "./UserAvatar.jsx";
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ export default function Sidebar() {
       <div className={styles.sidebarBottom}>
         {isAuthenticated ? (
           <button type="button" className={styles.account} onClick={() => navigate("/profile")}>
-            <div className={styles.accountAvatar}>{accountName.slice(0, 1).toUpperCase()}</div>
+            <UserAvatar avatarUrl={user?.avatarUrl} name={accountName} className={styles.accountAvatar} />
             <div className={styles.accountMeta}>
               <div className={styles.accountName}>{accountName}</div>
               <div className={styles.accountHint}>Аккаунт</div>

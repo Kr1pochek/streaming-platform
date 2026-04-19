@@ -121,13 +121,29 @@
     transform 0.18s ease;
 }
 
+.submenu::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+}
+
 .menu[data-submenu-side="right"] .submenu {
   left: calc(100% + 10px);
+}
+
+.menu[data-submenu-side="right"] .submenu::before {
+  left: -14px;
 }
 
 .menu[data-submenu-side="left"] .submenu {
   right: calc(100% + 10px);
   transform: translateX(-8px) scale(0.98);
+}
+
+.menu[data-submenu-side="left"] .submenu::before {
+  right: -14px;
 }
 
 .submenuOpen {

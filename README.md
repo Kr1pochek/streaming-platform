@@ -41,7 +41,7 @@ Checks:
 npm run smoke -- --client
 ```
 
-`npm run start:app` waits for PostgreSQL, applies migrations, seeds data, and starts the API.
+`npm run start:app` waits for PostgreSQL, applies migrations, optionally seeds the legacy demo catalog only when `ENABLE_DEFAULT_CATALOG_SEED=true`, and starts the API.
 If some old local audio files are missing, the app still starts and hides unavailable local tracks from the user catalog. Set `STRICT_AUDIO_VALIDATION=true` if you want startup to fail on missing media.
 
 ## 3. Portable clone with current data
@@ -107,6 +107,7 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # DB_WAIT_RETRIES=30
 # DB_WAIT_INTERVAL_MS=2000
 # STRICT_AUDIO_VALIDATION=false
+# ENABLE_DEFAULT_CATALOG_SEED=false
 # NODE_ENV=production
 # MEDIA_STORAGE_DRIVER=local
 # MEDIA_CDN_BASE_URL=https://cdn.example.com/audio
@@ -129,6 +130,7 @@ For a quick local demo config, use tracked `.env.demo`.
 ```bash
 npm run db:migrate
 npm run db:seed
+npm run db:cleanup-default-seed
 ```
 
 Or:
@@ -287,7 +289,7 @@ docker compose down -v
 
 Services:
 - `db` (internal PostgreSQL service, not published to the host by default)
-- `app` (waits for DB, runs migrations, restores portable snapshot when available, otherwise runs seed, then serves API + built frontend on `4000`)
+- `app` (waits for DB, runs migrations, restores portable snapshot when available, otherwise runs database bootstrap, then serves API + built frontend on `4000`)
 
 Notes:
 - uploaded/local audio is persisted in the named Docker volume `media_data`
@@ -295,6 +297,7 @@ Notes:
 - container always uses bundled Linux `ffmpeg/ffprobe`, so host Windows paths from local `.env` do not break Docker startup
 - if you need direct access to PostgreSQL, prefer `docker compose exec db psql ...` instead of opening `5432` publicly
 - committed portable snapshots are copied into the runtime image and restored only when the database is empty
+- the old demo catalog is disabled by default; set `ENABLE_DEFAULT_CATALOG_SEED=true` only if you intentionally want to restore it into an empty database
 
 Quick check after container startup:
 
@@ -321,9 +324,10 @@ npm run build
 - `npm run dev:client` - frontend dev server
 - `npm run dev:server` - backend dev run
 - `npm run server` - backend run
-- `npm run start:app` - wait for DB, run migrations + seed, start backend
+- `npm run start:app` - wait for DB, run migrations + database bootstrap, start backend
 - `npm run db:migrate` - apply SQL migrations
-- `npm run db:seed` - seed/sync catalog and optional seed user
+- `npm run db:seed` - optional default catalog bootstrap plus optional seed user
+- `npm run db:cleanup-default-seed` - remove legacy default catalog entries from the current database
 - `npm run db:setup` - migrations + seed
 - `npm run snapshot:export` - export current PostgreSQL data + local media into `portable-snapshot`
 - `npm run snapshot:restore` - restore committed portable snapshot into the current database/media directory

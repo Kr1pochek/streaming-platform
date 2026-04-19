@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate, Outlet } from "react-router-dom";
 import {
+  FiCheck,
   FiChevronDown,
   FiChevronUp,
   FiHome,
@@ -18,13 +19,38 @@ import {
   FiVolumeX,
   FiX,
 } from "react-icons/fi";
-import { BsFillPauseFill, BsFillPlayFill } from "react-icons/bs";
-import { LuHeart, LuHeartOff } from "react-icons/lu";
+import { BsFillPauseFill, BsFillPlayFill, BsHeartFill } from "react-icons/bs";
+import { LuHeart } from "react-icons/lu";
 import Sidebar from "./Sidebar.jsx";
 import styles from "./AppLayout.module.css";
 import usePlayer from "../hooks/usePlayer.js";
 import useAuth from "../hooks/useAuth.js";
 import ArtistInlineLinks from "./ArtistInlineLinks.jsx";
+import UserAvatar from "./UserAvatar.jsx";
+import { DEFAULT_PLAYER_PALETTE, resolvePlayerPalette } from "../utils/playerPalette.js";
+
+const STREAM_QUALITY_OPTIONS = [
+  {
+    value: "auto",
+    label: "AUTO",
+    hint: "Плеер сам выбирает поток",
+  },
+  {
+    value: "high",
+    label: "HIGH",
+    hint: "Максимальное качество",
+  },
+  {
+    value: "medium",
+    label: "MEDIUM",
+    hint: "Баланс качества и скорости",
+  },
+  {
+    value: "low",
+    label: "LOW",
+    hint: "Стабильнее на медленном интернете",
+  },
+];
 
 export default function AppLayout() {
   const navigate = useNavigate();
@@ -61,15 +87,26 @@ export default function AppLayout() {
   } = usePlayer();
 
   const [queueOpen, setQueueOpen] = useState(false);
+  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
+  const [playerPalette, setPlayerPalette] = useState(DEFAULT_PLAYER_PALETTE);
+  const [displayProgressPercent, setDisplayProgressPercent] = useState(0);
+  const [timelineDragging, setTimelineDragging] = useState(false);
   const queuePanelRef = useRef(null);
   const queueToggleRef = useRef(null);
+  const qualityMenuRef = useRef(null);
   const toastTimerMapRef = useRef(new Map());
   const lastNonZeroVolumeRef = useRef(volume > 0 ? volume : 70);
+  const visualProgressRef = useRef(0);
+  const progressAnchorRef = useRef({
+    durationSec: 0,
+    percent: 0,
+    timeMs: 0,
+    trackId: null,
+  });
+  const hasCurrentTrack = Boolean(currentTrack);
 
-  const canLikeCurrent = Boolean(currentTrack && !isCurrentTrackLiked);
-  const canUnlikeCurrent = Boolean(currentTrack && isCurrentTrackLiked);
   const repeatEnabled = repeatMode !== "off";
-  const accountInitial = (user?.displayName ?? user?.username ?? "Г").slice(0, 1).toUpperCase();
+  const accountName = user?.displayName ?? user?.username ?? "Гость";
   const streamQualitySelected = streamQuality?.selected || "auto";
   const fallbackQualityLevelLabel =
     streamQualitySelected === "auto" ? "AUTO" : streamQualitySelected.toUpperCase();
@@ -78,7 +115,23 @@ export default function AppLayout() {
   const streamQualityLevelLabel = streamQuality?.level
     ? streamQuality.level.toUpperCase()
     : fallbackQualityLevelLabel;
+  const showStreamQuality = Boolean(currentTrack && streamQuality?.available);
+  const qualityBadgeLabel = streamQualityModeLabel || "STREAM";
   const canControlStreamQuality = Boolean(streamQuality?.available && streamQuality?.canControl);
+  const selectedQualityOption =
+    STREAM_QUALITY_OPTIONS.find((option) => option.value === streamQualitySelected) ??
+    STREAM_QUALITY_OPTIONS[0];
+  const timelineProgressValue = Math.min(
+    100,
+    Math.max(0, Number.isFinite(progressPercent) ? progressPercent : 0),
+  );
+  const visualProgressPercent = Math.min(
+    100,
+    Math.max(0, Number.isFinite(displayProgressPercent) ? displayProgressPercent : 0),
+  );
+  const progressTailRoundRatio = Math.min(1, Math.max(0, (visualProgressPercent - 97) / 3));
+  const progressTailRadiusPx = 4 + progressTailRoundRatio * 18;
+  const progressEdgeHighlightOpacity = 0.03 * (1 - progressTailRoundRatio);
   const mobileNavItems = [
     { to: "/", label: "Главная", icon: FiHome, end: true },
     { to: "/search", label: "Поиск", icon: FiSearch },
@@ -93,12 +146,89 @@ export default function AppLayout() {
       : repeatMode === "all"
         ? "Повтор очереди"
         : "Включить повтор";
+  const favoriteLabel = isCurrentTrackLiked ? "Убрать трек из избранного" : "Добавить трек в избранное";
+  const playerThemeStyle = {
+    "--player-panel": playerPalette.panel,
+    "--player-panel-edge": playerPalette.panelEdge,
+    "--player-surface-start": playerPalette.surfaceStart,
+    "--player-surface-end": playerPalette.surfaceEnd,
+    "--player-ambient": playerPalette.ambient,
+    "--player-ambient-strong": playerPalette.ambientStrong,
+    "--player-border": playerPalette.border,
+    "--player-progress-track": playerPalette.progressTrack,
+    "--player-progress-fill": playerPalette.progressFill,
+    "--player-progress-thumb": playerPalette.progressThumb,
+    "--player-progress": `${visualProgressPercent}%`,
+    "--player-progress-ratio": `${visualProgressPercent / 100}`,
+    "--player-progress-tail-round-ratio": `${progressTailRoundRatio.toFixed(4)}`,
+    "--player-progress-tail-radius": `${progressTailRadiusPx.toFixed(2)}px`,
+    "--player-progress-edge-highlight-opacity": `${progressEdgeHighlightOpacity.toFixed(4)}`,
+  };
 
   useEffect(() => {
     if (volume > 0) {
       lastNonZeroVolumeRef.current = volume;
     }
   }, [volume]);
+
+  useEffect(() => {
+    visualProgressRef.current = visualProgressPercent;
+  }, [visualProgressPercent]);
+
+  useEffect(() => {
+    const trackId = currentTrack?.id ?? null;
+    const durationSec = currentTrack?.durationSec ?? 0;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const previousAnchor = progressAnchorRef.current;
+    const trackChanged = previousAnchor.trackId !== trackId;
+    const currentVisual = visualProgressRef.current;
+
+    progressAnchorRef.current = {
+      durationSec,
+      percent: timelineProgressValue,
+      timeMs: now,
+      trackId,
+    };
+
+    if (
+      trackChanged ||
+      timelineDragging ||
+      !hasCurrentTrack ||
+      !isPlaying ||
+      durationSec <= 0 ||
+      timelineProgressValue < currentVisual - 0.75 ||
+      Math.abs(timelineProgressValue - currentVisual) > 1.5
+    ) {
+      setDisplayProgressPercent(timelineProgressValue);
+    }
+  }, [currentTrack?.durationSec, currentTrack?.id, hasCurrentTrack, isPlaying, timelineDragging, timelineProgressValue]);
+
+  useEffect(() => {
+    if (timelineDragging || !hasCurrentTrack || !isPlaying || !(currentTrack?.durationSec > 0)) {
+      return undefined;
+    }
+
+    let frameId = 0;
+
+    const animateProgress = () => {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const anchor = progressAnchorRef.current;
+      const elapsedSec = Math.max(0, (now - anchor.timeMs) / 1000);
+      const predictedPercent = Math.min(100, anchor.percent + (elapsedSec / anchor.durationSec) * 100);
+
+      if (Math.abs(predictedPercent - visualProgressRef.current) >= 0.02) {
+        setDisplayProgressPercent(predictedPercent);
+      }
+
+      frameId = window.requestAnimationFrame(animateProgress);
+    };
+
+    frameId = window.requestAnimationFrame(animateProgress);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [currentTrack?.durationSec, hasCurrentTrack, isPlaying, timelineDragging]);
 
   const handleVolumeChange = (nextVolume) => {
     const safeVolume = Number(nextVolume);
@@ -117,6 +247,19 @@ export default function AppLayout() {
 
     const restoredVolume = Number(lastNonZeroVolumeRef.current);
     setVolume(Number.isFinite(restoredVolume) && restoredVolume > 0 ? restoredVolume : 70);
+  };
+
+  const handleToggleCurrentLike = () => {
+    if (!currentTrack) {
+      return;
+    }
+
+    if (isCurrentTrackLiked) {
+      unlikeTrack(currentTrack.id);
+      return;
+    }
+
+    likeTrack(currentTrack.id);
   };
 
   useEffect(() => {
@@ -142,6 +285,45 @@ export default function AppLayout() {
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [queueOpen]);
+
+  useEffect(() => {
+    if (!qualityMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (qualityMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setQualityMenuOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setQualityMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [qualityMenuOpen]);
+
+  useEffect(() => {
+    if (!currentTrack || !streamQuality?.available) {
+      setQualityMenuOpen(false);
+    }
+  }, [currentTrack, streamQuality?.available]);
 
   useEffect(() => {
     for (const toast of toastItems) {
@@ -173,6 +355,23 @@ export default function AppLayout() {
     []
   );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncPlayerPalette = async () => {
+      const nextPalette = await resolvePlayerPalette(currentTrack?.cover);
+      if (!cancelled) {
+        setPlayerPalette(nextPalette);
+      }
+    };
+
+    void syncPlayerPalette();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.cover]);
+
   return (
     <div className={styles.appShell}>
       <div className={styles.sidebar}>
@@ -195,7 +394,11 @@ export default function AppLayout() {
               aria-label={isAuthenticated ? "Открыть профиль" : "Войти или зарегистрироваться"}
               onClick={() => navigate("/profile")}
             >
-              {isAuthenticated ? accountInitial : <FiUser />}
+              {isAuthenticated ? (
+                <UserAvatar avatarUrl={user?.avatarUrl} name={accountName} className={styles.mobileAccountAvatar} />
+              ) : (
+                <FiUser />
+              )}
             </button>
           </div>
           <nav className={styles.mobileNav} aria-label="Быстрая навигация">
@@ -306,158 +509,214 @@ export default function AppLayout() {
           </aside>
         ) : null}
 
-        <footer className={styles.player} aria-label="Плеер">
-          <div className={styles.playerLeft}>
-            <div className={styles.trackArt} style={{ background: currentTrack?.cover }} />
-            <div className={styles.trackMeta} aria-live="polite">
-              <button
-                type="button"
-                className={styles.trackTitleButton}
-                disabled={!currentTrack}
-                onClick={() => currentTrack && navigate(`/track/${currentTrack.id}`)}
-              >
-                {currentTrack?.title ?? "Нет трека"}
-              </button>
-              {currentTrack?.artist ? (
-                <ArtistInlineLinks
-                  artistLine={currentTrack.artist}
-                  className={styles.trackArtist}
-                  linkClassName={styles.trackArtistButton}
-                  textClassName={styles.trackArtistText}
-                  onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                />
-              ) : (
-                <div className={styles.trackArtist}>Очередь пуста</div>
-              )}
-            </div>
-          </div>
-
-          <div className={styles.playerCenter}>
-            <div className={styles.controls}>
-              <button
-                type="button"
-                className={`${styles.iconButton} ${canLikeCurrent ? "" : styles.iconButtonDisabled}`.trim()}
-                aria-label="Добавить трек в избранное"
-                aria-pressed={isCurrentTrackLiked}
-                disabled={!canLikeCurrent}
-                onClick={() => currentTrack && likeTrack(currentTrack.id)}
-              >
-                <LuHeart />
-              </button>
-              <button
-                type="button"
-                className={`${styles.iconButton} ${shuffleEnabled ? styles.iconButtonActive : ""}`.trim()}
-                aria-label="Перемешать очередь"
-                aria-pressed={shuffleEnabled}
-                onClick={toggleShuffle}
-              >
-                <FiShuffle />
-              </button>
-              <button
-                type="button"
-                className={styles.iconButton}
-                aria-label="Предыдущий трек"
-                onClick={prevTrack}
-              >
-                <FiSkipBack />
-              </button>
-              <button
-                type="button"
-                className={styles.playButton}
-                aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
-                aria-pressed={isPlaying}
-                onClick={togglePlay}
-              >
-                {isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
-              </button>
-              <button type="button" className={styles.iconButton} aria-label="Следующий трек" onClick={nextTrack}>
-                <FiSkipForward />
-              </button>
-              <button
-                type="button"
-                className={`${styles.iconButton} ${canUnlikeCurrent ? "" : styles.iconButtonDisabled}`.trim()}
-                aria-label="Убрать трек из избранного"
-                disabled={!canUnlikeCurrent}
-                onClick={() => currentTrack && unlikeTrack(currentTrack.id)}
-              >
-                <LuHeartOff />
-              </button>
-              <button
-                type="button"
-                className={`${styles.iconButton} ${repeatEnabled ? styles.iconButtonActive : ""}`.trim()}
-                aria-label={repeatLabel}
-                aria-pressed={repeatEnabled}
-                onClick={cycleRepeatMode}
-              >
-                <FiRepeat />
-                {repeatMode === "one" ? <span className={styles.repeatBadge}>1</span> : null}
-              </button>
-            </div>
-            <div className={styles.progressRow}>
-              <span className={styles.time}>{progressLabel}</span>
+        <footer className={styles.player} aria-label="Плеер" style={playerThemeStyle}>
+          <div className={styles.playerTimelineWrap}>
+            <div className={styles.playerTimelineTrack}>
+              <div className={styles.playerTimelineRail} aria-hidden="true">
+                <span className={styles.playerTimelineRailFill} />
+              </div>
               <input
-                className={`${styles.range} ${styles.progress}`}
+                className={styles.playerTimeline}
                 type="range"
                 min="0"
                 max="100"
-                value={progressPercent}
-                style={{ "--range-progress": `${progressPercent}%` }}
+                step="any"
+                aria-label="Позиция воспроизведения"
+                aria-valuetext={`${progressLabel} из ${durationLabel}`}
+                value={timelineDragging ? timelineProgressValue : visualProgressPercent}
+                onBlur={() => setTimelineDragging(false)}
                 onChange={(event) => setProgressPercent(Number(event.target.value))}
+                onPointerDown={() => setTimelineDragging(true)}
+                onPointerUp={() => setTimelineDragging(false)}
               />
-              <span className={styles.time}>{durationLabel}</span>
+            </div>
+            <div className={styles.playerTimelineMeta} aria-hidden="true">
+              <span className={`${styles.playerTimelineTime} ${styles.playerTimelineTimeCurrent}`.trim()}>
+                {progressLabel}
+              </span>
+              <span className={`${styles.playerTimelineTime} ${styles.playerTimelineTimeDuration}`.trim()}>
+                {durationLabel}
+              </span>
             </div>
           </div>
 
-          <div className={styles.playerRight}>
-            {currentTrack && streamQuality?.available ? (
-              <div className={styles.streamQualityWrap}>
-                <label className={styles.streamQualityControl} aria-label="Режим качества">
-                  <span className={styles.streamQualityControlLabel}>Q</span>
-                  <select
-                    className={styles.streamQualitySelect}
-                    value={streamQualitySelected}
-                    onChange={(event) => setStreamQuality(event.target.value)}
-                    disabled={!canControlStreamQuality}
+          <div className={styles.playerContent}>
+            <div className={styles.playerLeft}>
+              <div className={styles.trackArt} style={{ background: currentTrack?.cover }} />
+              <div className={styles.trackMeta} aria-live="polite">
+                <button
+                  type="button"
+                  className={styles.trackTitleButton}
+                  disabled={!currentTrack}
+                  onClick={() => currentTrack && navigate(`/track/${currentTrack.id}`)}
+                >
+                  {currentTrack?.title ?? "Нет трека"}
+                </button>
+                {currentTrack?.artist ? (
+                  <ArtistInlineLinks
+                    artistLine={currentTrack.artist}
+                    className={styles.trackArtist}
+                    linkClassName={styles.trackArtistButton}
+                    textClassName={styles.trackArtistText}
+                    onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                  />
+                ) : (
+                  <div className={styles.trackArtist}>Очередь пуста</div>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.playerCenter}>
+              <div className={styles.controls}>
+                <div className={styles.controlGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.iconButton} ${isCurrentTrackLiked ? styles.iconButtonActive : ""} ${!hasCurrentTrack ? styles.iconButtonDisabled : ""}`.trim()}
+                    aria-label={favoriteLabel}
+                    aria-pressed={isCurrentTrackLiked}
+                    disabled={!hasCurrentTrack}
+                    onClick={handleToggleCurrentLike}
                   >
-                    <option value="auto">AUTO</option>
-                    <option value="high">HIGH</option>
-                    <option value="medium">MEDIUM</option>
-                    <option value="low">LOW</option>
-                  </select>
-                </label>
-                <div className={styles.streamQualityBadge} aria-label="Текущее качество потока">
-                  <span className={styles.streamQualityMode}>{streamQualityModeLabel}</span>
-                  <span className={styles.streamQualityLevel}>{streamQualityLevelLabel}</span>
+                    {isCurrentTrackLiked ? <BsHeartFill /> : <LuHeart />}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.iconButton} ${shuffleEnabled ? styles.iconButtonActive : ""}`.trim()}
+                    aria-label="Перемешать очередь"
+                    aria-pressed={shuffleEnabled}
+                    onClick={toggleShuffle}
+                  >
+                    <FiShuffle />
+                  </button>
+                </div>
+
+                <div className={`${styles.controlGroup} ${styles.transportGroup}`.trim()}>
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label="Предыдущий трек"
+                    onClick={prevTrack}
+                  >
+                    <FiSkipBack />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.playButton}
+                    aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
+                    aria-pressed={isPlaying}
+                    onClick={togglePlay}
+                  >
+                    {isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
+                  </button>
+                  <button type="button" className={styles.iconButton} aria-label="Следующий трек" onClick={nextTrack}>
+                    <FiSkipForward />
+                  </button>
+                </div>
+
+                <div className={styles.controlGroup}>
+                  <button
+                    type="button"
+                    className={`${styles.iconButton} ${repeatEnabled ? styles.iconButtonActive : ""}`.trim()}
+                    aria-label={repeatLabel}
+                    aria-pressed={repeatEnabled}
+                    onClick={cycleRepeatMode}
+                  >
+                    <FiRepeat />
+                    {repeatMode === "one" ? <span className={styles.repeatBadge}>1</span> : null}
+                  </button>
                 </div>
               </div>
-            ) : null}
-            <button
-              type="button"
-              ref={queueToggleRef}
-              className={`${styles.iconButton} ${queueOpen ? styles.iconButtonActive : ""}`.trim()}
-              aria-label="Показать очередь"
-              aria-pressed={queueOpen}
-              onClick={() => setQueueOpen((value) => !value)}
-            >
-              <FiList />
-            </button>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label={volume > 0 ? "Выключить звук" : "Включить звук"}
-              aria-pressed={volume === 0}
-              onClick={handleToggleMute}
-            >
-              {volume > 0 ? <FiVolume2 /> : <FiVolumeX />}
-            </button>
-            <input
-              className={`${styles.range} ${styles.volume}`}
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={(event) => handleVolumeChange(event.target.value)}
-            />
+            </div>
+
+            <div className={styles.playerRight}>
+              <div className={styles.playerTools}>
+                {showStreamQuality ? (
+                  <div className={styles.streamQualityWrap} ref={qualityMenuRef}>
+                    <div
+                      className={`${styles.streamQualityCluster} ${qualityMenuOpen ? styles.streamQualityClusterOpen : ""}`.trim()}
+                    >
+                      <button
+                        type="button"
+                        className={styles.streamQualityTrigger}
+                        aria-label="Выбрать качество потока"
+                        aria-haspopup="menu"
+                        aria-expanded={qualityMenuOpen}
+                        disabled={!canControlStreamQuality}
+                        onClick={() => setQualityMenuOpen((current) => !current)}
+                      >
+                        <span className={styles.streamQualityTriggerMeta}>
+                          <span className={styles.streamQualityTriggerEyebrow}>QUALITY</span>
+                          <span className={styles.streamQualityTriggerValue}>{selectedQualityOption.label}</span>
+                        </span>
+                        <FiChevronDown className={styles.streamQualityTriggerCaret} />
+                      </button>
+                      <span className={styles.streamQualityDivider} aria-hidden="true" />
+                      <div className={styles.streamQualityBadge} aria-label="Текущее качество потока">
+                        <span className={styles.streamQualityMode}>{qualityBadgeLabel}</span>
+                        <span className={styles.streamQualityLevel}>{streamQualityLevelLabel}</span>
+                      </div>
+                    </div>
+
+                    {qualityMenuOpen ? (
+                      <div className={styles.streamQualityMenu} role="menu" aria-label="Качество потока">
+                        {STREAM_QUALITY_OPTIONS.map((option) => {
+                          const isSelected = option.value === streamQualitySelected;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={isSelected}
+                              className={`${styles.streamQualityOption} ${
+                                isSelected ? styles.streamQualityOptionActive : ""
+                              }`.trim()}
+                              onClick={() => {
+                                setStreamQuality(option.value);
+                                setQualityMenuOpen(false);
+                              }}
+                            >
+                              <span className={styles.streamQualityOptionBody}>
+                                <span className={styles.streamQualityOptionLabel}>{option.label}</span>
+                                <span className={styles.streamQualityOptionHint}>{option.hint}</span>
+                              </span>
+                              {isSelected ? <FiCheck className={styles.streamQualityOptionCheck} /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  ref={queueToggleRef}
+                  className={`${styles.iconButton} ${queueOpen ? styles.iconButtonActive : ""}`.trim()}
+                  aria-label="Показать очередь"
+                  aria-pressed={queueOpen}
+                  onClick={() => setQueueOpen((value) => !value)}
+                >
+                  <FiList />
+                </button>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={volume > 0 ? "Выключить звук" : "Включить звук"}
+                  aria-pressed={volume === 0}
+                  onClick={handleToggleMute}
+                >
+                  {volume > 0 ? <FiVolume2 /> : <FiVolumeX />}
+                </button>
+              </div>
+              <input
+                className={`${styles.range} ${styles.volume}`}
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                style={{ "--range-progress": `${volume}%` }}
+                onChange={(event) => handleVolumeChange(event.target.value)}
+              />
+            </div>
           </div>
         </footer>
 

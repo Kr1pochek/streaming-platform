@@ -23,6 +23,7 @@ import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import { confirmPasswordReset, requestPasswordReset, uploadTrack } from "../api/musicApi.js";
 import ModalDialog from "../components/ModalDialog.jsx";
+import UserAvatar from "../components/UserAvatar.jsx";
 
 const DEFAULT_UPLOAD_TRACK_COVER = "linear-gradient(135deg, #5f739f 0%, #9ab2ff 50%, #22324d 100%)";
 const MAX_TRACK_COVER_FILE_SIZE = 5 * 1024 * 1024;
@@ -89,6 +90,8 @@ export default function ProfilePage() {
     signUp,
     signOut,
     updateProfile,
+    uploadAvatar,
+    removeAvatar,
     changePassword,
   } = useAuth();
   const {
@@ -136,8 +139,11 @@ export default function ProfilePage() {
   });
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const uploadAvatarInputRef = useRef(null);
   const uploadAudioInputRef = useRef(null);
   const uploadCoverInputRef = useRef(null);
+  const [avatarSubmitting, setAvatarSubmitting] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     audio: null,
@@ -175,6 +181,9 @@ export default function ProfilePage() {
     () => historyTracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0),
     [historyTracks]
   );
+  const accountName = user?.displayName ?? user?.username ?? "Пользователь";
+  const accountHandle = user?.username ? `@${user.username}` : "";
+  const hasAvatar = Boolean(user?.avatarUrl);
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
@@ -273,7 +282,7 @@ export default function ProfilePage() {
 
   const handleUpdateProfile = async (event) => {
     event.preventDefault();
-    if (!isAuthenticated || profileSubmitting) {
+    if (!isAuthenticated || profileSubmitting || avatarSubmitting) {
       return;
     }
 
@@ -297,7 +306,7 @@ export default function ProfilePage() {
 
   const handleChangePassword = async (event) => {
     event.preventDefault();
-    if (!isAuthenticated || passwordSubmitting) {
+    if (!isAuthenticated || passwordSubmitting || avatarSubmitting) {
       return;
     }
 
@@ -333,13 +342,57 @@ export default function ProfilePage() {
   const handleOpenAccountDialog = () => {
     setProfileError("");
     setPasswordError("");
+    setAvatarError("");
     setAccountDialogOpen(true);
   };
 
   const handleCloseAccountDialog = () => {
     setProfileError("");
     setPasswordError("");
+    setAvatarError("");
     setAccountDialogOpen(false);
+  };
+
+  const handleSelectAvatarFile = () => {
+    uploadAvatarInputRef.current?.click();
+  };
+
+  const handleAvatarFileChange = async (event) => {
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile || !isAuthenticated || avatarSubmitting) {
+      return;
+    }
+
+    setAvatarSubmitting(true);
+    setAvatarError("");
+    try {
+      await uploadAvatar(nextFile);
+      notify("Аватар обновлен.");
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Не удалось обновить аватар.");
+    } finally {
+      if (uploadAvatarInputRef.current) {
+        uploadAvatarInputRef.current.value = "";
+      }
+      setAvatarSubmitting(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!isAuthenticated || !hasAvatar || avatarSubmitting) {
+      return;
+    }
+
+    setAvatarSubmitting(true);
+    setAvatarError("");
+    try {
+      await removeAvatar();
+      notify("Аватар удален.");
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Не удалось удалить аватар.");
+    } finally {
+      setAvatarSubmitting(false);
+    }
   };
 
   const handleOpenUploadDialog = () => {
@@ -420,7 +473,7 @@ export default function ProfilePage() {
       return;
     }
     if (!title || !artist) {
-      setUploadError("Название и исполнитель обязательны.");
+      setUploadError("Название и исполнители обязательны.");
       return;
     }
     if (!genre) {
@@ -687,11 +740,13 @@ export default function ProfilePage() {
   return (
     <PageShell>
       <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Профиль</h1>
-          <p className={styles.subtitle}>
-            {user?.displayName ?? user?.username ?? "Пользователь"}: подписки, история и музыкальные предпочтения.
-          </p>
+        <div className={styles.headerIdentity}>
+          <UserAvatar avatarUrl={user?.avatarUrl} name={accountName} className={styles.profileAvatar} />
+          <div className={styles.headerCopy}>
+            {accountHandle ? <p className={styles.profileHandle}>{accountHandle}</p> : null}
+            <h1 className={styles.title}>Профиль</h1>
+            <p className={styles.subtitle}>{accountName}: подписки, история и музыкальные предпочтения.</p>
+          </div>
         </div>
         <div className={styles.headerRight}>
           <div className={styles.statsRow}>
@@ -867,10 +922,45 @@ export default function ProfilePage() {
       <ModalDialog
         open={accountDialogOpen}
         title="Настройки аккаунта"
-        description="Смена отображаемого имени и пароля."
+        description="Аватар, отображаемое имя и безопасность аккаунта."
         onClose={handleCloseAccountDialog}
       >
         <form className={`${styles.authForm} ${styles.modalForm}`.trim()} onSubmit={handleUpdateProfile}>
+          <input
+            ref={uploadAvatarInputRef}
+            className={styles.fileInputHidden}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={handleAvatarFileChange}
+          />
+          <div className={styles.accountAvatarCard}>
+            <UserAvatar avatarUrl={user?.avatarUrl} name={accountName} className={styles.accountAvatarPreview} />
+            <div className={styles.accountAvatarMeta}>
+              <div>
+                <p className={styles.accountAvatarTitle}>Аватар профиля</p>
+                <p className={styles.accountAvatarHint}>JPG, PNG, WebP или GIF, до 5 МБ.</p>
+              </div>
+              <div className={styles.authActions}>
+                <button
+                  type="button"
+                  className={styles.filePickerButton}
+                  disabled={avatarSubmitting}
+                  onClick={handleSelectAvatarFile}
+                >
+                  {avatarSubmitting ? "Загружаем..." : hasAvatar ? "Сменить аватар" : "Добавить аватар"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.authSecondaryButton}
+                  disabled={!hasAvatar || avatarSubmitting}
+                  onClick={handleRemoveAvatar}
+                >
+                  Удалить
+                </button>
+              </div>
+            </div>
+          </div>
+
           <label className={styles.authLabel}>
             Отображаемое имя
             <input
@@ -880,9 +970,10 @@ export default function ProfilePage() {
               maxLength={48}
             />
           </label>
+          {avatarError ? <p className={styles.authError}>{avatarError}</p> : null}
           {profileError ? <p className={styles.authError}>{profileError}</p> : null}
           <div className={styles.authActions}>
-            <button type="submit" className={styles.authPrimaryButton} disabled={profileSubmitting}>
+            <button type="submit" className={styles.authPrimaryButton} disabled={profileSubmitting || avatarSubmitting}>
               {profileSubmitting ? "Сохраняем..." : "Сохранить профиль"}
             </button>
           </div>
@@ -928,7 +1019,11 @@ export default function ProfilePage() {
           </label>
           {passwordError ? <p className={styles.authError}>{passwordError}</p> : null}
           <div className={styles.authActions}>
-            <button type="submit" className={styles.authPrimaryButton} disabled={passwordSubmitting}>
+            <button
+              type="submit"
+              className={styles.authPrimaryButton}
+              disabled={passwordSubmitting || avatarSubmitting}
+            >
               {passwordSubmitting ? "Сохраняем..." : "Изменить пароль"}
             </button>
           </div>
@@ -978,11 +1073,14 @@ export default function ProfilePage() {
               <input
                 className={styles.authInput}
                 value={uploadForm.artist}
-                maxLength={160}
+                maxLength={220}
                 required
+                placeholder="Например: Miyagi, Andy Panda или Miyagi feat. Andy Panda"
                 onChange={(event) => handleUploadFieldChange("artist", event.target.value)}
               />
             </label>
+
+            <p className={styles.uploadHint}>Несколько артистов можно указывать через запятую или `feat./ft.`.</p>
 
             <label className={styles.authLabel}>
               Жанр

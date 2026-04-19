@@ -141,8 +141,8 @@ async function main() {
         `Portable snapshot media synced into local storage (${snapshotRestore.mediaFileCount} files).`
       );
     }
-    console.log("Seeding catalog data...");
-    await runNodeScript("scripts/db/seed.mjs", "Database seed");
+    console.log("Running database bootstrap...");
+    await runNodeScript("scripts/db/seed.mjs", "Database bootstrap");
   }
   console.log("Starting API server...");
   await runServer();

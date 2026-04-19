@@ -518,7 +518,7 @@ function playerReducer(state, action) {
         };
       }
 
-      if (Math.floor(nextValue) === Math.floor(state.progressSec)) {
+      if (Math.abs(nextValue - state.progressSec) < 0.02) {
         return state;
       }
 
@@ -1506,7 +1506,7 @@ export function PlayerProvider({ children }) {
   const currentTrack = trackMap[currentTrackId] ?? null;
   const currentDuration = currentTrack?.durationSec ?? 0;
   const clampedProgress = clamp(state.progressSec, 0, currentDuration || state.progressSec);
-  const progressPercent = currentDuration ? Math.round((clampedProgress / currentDuration) * 100) : 0;
+  const progressPercent = currentDuration ? (clampedProgress / currentDuration) * 100 : 0;
 
   const stopTrailerPlayback = useCallback(
     (audio, trailerSession = trailerSessionRef.current) => {

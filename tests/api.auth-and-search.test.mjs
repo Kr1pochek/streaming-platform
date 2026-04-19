@@ -58,6 +58,26 @@ test("PATCH /api/auth/profile requires authentication", async (t) => {
   assert.equal(response.status, 401);
 });
 
+test("POST /api/auth/avatar requires authentication", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/auth/avatar`, {
+    method: "POST",
+  });
+  assert.equal(response.status, 401);
+});
+
+test("DELETE /api/auth/avatar requires authentication", async (t) => {
+  const server = await startServer();
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/auth/avatar`, {
+    method: "DELETE",
+  });
+  assert.equal(response.status, 401);
+});
+
 test("POST /api/auth/password/change requires authentication", async (t) => {
   const server = await startServer();
   t.after(server.stop);

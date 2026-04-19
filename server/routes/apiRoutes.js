@@ -53,6 +53,7 @@ import {
 import { getSmartRecommendations } from "../services/recommendationService.js";
 import { fetchUserState, updateUserState } from "../services/userStateService.js";
 import { ingestUploadedTrack } from "../services/trackUploadService.js";
+import { ingestUploadedAvatar, removeUploadedAvatar } from "../services/avatarUploadService.js";
 import {
   getAdminStats,
   getAdminReleaseFormOptions,
@@ -95,6 +96,7 @@ const mimeTypeByExtension = new Map([
   [".opus", "audio/ogg"],
 ]);
 const TRACK_UPLOAD_MAX_BYTES = Number(process.env.TRACK_UPLOAD_MAX_BYTES ?? 80 * 1024 * 1024);
+const AVATAR_UPLOAD_MAX_BYTES = Number(process.env.AVATAR_UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
 const trackUploadTempDirectory = path.resolve(
   process.cwd(),
   String(process.env.TRACK_UPLOAD_TEMP_DIR ?? "tmp/uploads")
@@ -106,6 +108,33 @@ const trackUploadMiddleware = multer({
     fileSize: TRACK_UPLOAD_MAX_BYTES,
   },
 });
+const avatarUploadMiddleware = multer({
+  dest: trackUploadTempDirectory,
+  limits: {
+    fileSize: AVATAR_UPLOAD_MAX_BYTES,
+  },
+  fileFilter: (_req, file, callback) => {
+    const normalizedMimeType = String(file?.mimetype ?? "").trim().toLowerCase();
+    if (!normalizedMimeType.startsWith("image/") || normalizedMimeType === "image/svg+xml") {
+      callback(new HttpError(400, "Avatar must be a JPG, PNG, WebP, or GIF image."));
+      return;
+    }
+    callback(null, true);
+  },
+}).single("avatar");
+
+function withUploadMiddleware(middleware, { fileSizeMessage = "" } = {}) {
+  return (req, res, next) => {
+    middleware(req, res, (error) => {
+      if (error?.name === "MulterError" && error.code === "LIMIT_FILE_SIZE" && fileSizeMessage) {
+        next(new HttpError(413, fileSizeMessage));
+        return;
+      }
+
+      next(error);
+    });
+  };
+}
 
 function parseLimit(value, fallback = 12) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -297,6 +326,21 @@ function playlistsWithTracks(playlists = []) {
   return playlists.filter((playlist) => Array.isArray(playlist?.trackIds) && playlist.trackIds.length > 0);
 }
 
+function mapHomeReleaseItem(release, artistNameById = new Map()) {
+  return {
+    id: `notif-${release.id}`,
+    releaseId: release.id,
+    artistId: release.artistId,
+    artistName: artistNameById.get(release.artistId) ?? "",
+    title: release.title,
+    type: release.type,
+    year: Number(release.year ?? 0),
+    cover: release.cover,
+    publishedAt: Number(release.publishedAt ?? 0),
+    trackIds: Array.isArray(release.trackIds) ? release.trackIds : [],
+  };
+}
+
 function buildHomeShowcases(playlists = []) {
   const availablePlaylists = playlistsWithTracks(playlists).filter((playlist) => !isCustomPlaylist(playlist));
   if (!availablePlaylists.length) {
@@ -477,6 +521,43 @@ export function createApiRouter({
       const user = await updateUserProfile({
         userId: req.auth.userId,
         displayName,
+      });
+      res.json({ user });
+    })
+  );
+
+  router.post(
+    "/auth/avatar",
+    requireAuth,
+    withUploadMiddleware(avatarUploadMiddleware, {
+      fileSizeMessage: "Avatar image is too large.",
+    }),
+    asyncHandler(async (req, res) => {
+      const uploadedFile = req.file;
+      if (!uploadedFile) {
+        throw new HttpError(400, "Avatar image is required.");
+      }
+
+      try {
+        const user = await ingestUploadedAvatar({
+          userId: req.auth.userId,
+          uploadFilePath: uploadedFile.path,
+          originalFileName: uploadedFile.originalname,
+          mimetype: uploadedFile.mimetype,
+        });
+        res.status(201).json({ user });
+      } finally {
+        fs.rmSync(uploadedFile.path, { force: true });
+      }
+    })
+  );
+
+  router.delete(
+    "/auth/avatar",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const user = await removeUploadedAvatar({
+        userId: req.auth.userId,
       });
       res.json({ user });
     })
@@ -913,40 +994,30 @@ export function createApiRouter({
     "/home-feed",
     asyncHandler(async (req, res) => {
       const userId = requestUserId(req);
-      const { playlists, tracks, trackMap, artists, releases } = await fetchCatalog();
+      const { playlists, tracks, trackMap, artists, releases } = await catalogFetcher();
       const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
       const catalogState = buildCatalogState({ tracks, playlists: visiblePlaylists });
       const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
       const fallbackFreshTrackIds = tracks.slice(0, 6).map((track) => track.id);
       const enrichedShowcases = buildHomeShowcases(visiblePlaylists);
 
-      let releaseNotifications = [];
+      const artistNameById = new Map((artists ?? []).map((artist) => [artist.id, artist.name]));
+      const sortedReleases = [...(releases ?? [])].sort(
+        (first, second) =>
+          Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
+          Number(second.year ?? 0) - Number(first.year ?? 0) ||
+          String(second.id).localeCompare(String(first.id))
+      );
+
+      let releaseNotifications = sortedReleases;
       if (userId) {
         const userState = await fetchUserState(userId);
         const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
-        const artistNameById = new Map((artists ?? []).map((artist) => [artist.id, artist.name]));
-        releaseNotifications = (releases ?? [])
-          .filter((release) => followedArtistIdSet.has(release.artistId))
-          .sort(
-            (first, second) =>
-              Number(second.publishedAt ?? 0) - Number(first.publishedAt ?? 0) ||
-              Number(second.year ?? 0) - Number(first.year ?? 0) ||
-              String(second.id).localeCompare(String(first.id))
-          )
-          .slice(0, 8)
-          .map((release) => ({
-            id: `notif-${release.id}`,
-            releaseId: release.id,
-            artistId: release.artistId,
-            artistName: artistNameById.get(release.artistId) ?? "",
-            title: release.title,
-            type: release.type,
-            year: Number(release.year ?? 0),
-            cover: release.cover,
-            publishedAt: Number(release.publishedAt ?? 0),
-            trackIds: Array.isArray(release.trackIds) ? release.trackIds : [],
-          }));
+        const followedReleases = sortedReleases.filter((release) => followedArtistIdSet.has(release.artistId));
+        const remainingReleases = sortedReleases.filter((release) => !followedArtistIdSet.has(release.artistId));
+        releaseNotifications = [...followedReleases, ...remainingReleases];
       }
+      releaseNotifications = releaseNotifications.slice(0, 8).map((release) => mapHomeReleaseItem(release, artistNameById));
 
       res.json({
         quickActions,
