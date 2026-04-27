@@ -1,6 +1,7 @@
 ﻿import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiHeart, FiMoreHorizontal, FiMusic, FiPlay, FiSearch } from "react-icons/fi";
+import { FiChevronRight, FiHeart, FiMoreHorizontal, FiMusic, FiSearch } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./LikedPage.module.css";
 import usePlayer from "../hooks/usePlayer.js";
 import PageShell from "../components/PageShell.jsx";
@@ -110,7 +111,7 @@ export default function LikedPage() {
             </div>
             <div className={styles.actionsRow}>
               <button type="button" className={styles.primaryButton} onClick={() => playTrack(likedTracks[0].id)}>
-                <FiPlay />
+                <BsFillPlayFill />
                 Слушать с начала
               </button>
               <button type="button" className={styles.secondaryButton} onClick={() => navigate("/library")}>

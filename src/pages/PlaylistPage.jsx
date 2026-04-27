@@ -7,10 +7,10 @@ import {
   FiHeart,
   FiLink2,
   FiMoreHorizontal,
-  FiPlay,
   FiShuffle,
   FiTrash2,
 } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import { LuHeart } from "react-icons/lu";
 import styles from "./PlaylistPage.module.css";
 import PageShell from "../components/PageShell.jsx";
@@ -273,7 +273,7 @@ export default function PlaylistPage() {
               </div>
               <div className={styles.heroActions}>
                 <button type="button" className={styles.primaryButton} onClick={() => playQueue(playlistTrackIds, 0)}>
-                  <FiPlay />
+                  <BsFillPlayFill />
                   Слушать
                 </button>
                 {canSavePlaylist ? (
@@ -435,7 +435,7 @@ export default function PlaylistPage() {
                               playTrack(firstTrackId);
                             }}
                           >
-                            <FiPlay />
+                            <BsFillPlayFill />
                           </button>
                           <button
                             type="button"

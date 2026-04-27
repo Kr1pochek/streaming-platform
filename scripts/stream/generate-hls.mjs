@@ -19,8 +19,8 @@ function toFfmpegPath(value) {
 function printUsage() {
   console.log("Usage:");
   console.log("  npm run stream:hls");
-  console.log("  npm run stream:hls -- --track city-rain");
-  console.log("  npm run stream:hls -- --track city-rain --track poison-halo --dry-run");
+  console.log("  npm run stream:hls -- --track your-track-id");
+  console.log("  npm run stream:hls -- --track your-track-id --dry-run");
 }
 
 function parseArgs(argv) {

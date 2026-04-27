@@ -1,6 +1,8 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiChevronRight, FiHeart, FiMoreHorizontal, FiPlay, FiSearch } from "react-icons/fi";
+import { FiChevronRight, FiHeart, FiMoreHorizontal, FiSearch } from "react-icons/fi";
+import { BsFillPlayFill, BsHeartFill } from "react-icons/bs";
+import { LuHeart } from "react-icons/lu";
 import { useRef } from "react";
 import { useLocation } from "react-router-dom";
 import styles from "./SearchPage.module.css";
@@ -11,9 +13,12 @@ import usePlayer from "../hooks/usePlayer.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
+import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import SmartRecommendations from "../components/SmartRecommendations.jsx";
+import CardActionMenu from "../components/CardActionMenu.jsx";
+import useCardActionMenu from "../hooks/useCardActionMenu.js";
 
 const tabs = [
   { id: "popular", label: "Популярное" },
@@ -29,6 +34,8 @@ const searchFilters = [
 ];
 
 const PAGE_LIMIT = 12;
+const SEARCH_HISTORY_STORAGE_KEY = "music.search.history.v1";
+const SEARCH_HISTORY_LIMIT = 12;
 const defaultPagination = {
   limit: PAGE_LIMIT,
   offset: 0,
@@ -67,6 +74,29 @@ function mergeById(currentItems = [], nextItems = []) {
   return result;
 }
 
+function normalizeSearchHistoryEntry(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function readSearchHistory() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(SEARCH_HISTORY_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    return raw.map(normalizeSearchHistoryEntry).filter(Boolean).slice(0, SEARCH_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
 export default function SearchPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,14 +106,20 @@ export default function SearchPage() {
   const {
     trackMap,
     likedIds,
-    historyIds,
     currentTrackId,
     playTrack,
+    isArtistFollowed,
+    toggleArtistFollow,
     toggleLikeTrack,
-    clearHistory,
+    notify,
   } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
+  const {
+    menuState: cardMenuState,
+    openCardMenu,
+    closeCardMenu,
+  } = useCardActionMenu();
   const initialQueryFromNavigation =
     typeof location.state?.initialQuery === "string" ? location.state.initialQuery.trim() : "";
   const appliedInitialQueryRef = useRef("");
@@ -93,8 +129,34 @@ export default function SearchPage() {
   const [resultFilter, setResultFilter] = useState("all");
   const [searchOffset, setSearchOffset] = useState(0);
   const [searchState, setSearchState] = useState(emptySearchState);
+  const [searchHistory, setSearchHistory] = useState(() => readSearchHistory());
 
   const normalizedQuery = query.trim();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(SEARCH_HISTORY_STORAGE_KEY, JSON.stringify(searchHistory));
+  }, [searchHistory]);
+
+  const rememberSearchQuery = useCallback((value) => {
+    const normalizedValue = normalizeSearchHistoryEntry(value);
+    if (!normalizedValue) {
+      return;
+    }
+
+    setSearchHistory((prev) => {
+      const normalizedValueLower = normalizedValue.toLocaleLowerCase();
+      const filtered = prev.filter((item) => item.toLocaleLowerCase() !== normalizedValueLower);
+      return [normalizedValue, ...filtered].slice(0, SEARCH_HISTORY_LIMIT);
+    });
+  }, []);
+
+  const clearSearchHistory = useCallback(() => {
+    setSearchHistory([]);
+  }, []);
 
   useEffect(() => {
     if (!initialQueryFromNavigation || appliedInitialQueryRef.current === initialQueryFromNavigation) {
@@ -220,14 +282,16 @@ export default function SearchPage() {
     };
   }, [normalizedQuery, resultFilter, searchOffset]);
 
+  useEffect(() => {
+    if (searchState.status === "success" && normalizedQuery) {
+      rememberSearchQuery(normalizedQuery);
+    }
+  }, [normalizedQuery, rememberSearchQuery, searchState.status]);
+
   const popularTracks = useMemo(
     () => (data?.newTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
     [data?.newTrackIds, trackMap]
   );
-
-  const historyTracks = useMemo(() => {
-    return historyIds.map((id) => trackMap[id]).filter(Boolean);
-  }, [historyIds, trackMap]);
 
   const recommendations = useMemo(() => {
     const source = popularTracks.length ? popularTracks : Object.values(trackMap);
@@ -235,7 +299,6 @@ export default function SearchPage() {
   }, [popularTracks, trackMap]);
 
   const popularColumns = useMemo(() => nonEmptyColumns(popularTracks), [popularTracks]);
-  const historyColumns = useMemo(() => nonEmptyColumns(historyTracks), [historyTracks]);
   const collections = Array.isArray(data?.collections) ? data.collections : [];
   const morePlaylists = Array.isArray(data?.morePlaylists) ? data.morePlaylists : [];
   const isSparseCatalog = Boolean(data?.catalogState?.sparseCatalog);
@@ -268,6 +331,60 @@ export default function SearchPage() {
     navigate("/search");
   };
 
+  const copyPlaylistLink = useCallback(
+    async (playlistId) => {
+      if (!playlistId || typeof window === "undefined") {
+        return;
+      }
+
+      const absoluteUrl = new URL(`/playlist/${playlistId}`, window.location.origin).toString();
+      try {
+        if (!navigator?.clipboard?.writeText) {
+          throw new Error("clipboard-unavailable");
+        }
+        await navigator.clipboard.writeText(absoluteUrl);
+        notify("Ссылка на плейлист скопирована.");
+      } catch {
+        window.prompt("Скопируй ссылку на плейлист:", absoluteUrl);
+      }
+    },
+    [notify]
+  );
+
+  const openPlaylistCardMenu = useCallback(
+    (event, playlist) => {
+      if (!playlist?.id) {
+        return;
+      }
+
+      openCardMenu(event, {
+        title: playlist.title ?? "Плейлист",
+        subtitle: `${playlist.trackIds?.length ?? 0} треков`,
+        actions: [
+          {
+            id: `open-playlist-${playlist.id}`,
+            icon: "open",
+            label: "Открыть плейлист",
+            onSelect: () => navigate(`/playlist/${playlist.id}`),
+          },
+          {
+            id: `share-playlist-${playlist.id}`,
+            icon: "share",
+            label: "Поделиться",
+            onSelect: () => copyPlaylistLink(playlist.id),
+          },
+        ],
+      });
+    },
+    [copyPlaylistLink, navigate, openCardMenu]
+  );
+
+  const handleSearchHistorySelect = useCallback((value) => {
+    setActiveTab("popular");
+    setResultFilter("all");
+    handleQueryChange(value);
+  }, []);
+
   return (
     <PageShell>
       <div className={styles.searchBlock}>
@@ -279,6 +396,7 @@ export default function SearchPage() {
           <input
             id="global-search"
             className={styles.searchInput}
+            data-testid="search-input"
             type="search"
             value={query}
             onChange={(event) => handleQueryChange(event.target.value)}
@@ -344,12 +462,14 @@ export default function SearchPage() {
           searchState={searchState}
           searchResults={searchResults}
           searchEmpty={searchEmpty}
+          isArtistFollowed={isArtistFollowed}
           likedIds={likedIds}
           currentTrackId={currentTrackId}
           recommendationTracks={recommendations}
           pagination={searchState.pagination}
           loadingMore={searchState.loadingMore}
           onPlay={playTrack}
+          onToggleArtistFollow={toggleArtistFollow}
           onToggleLike={toggleLikeTrack}
           onOpenPlaylist={(id) => navigate(`/playlist/${id}`)}
           onOpenArtist={(id) => navigate(`/artist/${id}`)}
@@ -363,6 +483,7 @@ export default function SearchPage() {
             )
           }
           onOpenTrackMenu={openTrackMenu}
+          onOpenPlaylistMenu={openPlaylistCardMenu}
         />
       ) : null}
 
@@ -421,52 +542,18 @@ export default function SearchPage() {
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
             </div>
             <div className={styles.moreGrid}>
-              {morePlaylists.map((playlist) => {
-                const firstTrackId = playlist.trackIds?.[0] ?? null;
-                return (
-                  <article key={playlist.id} className={styles.moreCard}>
-                    <button
-                      type="button"
-                      className={styles.moreMainButton}
-                      onClick={() => navigate(`/playlist/${playlist.id}`)}
-                    >
-                      <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                      <span className={styles.moreMeta}>
-                        <span className={styles.moreTitle}>{playlist.title}</span>
-                        <span className={styles.moreArtist}>{playlist.artist}</span>
-                      </span>
-                    </button>
-                    {firstTrackId ? (
-                      <span className={styles.cardActions}>
-                        <button
-                          type="button"
-                          className={styles.cardActionButton}
-                          aria-label="Слушать"
-                          onClick={() => playTrack(firstTrackId)}
-                        >
-                          <FiPlay />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.cardActionButton}
-                          aria-label="Лайк"
-                          onClick={() => toggleLikeTrack(firstTrackId)}
-                        >
-                          <FiHeart />
-                        </button>
-                        <button
-                          type="button"
-                          className={styles.cardActionButton}
-                          aria-label="Открыть меню трека"
-                          onClick={(event) => openTrackMenu(event, firstTrackId)}
-                        >
-                          <FiMoreHorizontal />
-                        </button>
-                      </span>
-                    ) : null}
-                  </article>
-                );
-              })}
+              {morePlaylists.map((playlist) => (
+                <PlaylistCard
+                  key={playlist.id}
+                  playlist={playlist}
+                  subtitle={playlist.artist}
+                  likedIds={likedIds}
+                  onOpenPlaylist={(playlistId) => navigate(`/playlist/${playlistId}`)}
+                  onPlay={playTrack}
+                  onToggleLike={toggleLikeTrack}
+                  onOpenMenu={openPlaylistCardMenu}
+                />
+              ))}
             </div>
           </section>
         </>
@@ -478,32 +565,30 @@ export default function SearchPage() {
             <h2 className={styles.sectionHeading}>История поиска</h2>
           </div>
 
-          {historyTracks.length ? (
+          {searchHistory.length ? (
             <>
-              <div
-                className={`${styles.historyGrid} ${historyColumns.length === 1 ? styles.historyGridSingle : ""}`.trim()}
-              >
-                {historyColumns.map((column, index) => (
-                  <HistoryColumn
-                    key={`history-column-${index}`}
-                    tracks={column}
-                    likedIds={likedIds}
-                    currentTrackId={currentTrackId}
-                    onPlay={playTrack}
-                    onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                    onOpenTrackMenu={openTrackMenu}
-                  />
+              <div className={styles.searchHistoryList}>
+                {searchHistory.map((entry) => (
+                  <button
+                    key={entry}
+                    type="button"
+                    className={styles.searchHistoryButton}
+                    onClick={() => handleSearchHistorySelect(entry)}
+                  >
+                    <FiSearch aria-hidden="true" />
+                    <span>{entry}</span>
+                  </button>
                 ))}
               </div>
-              <button type="button" className={styles.clearHistoryButton} onClick={clearHistory}>
-                Очистить историю
+              <button type="button" className={styles.clearHistoryButton} onClick={clearSearchHistory}>
+                Очистить запросы
               </button>
             </>
           ) : (
             <>
               <ResourceState
                 title="История пока пустая"
-                description="Запускай треки из поиска, и они появятся здесь автоматически."
+                description="Выполняй поисковые запросы, и последние из них появятся здесь."
                 actionLabel="Перейти в популярное"
                 onAction={() => setActiveTab("popular")}
               />
@@ -519,6 +604,7 @@ export default function SearchPage() {
         </section>
       ) : null}
 
+      <CardActionMenu menuState={cardMenuState} onClose={closeCardMenu} />
       <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />
     </PageShell>
   );
@@ -529,12 +615,14 @@ function SearchResults({
   searchState,
   searchResults,
   searchEmpty,
+  isArtistFollowed,
   likedIds,
   currentTrackId,
   recommendationTracks,
   pagination,
   loadingMore,
   onPlay,
+  onToggleArtistFollow,
   onToggleLike,
   onOpenPlaylist,
   onOpenArtist,
@@ -542,6 +630,7 @@ function SearchResults({
   onClearQuery,
   onLoadMore,
   onOpenTrackMenu,
+  onOpenPlaylistMenu,
 }) {
   if (searchState.status === "loading") {
     return (
@@ -618,52 +707,18 @@ function SearchResults({
             <h2 className={styles.sectionHeading}>Плейлисты</h2>
           </div>
           <div className={styles.moreGrid}>
-            {searchResults.playlists.map((playlist) => {
-              const firstTrackId = playlist.trackIds?.[0] ?? null;
-              return (
-                <article key={playlist.id} className={styles.moreCard}>
-                  <button
-                    type="button"
-                    className={styles.moreMainButton}
-                    onClick={() => onOpenPlaylist(playlist.id)}
-                  >
-                    <span className={styles.moreCover} style={{ background: playlist.cover }} />
-                    <span className={styles.moreMeta}>
-                      <span className={styles.moreTitle}>{playlist.title}</span>
-                      <span className={styles.moreArtist}>{playlist.subtitle}</span>
-                    </span>
-                  </button>
-                  {firstTrackId ? (
-                    <span className={styles.cardActions}>
-                      <button
-                        type="button"
-                        className={styles.cardActionButton}
-                        aria-label="Слушать"
-                        onClick={() => onPlay(firstTrackId)}
-                      >
-                        <FiPlay />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.cardActionButton}
-                        aria-label="Лайк"
-                        onClick={() => onToggleLike(firstTrackId)}
-                      >
-                        <FiHeart />
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.cardActionButton}
-                        aria-label="Открыть меню трека"
-                        onClick={(event) => onOpenTrackMenu(event, firstTrackId)}
-                      >
-                        <FiMoreHorizontal />
-                      </button>
-                    </span>
-                  ) : null}
-                </article>
-              );
-            })}
+            {searchResults.playlists.map((playlist) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                subtitle={playlist.subtitle}
+                likedIds={likedIds}
+                onOpenPlaylist={onOpenPlaylist}
+                onPlay={onPlay}
+                onToggleLike={onToggleLike}
+                onOpenMenu={onOpenPlaylistMenu}
+              />
+            ))}
           </div>
         </section>
       )}
@@ -696,18 +751,16 @@ function SearchResults({
           </div>
           <div className={styles.artistResultsGrid}>
             {searchResults.artists.map((artist) => (
-              <button
+              <ArtistSpotlightCard
                 key={artist.id}
-                type="button"
-                className={styles.artistResultCard}
-                onClick={() => onOpenArtist(artist.id)}
-              >
-                <span className={styles.artistResultAvatar}>{artist.name.slice(0, 1).toUpperCase()}</span>
-                <span className={styles.artistResultMeta}>
-                  <span className={styles.artistResultName}>{artist.name}</span>
-                  <span className={styles.artistResultFollowers}>{artist.followers} подписчиков</span>
-                </span>
-              </button>
+                artist={artist}
+                audience="followers"
+                contextLabel="Найдено"
+                description="Треки, релизы и быстрый переход на страницу артиста."
+                isFollowed={isArtistFollowed(artist.id)}
+                onOpen={() => onOpenArtist(artist.id)}
+                onToggleFollow={() => onToggleArtistFollow(artist.id)}
+              />
             ))}
           </div>
         </section>
@@ -726,6 +779,67 @@ function SearchResults({
         </section>
       ) : null}
     </>
+  );
+}
+
+function PlaylistCard({
+  playlist,
+  subtitle,
+  likedIds,
+  onOpenPlaylist,
+  onPlay,
+  onToggleLike,
+  onOpenMenu,
+}) {
+  const firstTrackId = playlist.trackIds?.[0] ?? null;
+  const isFirstTrackLiked = firstTrackId ? likedIds.includes(firstTrackId) : false;
+
+  return (
+    <article className={styles.moreCard}>
+      <button type="button" className={styles.moreMainButton} onClick={() => onOpenPlaylist(playlist.id)}>
+        <span className={styles.moreCover} style={{ background: playlist.cover }} />
+        <span className={styles.moreMeta}>
+          <span className={styles.moreTitle}>{playlist.title}</span>
+          <span className={styles.moreArtist}>{subtitle}</span>
+        </span>
+      </button>
+      <span className={styles.cardActions}>
+        {firstTrackId ? (
+          <>
+            <button
+              type="button"
+              className={styles.cardActionButton}
+              aria-label="Слушать"
+              onClick={() => onPlay(firstTrackId)}
+            >
+              <BsFillPlayFill />
+            </button>
+            <button
+              type="button"
+              className={`${styles.cardActionButton} ${styles.cardActionButtonLike} ${isFirstTrackLiked ? styles.cardActionButtonLiked : ""}`.trim()}
+              aria-label={isFirstTrackLiked ? "Убрать из избранного" : "Добавить в избранное"}
+              aria-pressed={isFirstTrackLiked}
+              onClick={() => onToggleLike(firstTrackId)}
+            >
+              <span className={styles.cardActionHeartOutline} aria-hidden="true">
+                <LuHeart />
+              </span>
+              <span className={styles.cardActionHeartFilled} aria-hidden="true">
+                <BsHeartFill />
+              </span>
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          className={styles.cardActionButton}
+          aria-label="Меню плейлиста"
+          onClick={(event) => onOpenMenu(event, playlist)}
+        >
+          <FiMoreHorizontal />
+        </button>
+      </span>
+    </article>
   );
 }
 
@@ -776,63 +890,6 @@ function TrackListColumn({
               <FiMoreHorizontal />
             </button>
             <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function HistoryColumn({
-  tracks,
-  likedIds,
-  currentTrackId,
-  onPlay,
-  onOpenArtist,
-  onOpenTrackMenu,
-}) {
-  return (
-    <ul className={styles.historyTrackList}>
-      {tracks.map((track) => {
-        const liked = likedIds.includes(track.id);
-        const isActive = currentTrackId === track.id;
-        return (
-          <li
-            key={track.id}
-            className={`${styles.historyTrackRow} ${isActive ? styles.historyTrackRowActive : ""}`.trim()}
-          >
-            <button
-              type="button"
-              className={styles.historyMainButton}
-              onClick={() => onPlay(track.id)}
-              onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
-            >
-              <span className={styles.historyCover} style={{ background: track.cover }} />
-              <span className={styles.historyMeta}>
-                <span className={styles.historyTitle}>
-                  {track.title}
-                  {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
-                  {track.explicit ? <span className={styles.explicitTag}>E</span> : null}
-                </span>
-                <ArtistInlineLinks
-                  artistLine={track.artist}
-                  className={styles.historySubtitle}
-                  linkClassName={styles.historyArtistButton}
-                  textClassName={styles.historySubtitle}
-                  onOpenArtist={onOpenArtist}
-                  stopPropagation
-                />
-              </span>
-            </button>
-            <button
-              type="button"
-              className={styles.historyQueueButton}
-              aria-label="Открыть меню трека"
-              onClick={(event) => onOpenTrackMenu(event, track.id)}
-            >
-              <FiMoreHorizontal />
-            </button>
-            <span className={styles.historyDuration}>{formatDurationClock(track.durationSec)}</span>
           </li>
         );
       })}

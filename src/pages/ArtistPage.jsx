@@ -7,11 +7,11 @@ import {
   FiExternalLink,
   FiHeart,
   FiMoreHorizontal,
-  FiPlay,
   FiShuffle,
   FiUserPlus,
   FiUsers,
 } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./ArtistPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -20,6 +20,7 @@ import usePlayer from "../hooks/usePlayer.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
+import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 
@@ -29,20 +30,11 @@ export default function ArtistPage() {
   const loadArtistPage = useCallback(() => fetchArtistPage(artistId), [artistId]);
   const { status, data, error, reload } = useAsyncResource(loadArtistPage);
 
-  const {
-    likedIds,
-    followedArtistIds,
-    currentTrackId,
-    isArtistFollowed,
-    toggleArtistFollow,
-    playTrack,
-    playQueue,
-  } = usePlayer();
+  const { likedIds, currentTrackId, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const artistTrackIds = useMemo(() => (data?.topTracks ?? []).map((track) => track.id), [data?.topTracks]);
-  const followedCount = followedArtistIds.length;
   const artistFollowed = data?.artist ? isArtistFollowed(data.artist.id) : false;
 
   return (
@@ -73,7 +65,6 @@ export default function ArtistPage() {
                   {data.artist.followers} слушателей
                 </span>
                 <span>{data.topTracks.length} треков</span>
-                <span>Мои подписки: {followedCount}</span>
               </div>
               <div className={styles.heroActions}>
                 <button
@@ -82,7 +73,7 @@ export default function ArtistPage() {
                   disabled={!artistTrackIds.length}
                   onClick={() => playQueue(artistTrackIds, 0)}
                 >
-                  <FiPlay />
+                  <BsFillPlayFill />
                   Слушать
                 </button>
                 <button
@@ -197,7 +188,7 @@ export default function ArtistPage() {
                       aria-label="Слушать релиз"
                       onClick={() => playQueue(data.latestRelease.trackIds, 0)}
                     >
-                      <FiPlay />
+                      <BsFillPlayFill />
                       Слушать
                     </button>
                     <button
@@ -244,7 +235,7 @@ export default function ArtistPage() {
                         className={styles.albumPlayButton}
                         onClick={() => playQueue(album.trackIds, 0)}
                       >
-                        <FiPlay />
+                        <BsFillPlayFill />
                         Слушать
                       </button>
                       <button
@@ -300,6 +291,31 @@ export default function ArtistPage() {
               </div>
             ) : (
               <p className={styles.emptyText}>EP и синглы пока не добавлены.</p>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionTitleRow}>
+              <h2 className={styles.sectionTitle}>Похожие артисты</h2>
+              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+            </div>
+            {data.relatedArtists?.length ? (
+              <div className={styles.relatedArtistGrid}>
+                {data.relatedArtists.map((relatedArtist) => (
+                  <ArtistSpotlightCard
+                    key={relatedArtist.id}
+                    artist={relatedArtist}
+                    contextLabel="Похоже по звучанию"
+                    description="Исследуй похожего автора и переключайся между близкими по атмосфере релизами."
+                    isFollowed={isArtistFollowed(relatedArtist.id)}
+                    onOpen={() => navigate(`/artist/${relatedArtist.id}`)}
+                    onToggleFollow={() => toggleArtistFollow(relatedArtist.id)}
+                    openLabel="Открыть"
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className={styles.emptyText}>Похожие артисты появятся, когда в каталоге станет больше совпадений.</p>
             )}
           </section>
         </>

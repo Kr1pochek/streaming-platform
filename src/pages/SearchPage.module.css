@@ -492,6 +492,62 @@
   transform: translateY(-3px);
 }
 
+.searchHistoryList {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.searchHistoryButton {
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+    rgba(16, 18, 24, 0.96);
+  color: rgba(255, 255, 255, 0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.searchHistoryButton:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)),
+    rgba(18, 20, 26, 0.98);
+  transform: translateY(-1px);
+}
+
+.searchHistoryButton svg {
+  width: 16px;
+  height: 16px;
+  color: rgba(245, 204, 70, 0.92);
+  flex: 0 0 auto;
+}
+
+.searchHistoryButton span {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.searchHistoryButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
 .historyGrid {
   margin-top: 14px;
   display: grid;
@@ -871,6 +927,59 @@
   background: rgba(255, 255, 255, 0.18);
 }
 
+.cardActionButtonLike {
+  position: relative;
+}
+
+.cardActionHeartOutline,
+.cardActionHeartFilled {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+
+.cardActionHeartOutline {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cardActionHeartFilled {
+  opacity: 0;
+  transform: scale(0.72);
+  color: #f5cc46;
+}
+
+.cardActionButtonLike:hover,
+.cardActionButtonLike:focus-visible,
+.cardActionButtonLiked {
+  color: #f5cc46;
+}
+
+.cardActionButtonLike:hover .cardActionHeartOutline,
+.cardActionButtonLike:focus-visible .cardActionHeartOutline,
+.cardActionButtonLiked .cardActionHeartOutline {
+  opacity: 0;
+  transform: scale(0.72);
+}
+
+.cardActionButtonLike:hover .cardActionHeartFilled,
+.cardActionButtonLike:focus-visible .cardActionHeartFilled,
+.cardActionButtonLiked .cardActionHeartFilled {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cardActionButtonLiked {
+  border-color: rgba(245, 204, 70, 0.28);
+  background: rgba(245, 204, 70, 0.12);
+}
+
 .cardActionButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
@@ -925,7 +1034,7 @@
 .artistResultsGrid {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 12px;
 }
 
@@ -1067,6 +1176,10 @@
 @media (max-width: 760px) {
   .moreGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .artistResultsGrid {
+    grid-template-columns: 1fr;
   }
 }
 

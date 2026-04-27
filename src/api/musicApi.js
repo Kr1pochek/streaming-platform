@@ -255,11 +255,21 @@ function normalizeArtistLine(value, artists = []) {
 }
 
 function normalizeArtistSummary(artist = {}) {
+  const rawFollowers = artist?.followers;
+  const followers =
+    typeof rawFollowers === "string"
+      ? rawFollowers.trim()
+      : Number.isFinite(rawFollowers)
+        ? String(rawFollowers)
+        : Number.isFinite(Number(rawFollowers))
+          ? String(Number(rawFollowers))
+          : "0";
+
   return {
     ...artist,
     id: asString(artist.id),
     name: asString(artist.name),
-    followers: asNumber(artist.followers, 0),
+    followers,
   };
 }
 
@@ -397,11 +407,21 @@ function normalizeReleaseNotification(item = {}) {
 }
 
 function normalizeSearchArtist(item = {}) {
+  const rawFollowers = item?.followers;
+  const followers =
+    typeof rawFollowers === "string"
+      ? rawFollowers.trim()
+      : Number.isFinite(rawFollowers)
+        ? String(rawFollowers)
+        : Number.isFinite(Number(rawFollowers))
+          ? String(Number(rawFollowers))
+          : "0";
+
   return {
     ...item,
     id: asString(item.id),
     name: asString(item.name),
-    followers: asNumber(item.followers, 0),
+    followers,
   };
 }
 
@@ -488,6 +508,7 @@ function normalizeSearchResultPayload(payload = {}) {
 function normalizeLibraryFeedPayload(payload = {}) {
   return {
     ...payload,
+    artists: asArray(payload.artists).map(normalizeArtistSummary),
     playlists: asArray(payload.playlists).map(normalizePlaylistSummary),
     savedPlaylists: asArray(payload.savedPlaylists).map(normalizePlaylistSummary),
   };
@@ -532,6 +553,7 @@ function normalizeArtistPagePayload(payload = {}) {
     popularAlbums: asArray(payload.popularAlbums).map(normalizeReleaseSummary),
     eps: asArray(payload.eps).map(normalizeReleaseSummary),
     singles: asArray(payload.singles).map(normalizeReleaseSummary),
+    relatedArtists: asArray(payload.relatedArtists).map(normalizeArtistSummary),
   };
 }
 

@@ -1,7 +1,8 @@
 ﻿import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
-import { FiChevronRight, FiExternalLink, FiHeart, FiMoreHorizontal, FiPlay, FiPlus } from "react-icons/fi";
+import { FiChevronRight, FiHeart, FiMoreHorizontal, FiPlus } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./LibraryPage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -20,9 +21,11 @@ import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import useCardActionMenu from "../hooks/useCardActionMenu.js";
+import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 
+const INITIAL_FOLLOWED_ARTISTS_LIMIT = 6;
 const INITIAL_MY_PLAYLISTS_LIMIT = 6;
 const INITIAL_SAVED_PLAYLISTS_LIMIT = 6;
 const DEFAULT_PLAYLIST_DESCRIPTION = "Custom playlist";
@@ -112,10 +115,13 @@ export default function LibraryPage() {
   const { status, data, error, reload } = useAsyncResource(loadLibraryFeed);
 
   const {
+    artists,
     trackMap,
+    followedArtistIds,
     likedIds,
     currentTrackId,
     playTrack,
+    toggleArtistFollow,
     toggleLikeTrack,
     togglePlaylistSave,
     notify,
@@ -129,6 +135,7 @@ export default function LibraryPage() {
 
   const [showAllPlaylists, setShowAllPlaylists] = useState(false);
   const [showAllSavedPlaylists, setShowAllSavedPlaylists] = useState(false);
+  const [showAllArtists, setShowAllArtists] = useState(false);
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createCoverUploading, setCreateCoverUploading] = useState(false);
@@ -165,6 +172,16 @@ export default function LibraryPage() {
     canToggleSavedPlaylists && !showAllSavedPlaylists
       ? savedPlaylists.slice(0, INITIAL_SAVED_PLAYLISTS_LIMIT)
       : savedPlaylists;
+  const followedArtistsSource = data?.artists?.length ? data.artists : artists;
+  const followedArtists = useMemo(() => {
+    const followedSet = new Set(followedArtistIds);
+    return (followedArtistsSource ?? []).filter((artist) => followedSet.has(artist.id));
+  }, [followedArtistsSource, followedArtistIds]);
+  const canToggleArtists = followedArtists.length > INITIAL_FOLLOWED_ARTISTS_LIMIT;
+  const visibleFollowedArtists =
+    canToggleArtists && !showAllArtists
+      ? followedArtists.slice(0, INITIAL_FOLLOWED_ARTISTS_LIMIT)
+      : followedArtists;
 
   const likedTracks = useMemo(() => likedIds.map((id) => trackMap[id]).filter(Boolean), [likedIds, trackMap]);
   const likedPreviewTracks = useMemo(() => likedTracks.slice(0, 6), [likedTracks]);
@@ -172,7 +189,12 @@ export default function LibraryPage() {
     () => Object.values(trackMap).filter((track) => !likedIds.includes(track.id)).slice(0, 4),
     [trackMap, likedIds]
   );
-  const isEmpty = status === "success" && !myPlaylists.length && !savedPlaylists.length && !likedTracks.length;
+  const isEmpty =
+    status === "success" &&
+    !myPlaylists.length &&
+    !savedPlaylists.length &&
+    !likedTracks.length &&
+    !followedArtists.length;
 
   useEffect(() => {
     if (searchParams.get("createPlaylist") !== "1") {
@@ -498,6 +520,52 @@ export default function LibraryPage() {
 
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
+              <h2 className={styles.sectionTitle}>Артисты в библиотеке</h2>
+              <span className={styles.artistCount}>{followedArtists.length}</span>
+              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+            </div>
+            {followedArtists.length ? (
+              <>
+                <div className={styles.artistGrid}>
+                  {visibleFollowedArtists.map((artist) => (
+                    <ArtistSpotlightCard
+                      key={artist.id}
+                      artist={artist}
+                      audience="followers"
+                      contextLabel="Подписка"
+                      description="Открой страницу автора, чтобы не пропускать новые треки и релизы."
+                      followLabel="Отписаться"
+                      isFollowed
+                      onOpen={() => navigate(`/artist/${artist.id}`)}
+                      onToggleFollow={() => toggleArtistFollow(artist.id)}
+                      openLabel="Открыть"
+                    />
+                  ))}
+                </div>
+                {canToggleArtists ? (
+                  <button
+                    type="button"
+                    className={styles.artistToggleButton}
+                    onClick={() => setShowAllArtists((value) => !value)}
+                  >
+                    {showAllArtists ? "Свернуть" : "Показать все"}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <div className={styles.sectionState}>
+                <ResourceState
+                  title="Пока нет артистов в библиотеке"
+                  description="Подпишись на исполнителя из поиска или со страницы артиста, чтобы собрать их здесь."
+                  actionLabel="Перейти в поиск"
+                  onAction={() => navigate("/search")}
+                />
+              </div>
+            )}
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionTitleRow}>
               <h2 className={styles.sectionTitle}>Мои плейлисты</h2>
               <span className={styles.playlistCountBadge}>{myPlaylists.length}</span>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
@@ -538,7 +606,7 @@ export default function LibraryPage() {
                               aria-label="Слушать плейлист"
                               onClick={() => playTrack(firstTrackId)}
                             >
-                              <FiPlay />
+                              <BsFillPlayFill />
                             </button>
                           ) : null}
                           <button
@@ -653,7 +721,7 @@ export default function LibraryPage() {
                             aria-label="Слушать плейлист"
                             onClick={() => playTrack(playlist.trackIds[0])}
                           >
-                            <FiPlay />
+                            <BsFillPlayFill />
                           </button>
                         ) : null}
                         <button

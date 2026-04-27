@@ -9,6 +9,7 @@ import {
   invalidateCatalogCache,
   normalizeTitle,
   pool,
+  sanitizeTrackTags,
   splitArtistNames,
   withTransaction,
 } from "./catalogService.js";
@@ -86,20 +87,17 @@ function normalizeTrackId(rawTrackId, title) {
 
 function normalizeTags(rawTags) {
   if (Array.isArray(rawTags)) {
-    return Array.from(new Set(rawTags.map((item) => normalizeTitle(item).toLowerCase()).filter(Boolean))).slice(0, 12);
+    return sanitizeTrackTags(rawTags.map((item) => normalizeTitle(item).toLowerCase())).slice(0, 12);
   }
 
   const text = normalizeTitle(rawTags);
   if (!text) {
     return [];
   }
-  return Array.from(
-    new Set(
-      text
-        .split(/[,\n]+/g)
-        .map((item) => normalizeTitle(item).toLowerCase())
-        .filter(Boolean)
-    )
+  return sanitizeTrackTags(
+    text
+      .split(/[,\n]+/g)
+      .map((item) => normalizeTitle(item).toLowerCase())
   ).slice(0, 12);
 }
 

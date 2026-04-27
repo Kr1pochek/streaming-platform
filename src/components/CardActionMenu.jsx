@@ -3,12 +3,12 @@ import {
   FiEdit2,
   FiExternalLink,
   FiHeart,
-  FiPlay,
   FiShare2,
   FiTrash2,
   FiUserMinus,
   FiUserPlus,
 } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./CardActionMenu.module.css";
 
 function clampToViewport(value, min, max) {
@@ -20,7 +20,7 @@ const iconMap = {
   share: FiShare2,
   edit: FiEdit2,
   delete: FiTrash2,
-  play: FiPlay,
+  play: BsFillPlayFill,
   save: FiHeart,
   remove: FiTrash2,
   follow: FiUserPlus,

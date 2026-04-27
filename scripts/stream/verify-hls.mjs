@@ -6,7 +6,7 @@ import { tracks } from "../../shared/musicData.js";
 function printUsage() {
   console.log("Usage:");
   console.log("  npm run stream:verify");
-  console.log("  npm run stream:verify -- --track city-rain");
+  console.log("  npm run stream:verify -- --track your-track-id");
 }
 
 function parseArgs(argv) {

@@ -50,6 +50,7 @@ const playlistOrderMap = new Map(seedPlaylists.map((item, index) => [item.id, in
 const artistOrderMap = new Map(seedArtists.map((item, index) => [item.id, index]));
 const artistNameMap = new Map(seedArtists.map((item) => [normalizeArtistName(item.name), item.id]));
 const CATALOG_CACHE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS ?? 4000);
+const blockedTrackTagKeys = new Set(["locura"]);
 let catalogCache = {
   value: null,
   expiresAt: 0,
@@ -77,6 +78,28 @@ export function normalizeArtistName(value = "") {
 
 export function normalizeTitle(value = "") {
   return String(value ?? "").trim();
+}
+
+function normalizeTrackTagKey(value = "") {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+export function sanitizeTrackTags(tags = []) {
+  const safeTags = Array.isArray(tags) ? tags : [];
+  const seen = new Set();
+  const filteredTags = [];
+
+  for (const tag of safeTags) {
+    const trimmedTag = String(tag ?? "").trim();
+    const normalizedTagKey = normalizeTrackTagKey(trimmedTag);
+    if (!normalizedTagKey || blockedTrackTagKeys.has(normalizedTagKey) || seen.has(normalizedTagKey)) {
+      continue;
+    }
+    seen.add(normalizedTagKey);
+    filteredTags.push(trimmedTag);
+  }
+
+  return filteredTags;
 }
 
 export function parseBooleanFlag(value, fallback = false) {
@@ -258,7 +281,7 @@ export function mapTrackRow(row) {
     isLocalAudio: hasLocalAudio,
     audioUrl: playbackUrlForTrack(row.id, rawAudioUrl),
     hlsUrl: hasHls ? hlsManifestUrlForTrack(row.id) : null,
-    tags: Array.isArray(row.tags) ? row.tags : [],
+    tags: sanitizeTrackTags(row.tags),
     createdAt: Number(row.createdAt ?? 0),
   };
 }
@@ -525,7 +548,7 @@ export async function seedCatalogIfEmpty() {
         );
       }
 
-      for (const tag of track.tags ?? []) {
+      for (const tag of sanitizeTrackTags(track.tags)) {
         await client.query(
           `insert into track_tags (track_id, tag)
            values ($1, $2)

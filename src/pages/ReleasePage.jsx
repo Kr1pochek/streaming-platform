@@ -1,6 +1,7 @@
 ﻿import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiHeart, FiMoreHorizontal, FiPlay, FiShuffle } from "react-icons/fi";
+import { FiArrowLeft, FiHeart, FiMoreHorizontal, FiShuffle } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./ReleasePage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -79,7 +80,7 @@ export default function ReleasePage() {
                   disabled={!releaseTrackIds.length}
                   onClick={() => playQueue(releaseTrackIds, 0)}
                 >
-                  <FiPlay />
+                  <BsFillPlayFill />
                   Слушать
                 </button>
                 <button

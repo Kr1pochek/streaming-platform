@@ -1,4 +1,5 @@
-import { FiArrowRight, FiHeart, FiMoreHorizontal, FiPlay } from "react-icons/fi";
+import { FiArrowRight, FiHeart, FiMoreHorizontal } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import styles from "./SmartRecommendations.module.css";
 
 export default function SmartRecommendations({
@@ -35,7 +36,7 @@ export default function SmartRecommendations({
                 aria-label="Слушать трек"
                 onClick={() => onPlayTrack(track.id)}
               >
-                <FiPlay />
+                <BsFillPlayFill />
               </button>
               <button
                 type="button"

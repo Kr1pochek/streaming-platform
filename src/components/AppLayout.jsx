@@ -129,8 +129,8 @@ export default function AppLayout() {
     100,
     Math.max(0, Number.isFinite(displayProgressPercent) ? displayProgressPercent : 0),
   );
-  const progressTailRoundRatio = Math.min(1, Math.max(0, (visualProgressPercent - 97) / 3));
-  const progressTailRadiusPx = 4 + progressTailRoundRatio * 18;
+  const progressTailRoundRatio = Math.min(1, Math.max(0, 0.18 + (visualProgressPercent / 100) * 0.82));
+  const progressTailRadiusPx = 6 + progressTailRoundRatio * 16;
   const progressEdgeHighlightOpacity = 0.03 * (1 - progressTailRoundRatio);
   const mobileNavItems = [
     { to: "/", label: "Главная", icon: FiHome, end: true },
@@ -182,6 +182,7 @@ export default function AppLayout() {
     const previousAnchor = progressAnchorRef.current;
     const trackChanged = previousAnchor.trackId !== trackId;
     const currentVisual = visualProgressRef.current;
+    let syncFrameId = 0;
 
     progressAnchorRef.current = {
       durationSec,
@@ -199,8 +200,16 @@ export default function AppLayout() {
       timelineProgressValue < currentVisual - 0.75 ||
       Math.abs(timelineProgressValue - currentVisual) > 1.5
     ) {
-      setDisplayProgressPercent(timelineProgressValue);
+      syncFrameId = window.requestAnimationFrame(() => {
+        setDisplayProgressPercent(timelineProgressValue);
+      });
     }
+
+    return () => {
+      if (syncFrameId) {
+        window.cancelAnimationFrame(syncFrameId);
+      }
+    };
   }, [currentTrack?.durationSec, currentTrack?.id, hasCurrentTrack, isPlaying, timelineDragging, timelineProgressValue]);
 
   useEffect(() => {
@@ -321,8 +330,14 @@ export default function AppLayout() {
 
   useEffect(() => {
     if (!currentTrack || !streamQuality?.available) {
-      setQualityMenuOpen(false);
+      const timeoutId = setTimeout(() => {
+        setQualityMenuOpen(false);
+      }, 0);
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
+    return undefined;
   }, [currentTrack, streamQuality?.available]);
 
   useEffect(() => {
@@ -427,7 +442,12 @@ export default function AppLayout() {
         </div>
 
         {queueOpen ? (
-          <aside ref={queuePanelRef} className={styles.queuePanel} aria-label="Очередь воспроизведения">
+          <aside
+            ref={queuePanelRef}
+            className={styles.queuePanel}
+            aria-label="Очередь воспроизведения"
+            data-testid="player-queue-panel"
+          >
             <header className={styles.queueHeader}>
               <div>
                 <h2 className={styles.queueTitle}>Очередь</h2>
@@ -509,7 +529,7 @@ export default function AppLayout() {
           </aside>
         ) : null}
 
-        <footer className={styles.player} aria-label="Плеер" style={playerThemeStyle}>
+        <footer className={styles.player} aria-label="Плеер" data-testid="player-footer" style={playerThemeStyle}>
           <div className={styles.playerTimelineWrap}>
             <div className={styles.playerTimelineTrack}>
               <div className={styles.playerTimelineRail} aria-hidden="true">
@@ -547,6 +567,7 @@ export default function AppLayout() {
                 <button
                   type="button"
                   className={styles.trackTitleButton}
+                  data-testid="player-current-track-button"
                   disabled={!currentTrack}
                   onClick={() => currentTrack && navigate(`/track/${currentTrack.id}`)}
                 >
@@ -595,6 +616,7 @@ export default function AppLayout() {
                     type="button"
                     className={styles.iconButton}
                     aria-label="Предыдущий трек"
+                    data-testid="player-prev-button"
                     onClick={prevTrack}
                   >
                     <FiSkipBack />
@@ -604,11 +626,18 @@ export default function AppLayout() {
                     className={styles.playButton}
                     aria-label={isPlaying ? "Пауза" : "Воспроизвести"}
                     aria-pressed={isPlaying}
+                    data-testid="player-play-toggle"
                     onClick={togglePlay}
                   >
                     {isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
                   </button>
-                  <button type="button" className={styles.iconButton} aria-label="Следующий трек" onClick={nextTrack}>
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label="Следующий трек"
+                    data-testid="player-next-button"
+                    onClick={nextTrack}
+                  >
                     <FiSkipForward />
                   </button>
                 </div>
@@ -693,6 +722,7 @@ export default function AppLayout() {
                   className={`${styles.iconButton} ${queueOpen ? styles.iconButtonActive : ""}`.trim()}
                   aria-label="Показать очередь"
                   aria-pressed={queueOpen}
+                  data-testid="player-queue-toggle"
                   onClick={() => setQueueOpen((value) => !value)}
                 >
                   <FiList />

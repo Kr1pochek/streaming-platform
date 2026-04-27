@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiArrowDown,
   FiArrowUp,
+  FiChevronDown,
   FiChevronLeft,
   FiChevronRight,
   FiEdit2,
@@ -99,6 +100,7 @@ function resolveEditorValidationMessage(form) {
 
 export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
   const navigate = useNavigate();
+  const artistSelectRef = useRef(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [offset, setOffset] = useState(0);
@@ -110,6 +112,7 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
   const [feedback, setFeedback] = useState("");
   const [actionReleaseId, setActionReleaseId] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
+  const [artistMenuOpen, setArtistMenuOpen] = useState(false);
   const [editor, setEditor] = useState({
     open: false,
     mode: "create",
@@ -183,6 +186,32 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
   useEffect(() => {
     void loadOptions();
   }, [refreshToken, loadOptions]);
+
+  useEffect(() => {
+    if (!artistMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (!artistSelectRef.current?.contains(event.target)) {
+        setArtistMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setArtistMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [artistMenuOpen]);
 
   const hasMore = offset + RELEASES_LIMIT < releasesData.total;
   const canGoBack = offset > 0;

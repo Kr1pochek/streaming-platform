@@ -1345,16 +1345,26 @@ export function createApiRouter({
         .slice(0, 4);
 
       const artistTagSet = new Set(artistTracks.flatMap((track) => track.tags));
-      const relatedScore = (candidateName) =>
-        tracks.filter(
-          (track) => trackHasArtist(track, candidateName) && track.tags.some((tag) => artistTagSet.has(tag))
-        ).length;
-
       const relatedArtists = artists
         .filter((candidate) => candidate.id !== artist.id)
-        .sort((first, second) => relatedScore(second.name) - relatedScore(first.name))
+        .map((candidate) => {
+          const candidateTracks = tracks.filter((track) => trackHasArtist(track, candidate.name));
+          const sharedTagMatches = candidateTracks.filter((track) => track.tags.some((tag) => artistTagSet.has(tag))).length;
+          return {
+            candidate,
+            candidateTrackCount: candidateTracks.length,
+            sharedTagMatches,
+          };
+        })
+        .filter(({ candidateTrackCount, sharedTagMatches }) => candidateTrackCount > 0 && sharedTagMatches > 0)
+        .sort(
+          (first, second) =>
+            second.sharedTagMatches - first.sharedTagMatches ||
+            second.candidateTrackCount - first.candidateTrackCount ||
+            String(first.candidate.name ?? "").localeCompare(String(second.candidate.name ?? ""), "ru")
+        )
         .slice(0, 4)
-        .map((candidate) => ({ ...candidate }));
+        .map(({ candidate }) => ({ ...candidate }));
 
       res.json({
         artist,

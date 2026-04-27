@@ -9,6 +9,7 @@ import {
   normalizeTitle,
   pool,
   resolveMediaFilePath,
+  sanitizeTrackTags,
   validateCatalogAudioFiles,
   withTransaction,
 } from "./catalogService.js";
@@ -421,7 +422,7 @@ export async function getUploadedTracks({ limit = 20, offset = 0, query = "", st
       isStreamable:
         Boolean(audioUrl) &&
         (Boolean(resolveMediaFilePath(audioUrl)) || hasHlsManifestForTrack(row.id) || !audioUrl.startsWith("/api/media/")),
-      tags: Array.isArray(row.tags) ? row.tags : [],
+      tags: sanitizeTrackTags(row.tags),
     };
   });
 }

@@ -5,11 +5,11 @@ import {
   FiExternalLink,
   FiHeart,
   FiList,
-  FiPlay,
   FiPlusSquare,
   FiShare2,
   FiUser,
 } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import { LuHeartOff } from "react-icons/lu";
 import {
   addTrackToUserPlaylist,
@@ -400,7 +400,7 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
 
         <button type="button" className={styles.menuButton} onClick={handlePlayTrailer}>
           <span className={styles.menuIcon}>
-            <FiPlay />
+            <BsFillPlayFill />
           </span>
           <span className={styles.menuLabel}>Трейлер 18 секунд</span>
         </button>

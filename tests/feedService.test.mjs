@@ -43,24 +43,24 @@ test("buildSearchCollections mixes playlist and artist shortcuts for a compact c
       {
         id: "t-1",
         title: "Track One",
-        artist: "Joji",
+        artist: "Artist One",
         cover: "linear-gradient(135deg, #555, #666)",
       },
       {
         id: "t-2",
         title: "Track Two",
-        artist: "Joji",
+        artist: "Artist One",
         cover: "linear-gradient(135deg, #777, #888)",
       },
     ],
-    artists: [{ id: "a-joji", name: "Joji" }],
+    artists: [{ id: "a-artist-one", name: "Artist One" }],
   });
 
   assert.ok(collections.length >= 2);
   assert.ok(collections.length <= 5);
   assert.equal(collections[0].type, "playlist");
   assert.equal(collections[0].targetId, "sys-catalog-now");
-  assert.equal(collections.some((item) => item.type === "artist" && item.targetId === "a-joji"), true);
+  assert.equal(collections.some((item) => item.type === "artist" && item.targetId === "a-artist-one"), true);
   assert.equal(new Set(collections.map((item) => item.id)).size, collections.length);
   assert.equal(collections.every((item) => item.badge === undefined), true);
 });

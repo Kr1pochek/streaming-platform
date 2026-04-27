@@ -114,6 +114,7 @@
 .trackMainButton:focus-visible,
 .notificationMainButton:focus-visible,
 .notificationActionButton:focus-visible,
+.releaseHubControlButton:focus-visible,
 .releaseFeedMainButton:focus-visible,
 .releaseFeedPrimaryButton:focus-visible,
 .releaseFeedSecondaryButton:focus-visible,
@@ -356,6 +357,14 @@
   line-height: 1.55;
 }
 
+.releaseHubHeaderMeta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .releaseHubStats {
   display: flex;
   flex-wrap: wrap;
@@ -382,14 +391,62 @@
   font-size: 15px;
 }
 
+.releaseHubControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.releaseHubControlButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.releaseHubControlButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
 .releaseCardGrid {
   margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  display: flex;
   gap: 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  padding-bottom: 6px;
+}
+
+.releaseCardGrid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.releaseCardGrid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.releaseCardGrid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .releaseFeedCard {
+  flex: 0 0 min(100%, 372px);
   position: relative;
   overflow: hidden;
   border-radius: 22px;
@@ -403,6 +460,7 @@
   padding: 14px;
   display: grid;
   gap: 12px;
+  scroll-snap-align: start;
 }
 
 .releaseFeedCard::before {
@@ -1191,6 +1249,59 @@
   background: rgba(255, 255, 255, 0.18);
 }
 
+.cardActionButtonLike {
+  position: relative;
+}
+
+.cardActionHeartOutline,
+.cardActionHeartFilled {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+
+.cardActionHeartOutline {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cardActionHeartFilled {
+  opacity: 0;
+  transform: scale(0.72);
+  color: #f5cc46;
+}
+
+.cardActionButtonLike:hover,
+.cardActionButtonLike:focus-visible,
+.cardActionButtonLiked {
+  color: #f5cc46;
+}
+
+.cardActionButtonLike:hover .cardActionHeartOutline,
+.cardActionButtonLike:focus-visible .cardActionHeartOutline,
+.cardActionButtonLiked .cardActionHeartOutline {
+  opacity: 0;
+  transform: scale(0.72);
+}
+
+.cardActionButtonLike:hover .cardActionHeartFilled,
+.cardActionButtonLike:focus-visible .cardActionHeartFilled,
+.cardActionButtonLiked .cardActionHeartFilled {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cardActionButtonLiked {
+  border-color: rgba(245, 204, 70, 0.28);
+  background: rgba(245, 204, 70, 0.12);
+}
+
 .cardActionButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
@@ -1486,8 +1597,9 @@
     flex-direction: column;
   }
 
-  .releaseCardGrid {
-    grid-template-columns: 1fr;
+  .releaseHubHeaderMeta {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .releaseShowcaseSplit {

@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMoreHorizontal, FiMusic, FiPlay } from "react-icons/fi";
+import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMoreHorizontal, FiMusic } from "react-icons/fi";
+import { BsFillPlayFill } from "react-icons/bs";
 import { LuHeart } from "react-icons/lu";
 import styles from "./TrackPage.module.css";
 import PageShell from "../components/PageShell.jsx";
@@ -106,7 +107,7 @@ export default function TrackPage() {
               </div>
               <div className={styles.heroActions}>
                 <button type="button" className={styles.primaryButton} onClick={() => playTrack(data.track.id)}>
-                  <FiPlay />
+                  <BsFillPlayFill />
                   Слушать
                 </button>
                 <button
@@ -160,7 +161,7 @@ export default function TrackPage() {
                             aria-label="Слушать"
                             onClick={() => playTrack(firstTrackId)}
                           >
-                            <FiPlay />
+                            <BsFillPlayFill />
                           </button>
                           <button
                             type="button"

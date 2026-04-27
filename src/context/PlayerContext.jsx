@@ -1094,6 +1094,7 @@ export function PlayerProvider({ children }) {
   const loadedTrackIdRef = useRef(null);
   const loadedSourceKeyRef = useRef("");
   const seekVersionRef = useRef(0);
+  const playbackIntentRef = useRef(defaultState.isPlaying);
   const trailerSessionRef = useRef(defaultState.trailerSession);
 
   const updateStreamQuality = useCallback((nextState) => {
@@ -1133,6 +1134,10 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     streamQualitySelectionRef.current = normalizeStreamQualitySelection(state.streamQualitySelected);
   }, [state.streamQualitySelected]);
+
+  useEffect(() => {
+    playbackIntentRef.current = state.isPlaying;
+  }, [state.isPlaying]);
 
   useEffect(() => {
     trailerSessionRef.current = state.trailerSession;
@@ -1316,6 +1321,19 @@ export function PlayerProvider({ children }) {
     return audioRef.current;
   }, []);
 
+  const attemptAudioPlayback = useCallback((audio) => {
+    if (!audio || !playbackIntentRef.current) {
+      return;
+    }
+
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        // noop
+      });
+    }
+  }, []);
+
   const replaceAudioSource = useCallback((track) => {
     const audio = ensureAudioElement();
     if (!audio || !track?.id) {
@@ -1335,6 +1353,8 @@ export function PlayerProvider({ children }) {
 
     audio.pause();
     disposeHls();
+    audio.removeAttribute("src");
+    audio.load();
     updateStreamQuality({
       available: Boolean(sourceDescriptor.hlsUrl),
       canControl: false,
@@ -1407,6 +1427,9 @@ export function PlayerProvider({ children }) {
             hls.on(HlsLibrary.Events.MANIFEST_PARSED, () => {
               applySelectionToHls(hls, streamQualitySelectionRef.current);
               syncHlsQuality();
+              if (audio.paused) {
+                attemptAudioPlayback(audio);
+              }
             });
             hls.on(HlsLibrary.Events.LEVEL_SWITCHED, syncHlsQuality);
             hls.on(HlsLibrary.Events.LEVELS_UPDATED, syncHlsQuality);
@@ -1435,6 +1458,9 @@ export function PlayerProvider({ children }) {
               if (sourceDescriptor.url) {
                 audio.src = sourceDescriptor.url;
                 audio.load();
+                if (audio.paused) {
+                  attemptAudioPlayback(audio);
+                }
               }
             });
             return;
@@ -1449,6 +1475,9 @@ export function PlayerProvider({ children }) {
             });
             audio.src = sourceDescriptor.hlsUrl;
             audio.load();
+            if (audio.paused) {
+              attemptAudioPlayback(audio);
+            }
             return;
           }
 
@@ -1461,6 +1490,9 @@ export function PlayerProvider({ children }) {
           if (sourceDescriptor.url) {
             audio.src = sourceDescriptor.url;
             audio.load();
+            if (audio.paused) {
+              attemptAudioPlayback(audio);
+            }
           }
         })
         .catch(() => {
@@ -1473,6 +1505,9 @@ export function PlayerProvider({ children }) {
             });
             audio.src = sourceDescriptor.hlsUrl;
             audio.load();
+            if (audio.paused) {
+              attemptAudioPlayback(audio);
+            }
             return;
           }
 
@@ -1485,6 +1520,9 @@ export function PlayerProvider({ children }) {
           if (sourceDescriptor.url) {
             audio.src = sourceDescriptor.url;
             audio.load();
+            if (audio.paused) {
+              attemptAudioPlayback(audio);
+            }
           }
         });
       return audio;
@@ -1498,9 +1536,12 @@ export function PlayerProvider({ children }) {
       level: "",
     });
     audio.load();
+    if (audio.paused) {
+      attemptAudioPlayback(audio);
+    }
 
     return audio;
-  }, [disposeHls, ensureAudioElement, updateStreamQuality]);
+  }, [attemptAudioPlayback, disposeHls, ensureAudioElement, updateStreamQuality]);
 
   const currentTrackId = state.queue[state.currentIndex];
   const currentTrack = trackMap[currentTrackId] ?? null;
@@ -1559,12 +1600,7 @@ export function PlayerProvider({ children }) {
         if (loadedTrackIdRef.current === currentTrackId) {
           const audio = replaceAudioSource(currentTrack);
           if (audio && state.isPlaying && audio.paused) {
-            const playPromise = audio.play();
-            if (playPromise && typeof playPromise.catch === "function") {
-              playPromise.catch(() => {
-                // noop
-              });
-            }
+            attemptAudioPlayback(audio);
           }
         }
       } catch {
@@ -1577,7 +1613,7 @@ export function PlayerProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [currentTrackId, currentTrack, replaceAudioSource, state.isPlaying]);
+  }, [attemptAudioPlayback, currentTrackId, currentTrack, replaceAudioSource, state.isPlaying]);
 
   useEffect(() => {
     const audio = ensureAudioElement();
@@ -1598,17 +1634,27 @@ export function PlayerProvider({ children }) {
     const handleEnded = () => {
       dispatch({ type: "track_finished" });
     };
+    const handleCanPlay = () => {
+      if (!audio.paused) {
+        return;
+      }
+      attemptAudioPlayback(audio);
+    };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("seeked", handleSeeked);
     audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("loadedmetadata", handleCanPlay);
+    audio.addEventListener("canplay", handleCanPlay);
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("seeked", handleSeeked);
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("loadedmetadata", handleCanPlay);
+      audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [ensureAudioElement, stopTrailerPlayback]);
+  }, [attemptAudioPlayback, ensureAudioElement, stopTrailerPlayback]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1661,12 +1707,7 @@ export function PlayerProvider({ children }) {
 
     if (state.isPlaying) {
       if (audio.paused) {
-        const playPromise = audio.play();
-        if (playPromise && typeof playPromise.catch === "function") {
-          playPromise.catch(() => {
-            // noop
-          });
-        }
+        attemptAudioPlayback(audio);
       }
     } else {
       audio.pause();
@@ -1677,6 +1718,7 @@ export function PlayerProvider({ children }) {
     replaceAudioSource,
     currentTrack,
     currentTrackId,
+    attemptAudioPlayback,
     state.isPlaying,
     state.seekVersion,
     state.progressSec,

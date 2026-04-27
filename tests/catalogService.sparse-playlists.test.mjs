@@ -53,8 +53,8 @@ test("buildCatalogSupplementalPlaylists skips duplicate track signatures already
 test("buildCatalogSupplementalPlaylists adds artist focus playlist when one artist dominates sparse catalog", () => {
   const playlists = buildCatalogSupplementalPlaylists({
     tracks: [
-      createTrack("night-one", "Night One", "Ari Vox", 300),
-      createTrack("night-two", "Night Two", "Ari Vox", 200),
+      createTrack("night-one", "Night One", "Night Echo", 300),
+      createTrack("night-two", "Night Two", "Night Echo", 200),
       createTrack("night-three", "Night Three", "Other Artist", 100),
     ],
     existingPlaylists: [],

@@ -1,63 +1,21 @@
+import { buildWaveQueuePlan } from "../../shared/waveRecommendations.js";
 import { fetchCatalog, normalizeArtistName, splitArtistNames } from "./catalogService.js";
 import { fetchUserState } from "./userStateService.js";
 
-function buildTagScoreMap(tracks = []) {
-  const scoreMap = new Map();
-  for (const track of tracks) {
-    for (const tag of track.tags ?? []) {
-      const normalizedTag = String(tag ?? "").trim().toLowerCase();
-      if (!normalizedTag) {
-        continue;
-      }
-      scoreMap.set(normalizedTag, (scoreMap.get(normalizedTag) ?? 0) + 1);
-    }
-  }
-  return scoreMap;
-}
+function uniqueTrackIds(trackIds = [], trackMap = {}) {
+  const seen = new Set();
+  const ids = [];
 
-function artistIdsToNameSet(artists = [], artistIds = []) {
-  const idSet = new Set(artistIds);
-  const names = new Set();
-  for (const artist of artists) {
-    if (!idSet.has(artist.id)) {
+  for (const trackId of trackIds) {
+    const normalizedTrackId = String(trackId ?? "").trim();
+    if (!normalizedTrackId || seen.has(normalizedTrackId) || !trackMap[normalizedTrackId]) {
       continue;
     }
-    names.add(normalizeArtistName(artist.name));
+    seen.add(normalizedTrackId);
+    ids.push(normalizedTrackId);
   }
-  return names;
-}
 
-function trackArtistNameSet(track) {
-  return new Set(splitArtistNames(track.artist).map((item) => normalizeArtistName(item)));
-}
-
-function rankTracks(tracks, state, artists) {
-  const likedSet = new Set(state.likedTrackIds ?? []);
-  const historySet = new Set(state.historyTrackIds ?? []);
-  const consumedSet = new Set([...likedSet, ...historySet]);
-
-  const likedTracks = tracks.filter((track) => likedSet.has(track.id));
-  const historyTracks = tracks.filter((track) => historySet.has(track.id));
-  const preferenceTracks = [...likedTracks, ...historyTracks];
-  const tagScoreMap = buildTagScoreMap(preferenceTracks);
-  const followedArtistNames = artistIdsToNameSet(artists, state.followedArtistIds ?? []);
-
-  return tracks
-    .filter((track) => !consumedSet.has(track.id))
-    .map((track, index) => {
-      const trackTags = track.tags ?? [];
-      const tagScore = trackTags.reduce(
-        (sum, tag) => sum + (tagScoreMap.get(String(tag ?? "").trim().toLowerCase()) ?? 0),
-        0
-      );
-
-      const artistNames = trackArtistNameSet(track);
-      const followedArtistScore = [...artistNames].some((name) => followedArtistNames.has(name)) ? 4 : 0;
-      const freshnessScore = Math.max(0, tracks.length - index) / tracks.length;
-      const score = tagScore * 1.8 + followedArtistScore + freshnessScore;
-      return { track, score };
-    })
-    .sort((left, right) => right.score - left.score);
+  return ids;
 }
 
 function rankPlaylists(playlists, topTrackIds = []) {
@@ -95,11 +53,12 @@ export async function getSmartRecommendations({ userId = null, limitTracks = 6, 
   const userState = userId
     ? await fetchUserState(userId)
     : { likedTrackIds: [], followedArtistIds: [], historyTrackIds: [] };
-
-  const trackRanking = rankTracks(catalog.tracks, userState, catalog.artists);
-  const fallbackTracks = catalog.tracks.slice(0, limitTracks);
-  const recommendedTracks = (trackRanking.map((item) => item.track).slice(0, limitTracks) || []).filter(Boolean);
-  const finalTracks = recommendedTracks.length ? recommendedTracks : fallbackTracks;
+  const likedTrackIds = uniqueTrackIds(userState.likedTrackIds ?? [], catalog.trackMap);
+  const waveQueuePlan = buildWaveQueuePlan(catalog.tracks, {
+    likedTrackIds,
+    limit: limitTracks,
+  });
+  const finalTracks = waveQueuePlan.trackIds.map((trackId) => catalog.trackMap[trackId]).filter(Boolean);
 
   const playlistRanking = rankPlaylists(catalog.playlists, finalTracks.map((track) => track.id));
   const artistRanking = rankArtists(catalog.artists, finalTracks);
