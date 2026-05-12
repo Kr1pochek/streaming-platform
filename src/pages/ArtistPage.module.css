@@ -52,6 +52,19 @@
   pointer-events: none;
 }
 
+.heroAvatarImage {
+  background-size: cover;
+  background-position: center;
+}
+
+.heroAvatarImage::after {
+  inset: 0;
+  height: auto;
+  border-radius: inherit;
+  background: linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.38));
+  transform: none;
+}
+
 .heroMeta {
   min-width: 0;
 }
@@ -292,8 +305,8 @@
 }
 
 .iconButton {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   border: none;
   background: transparent;

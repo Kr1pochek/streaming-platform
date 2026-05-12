@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE_URL = import.meta.env?.VITE_API_URL ?? "/api";
 const AUTH_TOKEN_STORAGE_KEY = "music.auth.token.v1";
 const RETRYABLE_METHODS = new Set(["GET"]);
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -254,22 +254,48 @@ function normalizeArtistLine(value, artists = []) {
     .join(", ");
 }
 
+export function normalizeAudienceCount(value) {
+  if (typeof value === "string") {
+    const textValue = value.trim();
+    if (!textValue) {
+      return "0";
+    }
+
+    const normalizedTextValue = textValue.replace(",", ".");
+    const shorthandMatch = normalizedTextValue.match(/^(\d+(?:\.\d+)?)\s*([KMB])$/i);
+    if (shorthandMatch) {
+      const [, amount, suffix] = shorthandMatch;
+      const multipliers = { K: 1_000, M: 1_000_000, B: 1_000_000_000 };
+      const numericValue = Number(amount) * multipliers[suffix.toUpperCase()];
+      return Number.isFinite(numericValue) ? String(Math.max(0, Math.trunc(numericValue))) : "0";
+    }
+
+    const numericValue = Number(normalizedTextValue);
+    return Number.isFinite(numericValue) ? String(Math.max(0, Math.trunc(numericValue))) : textValue;
+  }
+
+  if (Number.isFinite(value)) {
+    return String(Math.max(0, Math.trunc(value)));
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? String(Math.max(0, Math.trunc(numericValue))) : "0";
+}
+
 function normalizeArtistSummary(artist = {}) {
-  const rawFollowers = artist?.followers;
-  const followers =
-    typeof rawFollowers === "string"
-      ? rawFollowers.trim()
-      : Number.isFinite(rawFollowers)
-        ? String(rawFollowers)
-        : Number.isFinite(Number(rawFollowers))
-          ? String(Number(rawFollowers))
-          : "0";
+  const followers = normalizeAudienceCount(artist?.followers);
+  const listeners = normalizeAudienceCount(artist?.listeners ?? artist?.listenerCount);
+  const avatar = normalizeCover(artist?.avatar ?? artist?.avatarUrl ?? artist?.cover);
 
   return {
     ...artist,
     id: asString(artist.id),
     name: asString(artist.name),
     followers,
+    listeners,
+    avatar,
+    avatarUrl: avatar,
+    cover: avatar,
   };
 }
 
@@ -407,21 +433,19 @@ function normalizeReleaseNotification(item = {}) {
 }
 
 function normalizeSearchArtist(item = {}) {
-  const rawFollowers = item?.followers;
-  const followers =
-    typeof rawFollowers === "string"
-      ? rawFollowers.trim()
-      : Number.isFinite(rawFollowers)
-        ? String(rawFollowers)
-        : Number.isFinite(Number(rawFollowers))
-          ? String(Number(rawFollowers))
-          : "0";
+  const followers = normalizeAudienceCount(item?.followers);
+  const listeners = normalizeAudienceCount(item?.listeners ?? item?.listenerCount);
+  const avatar = normalizeCover(item?.avatar ?? item?.avatarUrl ?? item?.cover);
 
   return {
     ...item,
     id: asString(item.id),
     name: asString(item.name),
     followers,
+    listeners,
+    avatar,
+    avatarUrl: avatar,
+    cover: avatar,
   };
 }
 

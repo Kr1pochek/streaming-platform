@@ -1882,7 +1882,11 @@ export function PlayerProvider({ children }) {
           ? state.followedArtistIds.filter((id) => id !== normalizedArtistId)
           : [normalizedArtistId, ...state.followedArtistIds];
         dispatch({ type: "toggle_follow_artist", artistId: normalizedArtistId });
-        return persistRemoteStateNow({ followedArtistIds: nextFollowedArtistIds });
+        const saved = await persistRemoteStateNow({ followedArtistIds: nextFollowedArtistIds });
+        if (saved) {
+          void refreshCatalog({ silent: true });
+        }
+        return saved;
       },
       togglePlaylistSave: async (playlistId) => {
         const normalizedPlaylistId = String(playlistId ?? "").trim();

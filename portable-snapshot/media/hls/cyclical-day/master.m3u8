@@ -8,4 +8,3 @@ medium/index.m3u8
 
 #EXT-X-STREAM-INF:BANDWIDTH=73024,AVERAGE-BANDWIDTH=71424,CODECS="mp4a.40.2"
 low/index.m3u8
-

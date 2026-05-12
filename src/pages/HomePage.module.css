@@ -104,6 +104,14 @@
   filter: brightness(1.05);
 }
 
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: default;
+  opacity: 0.58;
+  transform: none;
+  filter: none;
+}
+
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .vibeTag:focus-visible,
@@ -1233,8 +1241,8 @@
 }
 
 .cardActionButton {
-  width: 27px;
-  height: 27px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(12, 12, 14, 0.88);
@@ -1342,7 +1350,7 @@
     rgba(16, 18, 24, 0.96);
   padding: 0 12px 0 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px 44px;
+  grid-template-columns: minmax(0, 1fr) 36px 44px;
   align-items: center;
   gap: 8px;
   transition: border-color 0.18s ease, background 0.18s ease;
@@ -1465,8 +1473,8 @@
 }
 
 .queueButton {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: transparent;
   border-radius: 999px;
@@ -1479,8 +1487,8 @@
 }
 
 .queueButton svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .queueButton:hover {

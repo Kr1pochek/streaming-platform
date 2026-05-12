@@ -450,6 +450,64 @@ export function sortArtists(artists) {
   return [...artists].sort((left, right) => compareBySeed(artistOrderMap, left.id, right.id));
 }
 
+function artistSummarySelect(alias = "a") {
+  const artistId = `${alias}.id`;
+  return `
+    ${artistId} as id,
+    ${alias}.name as name,
+    coalesce(
+      (
+        select count(*)::int
+        from user_states us
+        where ${artistId} = any(coalesce(us.followed_artist_ids, array[]::text[]))
+      ),
+      0
+    ) as followers,
+    coalesce(
+      (
+        select count(distinct us.user_id)::int
+        from user_states us
+        join track_artists listener_ta on listener_ta.artist_id = ${artistId}
+        where listener_ta.track_id = any(coalesce(us.history_track_ids, array[]::text[]))
+      ),
+      0
+    ) as listeners,
+    coalesce(
+      (
+        select r.cover
+        from releases r
+        where r.artist_id = ${artistId}
+          and coalesce(nullif(r.status, ''), 'published') = 'published'
+        order by coalesce(r.published_at, r.created_at, 0) desc, r.year desc, r.title
+        limit 1
+      ),
+      (
+        select t.cover
+        from track_artists cover_ta
+        join tracks t on t.id = cover_ta.track_id
+        where cover_ta.artist_id = ${artistId}
+          and coalesce(t.is_hidden, false) = false
+        order by coalesce(t.created_at, 0) desc, t.title
+        limit 1
+      ),
+      ''
+    ) as avatar
+  `;
+}
+
+function mapArtistRow(row) {
+  const avatar = String(row.avatar ?? row.avatarUrl ?? row.cover ?? "").trim();
+  return {
+    id: row.id,
+    name: row.name,
+    followers: Math.max(0, Number(row.followers ?? 0)),
+    listeners: Math.max(0, Number(row.listeners ?? 0)),
+    avatar,
+    avatarUrl: avatar,
+    cover: avatar,
+  };
+}
+
 export function sortPlaylists(playlists) {
   const basePlaylists = playlists
     .filter((playlist) => !isCustomPlaylist(playlist))
@@ -801,10 +859,11 @@ export async function seedReleasesIfEmpty() {
 
 export async function fetchArtists() {
   const { rows } = await pool.query(`
-    select id, name, followers
-    from artists;
+    select
+      ${artistSummarySelect("a")}
+    from artists a;
   `);
-  return sortArtists(rows.map((row) => ({ id: row.id, name: row.name, followers: row.followers })));
+  return sortArtists(rows.map(mapArtistRow));
 }
 
 export async function fetchTracks() {
@@ -1077,17 +1136,18 @@ export async function searchCatalogInDatabase({
   if (includeArtists) {
     const { rows } = await pool.query(
       `
-      select id, name, followers
-      from artists
-      where lower(name) like $1
+      select
+        ${artistSummarySelect("a")}
+      from artists a
+      where lower(a.name) like $1
          or exists (
            select 1
            from track_artists ta
            join track_tags tt on tt.track_id = ta.track_id
-           where ta.artist_id = artists.id
+           where ta.artist_id = a.id
              and lower(tt.tag) like $1
          )
-      order by name
+      order by a.name
       limit $2
       offset $3;
     `,
@@ -1161,11 +1221,7 @@ export async function searchCatalogInDatabase({
   }))
     .filter((playlist) => playlist.isCustom || playlist.trackIds.some((trackId) => visibleTrackIdSet.has(trackId)));
 
-  const artists = rawArtists.slice(0, safeLimit).map((row) => ({
-    id: row.id,
-    name: row.name,
-    followers: row.followers,
-  }));
+  const artists = rawArtists.slice(0, safeLimit).map(mapArtistRow);
 
   const albums = rawAlbums.slice(0, safeLimit).map((row) => ({
     id: row.id,

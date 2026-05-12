@@ -143,6 +143,7 @@ export default function HomePage() {
   const isCompactCatalog = Boolean(catalogState.sparseCatalog);
   const visibleTrackCount = Number(catalogState.visibleTracks ?? freshTracks.length);
   const isCatalogEmpty = status === "success" && visibleTrackCount === 0 && !releaseNotifications.length;
+  const waveButtonDisabled = !isCatalogEmpty && !catalogTracks.length;
   const isCurrentTrackFinished =
     Boolean(currentTrack?.durationSec) && progressSec >= Math.max(currentTrack.durationSec - 0.25, 0);
 
@@ -278,6 +279,7 @@ export default function HomePage() {
                 type="button"
                 className={styles.primaryButton}
                 data-testid="home-wave-button"
+                disabled={waveButtonDisabled}
                 onClick={isCatalogEmpty ? () => navigate("/search") : handleWaveAction}
               >
                 {isCatalogEmpty ? <FiArrowRight /> : isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}

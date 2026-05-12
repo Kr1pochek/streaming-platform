@@ -135,8 +135,7 @@ export default function AppLayout() {
   const mobileNavItems = [
     { to: "/", label: "Главная", icon: FiHome, end: true },
     { to: "/search", label: "Поиск", icon: FiSearch },
-    { to: "/library", label: "Моя музыка", icon: FiMusic },
-    { to: "/profile", label: "Профиль", icon: FiUser },
+    { to: "/library", label: "Музыка", icon: FiMusic },
     ...(user?.isAdmin ? [{ to: "/admin", label: "Админка", icon: FiSettings }] : []),
   ];
 

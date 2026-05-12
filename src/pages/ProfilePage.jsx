@@ -112,29 +112,6 @@ async function buildTrackCoverFromFile(file) {
   return `url("${optimizedDataUrl}") center / cover no-repeat`;
 }
 
-async function buildTrackCoverFromDataUrl(sourceDataUrl) {
-  const image = await loadImageElement(sourceDataUrl);
-  const maxSide = Math.max(image.width || 1, image.height || 1);
-  const scale = maxSide > TRACK_COVER_MAX_SIDE ? TRACK_COVER_MAX_SIDE / maxSide : 1;
-  const width = Math.max(1, Math.round((image.width || 1) * scale));
-  const height = Math.max(1, Math.round((image.height || 1) * scale));
-
-  const canvas = window.document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Не удалось подготовить изображение.");
-  }
-  context.drawImage(image, 0, 0, width, height);
-  const optimizedDataUrl = canvas.toDataURL("image/jpeg", TRACK_COVER_JPEG_QUALITY);
-  if (optimizedDataUrl.length > MAX_TRACK_COVER_BACKGROUND_LENGTH) {
-    throw new Error("Изображение слишком тяжелое. Попробуй файл меньшего размера.");
-  }
-
-  return `url("${optimizedDataUrl}") center / cover no-repeat`;
-}
-
 async function buildEmbeddedTrackCoverFromDataUrl(sourceDataUrl) {
   const image = await loadImageElement(sourceDataUrl);
   const maxSide = Math.max(image.width || 1, image.height || 1);
@@ -161,24 +138,6 @@ async function buildEmbeddedTrackCoverFromDataUrl(sourceDataUrl) {
 
 function stripAudioFileExtension(fileName) {
   return String(fileName ?? "").replace(/\.[^.]+$/, "").trim();
-}
-
-function inferTrackFieldsFromFileName(fileName) {
-  const normalized = stripAudioFileExtension(fileName).replace(/[_]+/g, " ").trim();
-  if (!normalized) {
-    return { title: "", artist: "" };
-  }
-
-  const separatorMatch = normalized.match(/\s[-–—]\s/);
-  if (!separatorMatch) {
-    return { title: normalized, artist: "" };
-  }
-
-  const [artist = "", title = ""] = normalized.split(/\s[-–—]\s/, 2);
-  return {
-    title: String(title ?? "").trim() || normalized,
-    artist: String(artist ?? "").trim(),
-  };
 }
 
 function inferTrackFieldsFromUploadFileName(fileName) {
@@ -235,7 +194,7 @@ async function buildTrackCoverFromMetadataPicture(picture) {
 }
 
 async function extractTrackMetadataFromAudioFile(file) {
-  const { parseBlob, selectCover } = await import("music-metadata-browser");
+  const { parseBlob, selectCover } = await import("music-metadata");
   let metadata;
   try {
     metadata = await parseBlob(file);
@@ -273,31 +232,6 @@ async function extractTrackMetadataFromAudioFile(file) {
     durationSec,
     cover: embeddedCover,
   };
-}
-
-function buildUploadMetadataStatus(metadata) {
-  const resolvedFields = [];
-  if (metadata.title) {
-    resolvedFields.push("название");
-  }
-  if (metadata.artist) {
-    resolvedFields.push("исполнителя");
-  }
-  if (metadata.genre) {
-    resolvedFields.push("жанр");
-  }
-  if (metadata.durationSec) {
-    resolvedFields.push("длительность");
-  }
-  if (metadata.cover) {
-    resolvedFields.push("обложку");
-  }
-
-  if (!resolvedFields.length) {
-    return "Встроенные теги не нашлись. Данные можно заполнить вручную.";
-  }
-
-  return `Из файла подтянули: ${resolvedFields.join(", ")}. При желании всё можно поправить вручную.`;
 }
 
 function buildUploadMetadataSummary(metadata) {

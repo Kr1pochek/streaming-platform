@@ -187,6 +187,37 @@ function hasOwnField(payload, field) {
   return Object.prototype.hasOwnProperty.call(payload ?? {}, field);
 }
 
+function normalizeIdSet(values = []) {
+  return new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+  );
+}
+
+function sameIdSet(leftValues = [], rightValues = []) {
+  const left = normalizeIdSet(leftValues);
+  const right = normalizeIdSet(rightValues);
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function userStateAffectsCatalog(previousState = {}, nextState = {}) {
+  return (
+    !sameIdSet(previousState.followedArtistIds, nextState.followedArtistIds) ||
+    !sameIdSet(previousState.historyTrackIds, nextState.historyTrackIds)
+  );
+}
+
 function parseChunkSize() {
   const raw = Number.parseInt(String(process.env.STREAM_CHUNK_SIZE ?? DEFAULT_STREAM_CHUNK_SIZE), 10);
   if (!Number.isFinite(raw)) {
@@ -623,6 +654,7 @@ export function createApiRouter({
     "/me/player-state",
     requireAuth,
     asyncHandler(async (req, res) => {
+      const previousState = await fetchUserState(req.auth.userId);
       const nextState = {
         likedTrackIds: Array.isArray(req.body?.likedTrackIds) ? req.body.likedTrackIds : [],
         followedArtistIds: Array.isArray(req.body?.followedArtistIds) ? req.body.followedArtistIds : [],
@@ -634,6 +666,9 @@ export function createApiRouter({
         queueIsPlaying: req.body?.queueIsPlaying,
       };
       const saved = await updateUserState(req.auth.userId, nextState);
+      if (userStateAffectsCatalog(previousState, saved)) {
+        invalidateCatalogCache();
+      }
       res.json(saved);
     })
   );

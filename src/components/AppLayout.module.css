@@ -1375,6 +1375,7 @@
   .mobileNav {
     overflow-x: auto;
     padding-bottom: 2px;
+    scroll-padding-inline: 2px;
     scrollbar-width: none;
   }
 
@@ -1479,31 +1480,50 @@
 
 @media (max-width: 640px) {
   .main {
-    padding: 12px 12px 16px;
+    gap: 12px;
+    padding: 12px 12px 14px;
+  }
+
+  .mobileNav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding-bottom: 0;
   }
 
   .mobileNavItem {
     min-height: 38px;
-    padding: 0 12px;
+    justify-content: center;
+    min-width: 0;
+    padding: 0 10px;
     font-size: 12px;
   }
 
   .queuePanel {
-    bottom: 244px;
-    border-radius: 16px;
+    left: 0;
+    right: 0;
+    bottom: 92px;
+    max-height: min(68dvh, 560px);
+    border-radius: 22px 22px 0 0;
+    z-index: 12;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.58);
   }
 
   .queueRow {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
 
   .queueItemActions {
     justify-content: flex-end;
+    gap: 5px;
   }
 
   .player {
     --player-radius: 20px;
-    padding: 14px 12px 16px;
+    min-height: 76px;
+    padding: 10px 12px 12px;
     border-radius: var(--player-radius);
   }
 
@@ -1516,58 +1536,96 @@
   }
 
   .trackArt {
-    width: 52px;
-    height: 52px;
-    border-radius: 14px;
+    width: 48px;
+    height: 48px;
+    border-radius: 13px;
+  }
+
+  .playerContent {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 9px;
+    padding-top: 14px;
+  }
+
+  .playerLeft,
+  .playerCenter,
+  .playerRight {
+    width: auto;
+  }
+
+  .playerLeft {
+    align-items: center;
+    min-width: 0;
+  }
+
+  .playerCenter {
+    justify-content: flex-end;
+    max-width: none;
   }
 
   .controls {
-    gap: 12px;
-    justify-content: center;
-    flex-wrap: wrap;
+    width: auto;
+    gap: 0;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
   }
 
   .controlGroup {
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .controlGroup:not(.transportGroup) {
+    display: none;
   }
 
   .transportGroup {
-    gap: 10px;
+    gap: 6px;
+  }
+
+  .transportGroup .iconButton:first-child {
+    display: none;
   }
 
   .iconButton {
-    min-width: 40px;
-    height: 40px;
-    padding: 0 12px;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 10px;
     border-radius: 14px;
   }
 
   .playButton {
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
+    box-shadow:
+      0 10px 18px rgba(255, 228, 95, 0.26),
+      0 0 0 5px rgba(255, 228, 95, 0.08);
   }
 
-  .streamQualityCluster,
-  .streamQualityTrigger,
-  .streamQualityBadge {
-    min-height: 44px;
+  .playerRight {
+    display: flex;
+    width: auto;
+    justify-content: flex-end;
   }
 
-  .streamQualityMenu {
-    min-width: 228px;
+  .playerTools {
+    flex: 0 0 auto;
+    gap: 0;
   }
 
-  .streamQualityMenuTimeline {
-    min-width: 236px;
-    max-height: min(300px, calc(100dvh - 164px));
+  .streamQualityWrap,
+  .playerTools > button:last-child,
+  .volume {
+    display: none;
   }
 
-  .playerTimelineTime {
-    font-size: 10px;
+  .playerTimelineMeta {
+    display: none;
   }
 
   .toastStack {
-    bottom: 258px;
+    bottom: 104px;
+    width: calc(100% - 24px);
   }
 }
 
@@ -1590,12 +1648,13 @@
   }
 
   .queuePanel {
-    bottom: 258px;
-    max-height: min(50vh, 380px);
+    bottom: 94px;
+    max-height: min(70dvh, 560px);
   }
 
   .playerLeft {
-    align-items: flex-start;
+    align-items: center;
+    gap: 10px;
   }
 
   .trackTitleButton {
@@ -1609,49 +1668,19 @@
   }
 
   .playerContent {
-    gap: 12px;
+    gap: 8px;
   }
 
   .controls {
-    gap: 10px;
+    gap: 0;
   }
 
   .playerRight {
-    justify-content: center;
-    gap: 10px;
-  }
-
-  .streamQualityWrap {
-    justify-content: center;
-  }
-
-  .playerTimelineQualityWrap {
-    top: -50px;
-  }
-
-  .playerTimelineQualityButton {
-    min-width: 146px;
-    min-height: 38px;
-    padding: 7px 12px 8px;
-    border-radius: 14px;
-  }
-
-  .playerTimelineQualityEyebrow {
-    font-size: 8px;
-  }
-
-  .playerTimelineQualityValue {
-    gap: 6px;
-    font-size: 11px;
-  }
-
-  .volume {
-    max-width: 100%;
-    flex-basis: 100%;
+    justify-content: flex-end;
   }
 
   .toastStack {
-    bottom: 272px;
+    bottom: 106px;
   }
 }
 

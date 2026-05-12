@@ -1,4 +1,4 @@
-import { FiExternalLink, FiUserMinus, FiUserPlus, FiUsers } from "react-icons/fi";
+import { FiExternalLink, FiHeadphones, FiUserMinus, FiUserPlus, FiUsers } from "react-icons/fi";
 import styles from "./ArtistSpotlightCard.module.css";
 
 const audienceForms = {
@@ -37,6 +37,17 @@ function formatAudience(value, audience) {
   return `${safeValue.toLocaleString("ru-RU")} ${pluralizeRu(safeValue, ...forms)}`;
 }
 
+function parseAudienceCount(value) {
+  const rawValue = String(value ?? "").trim().replace(",", ".");
+  const shorthandMatch = rawValue.match(/^(\d+(?:\.\d+)?)\s*([KMB])$/i);
+  if (shorthandMatch) {
+    const [, amount, suffix] = shorthandMatch;
+    const multipliers = { K: 1_000, M: 1_000_000, B: 1_000_000_000 };
+    return Math.max(0, Math.trunc(Number(amount) * multipliers[suffix.toUpperCase()]));
+  }
+  return Math.max(0, Math.trunc(Number(rawValue) || 0));
+}
+
 function getArtistInitials(name) {
   const parts = String(name ?? "")
     .trim()
@@ -61,7 +72,8 @@ function createArtistTheme(name, followers) {
   }
 
   const hue = seed % 360;
-  const secondaryHue = (hue + 42 + (Math.max(0, followers) % 54)) % 360;
+  const followerSeed = Math.max(0, Number(followers) || 0);
+  const secondaryHue = (hue + 42 + (followerSeed % 54)) % 360;
 
   return {
     "--artist-card-glow": `hsla(${hue} 84% 68% / 0.26)`,
@@ -70,6 +82,10 @@ function createArtistTheme(name, followers) {
     "--artist-card-accent-strong": `hsl(${secondaryHue} 88% 72%)`,
     "--artist-card-border": `hsla(${hue} 82% 70% / 0.24)`,
   };
+}
+
+function resolveAvatarBackground(artist) {
+  return String(artist?.avatar ?? artist?.avatarUrl ?? artist?.cover ?? "").trim();
 }
 
 export default function ArtistSpotlightCard({
@@ -85,9 +101,21 @@ export default function ArtistSpotlightCard({
   openLabel = "Открыть",
 }) {
   const name = String(artist?.name ?? "").trim() || "Неизвестный артист";
-  const followers = Math.max(0, Math.trunc(Number(artist?.followers) || 0));
+  const followers = Math.max(parseAudienceCount(artist?.followers), isFollowed ? 1 : 0);
+  const listeners = parseAudienceCount(artist?.listeners ?? artist?.listenerCount);
+  const avatarBackground = resolveAvatarBackground(artist);
   const initials = getArtistInitials(name);
   const resolvedFollowLabel = String(followLabel ?? "").trim() || (isFollowed ? "Отписаться" : "Подписаться");
+  const orderedMetrics =
+    audience === "followers"
+      ? [
+          { key: "followers", icon: <FiUsers />, value: followers },
+          { key: "listeners", icon: <FiHeadphones />, value: listeners },
+        ]
+      : [
+          { key: "listeners", icon: <FiHeadphones />, value: listeners },
+          { key: "followers", icon: <FiUsers />, value: followers },
+        ];
 
   return (
     <article className={`${styles.card} ${className}`.trim()} style={createArtistTheme(name, followers)}>
@@ -97,7 +125,10 @@ export default function ArtistSpotlightCard({
         aria-label={`Открыть страницу артиста ${name}`}
         onClick={onOpen}
       >
-        <span className={styles.avatar}>
+        <span
+          className={`${styles.avatar} ${avatarBackground ? styles.avatarWithImage : ""}`.trim()}
+          style={avatarBackground ? { background: avatarBackground } : undefined}
+        >
           <span className={styles.avatarGlow} aria-hidden="true" />
           <span className={styles.avatarText}>{initials}</span>
         </span>
@@ -113,10 +144,12 @@ export default function ArtistSpotlightCard({
           {description ? <span className={styles.description}>{description}</span> : null}
 
           <span className={styles.metrics}>
-            <span className={styles.metric}>
-              <FiUsers />
-              {formatAudience(followers, audience)}
-            </span>
+            {orderedMetrics.map((metric) => (
+              <span key={metric.key} className={styles.metric}>
+                {metric.icon}
+                {formatAudience(metric.value, metric.key)}
+              </span>
+            ))}
             {isFollowed ? <span className={`${styles.metric} ${styles.metricActive}`.trim()}>В моей музыке</span> : null}
           </span>
         </span>

@@ -67,6 +67,20 @@
   background: radial-gradient(circle, rgba(255, 255, 255, 0.28), transparent 62%);
 }
 
+.avatarWithImage {
+  background-size: cover;
+  background-position: center;
+}
+
+.avatarWithImage .avatarGlow {
+  inset: 0;
+  background: linear-gradient(180deg, transparent 42%, rgba(0, 0, 0, 0.42));
+}
+
+.avatarWithImage .avatarText {
+  opacity: 0;
+}
+
 .avatarText {
   position: relative;
   z-index: 1;

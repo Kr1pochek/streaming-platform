@@ -93,7 +93,7 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) 36px;
   align-items: center;
   gap: 8px;
 }
@@ -180,8 +180,8 @@
 }
 
 .queueButton {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: transparent;
   color: rgba(255, 255, 255, 0.6);

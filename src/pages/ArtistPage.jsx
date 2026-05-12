@@ -5,6 +5,7 @@ import {
   FiChevronRight,
   FiClock,
   FiExternalLink,
+  FiHeadphones,
   FiHeart,
   FiMoreHorizontal,
   FiShuffle,
@@ -24,18 +25,65 @@ import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 
+const audienceForms = {
+  listeners: ["слушатель", "слушателя", "слушателей"],
+  followers: ["подписчик", "подписчика", "подписчиков"],
+};
+
+function pluralizeRu(value, one, few, many) {
+  const normalized = Math.abs(Math.trunc(Number(value) || 0));
+  const mod100 = normalized % 100;
+  if (mod100 >= 11 && mod100 <= 19) {
+    return many;
+  }
+
+  const mod10 = normalized % 10;
+  if (mod10 === 1) {
+    return one;
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return few;
+  }
+  return many;
+}
+
+function formatAudience(value, type) {
+  const forms = audienceForms[type] ?? audienceForms.listeners;
+  const safeValue = Math.max(0, Math.trunc(Number(value) || 0));
+  return `${safeValue.toLocaleString("ru-RU")} ${pluralizeRu(safeValue, ...forms)}`;
+}
+
+function audienceNumber(value) {
+  return Math.max(0, Math.trunc(Number(String(value ?? "").replace(",", ".")) || 0));
+}
+
+function resolveArtistAvatar(data) {
+  return (
+    String(data?.artist?.avatar ?? data?.artist?.avatarUrl ?? data?.artist?.cover ?? "").trim() ||
+    String(data?.latestRelease?.cover ?? "").trim() ||
+    String(data?.topTracks?.find((track) => track?.cover)?.cover ?? "").trim()
+  );
+}
+
 export default function ArtistPage() {
   const { artistId = "" } = useParams();
   const navigate = useNavigate();
   const loadArtistPage = useCallback(() => fetchArtistPage(artistId), [artistId]);
   const { status, data, error, reload } = useAsyncResource(loadArtistPage);
 
-  const { likedIds, currentTrackId, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
+  const { likedIds, currentTrackId, historyIds, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
 
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
   const artistTrackIds = useMemo(() => (data?.topTracks ?? []).map((track) => track.id), [data?.topTracks]);
   const artistFollowed = data?.artist ? isArtistFollowed(data.artist.id) : false;
+  const artistAvatar = resolveArtistAvatar(data);
+  const hasLocalArtistListen = useMemo(() => {
+    const artistTrackIdSet = new Set(artistTrackIds);
+    return (historyIds ?? []).some((trackId) => artistTrackIdSet.has(trackId));
+  }, [artistTrackIds, historyIds]);
+  const artistListeners = Math.max(audienceNumber(data?.artist?.listeners), hasLocalArtistListen ? 1 : 0);
+  const artistFollowers = Math.max(audienceNumber(data?.artist?.followers), artistFollowed ? 1 : 0);
 
   return (
     <PageShell>
@@ -55,14 +103,23 @@ export default function ArtistPage() {
       {status === "success" && data ? (
         <>
           <header className={styles.hero}>
-            <span className={styles.heroAvatar}>{data.artist.name.slice(0, 1).toUpperCase()}</span>
+            <span
+              className={`${styles.heroAvatar} ${artistAvatar ? styles.heroAvatarImage : ""}`.trim()}
+              style={artistAvatar ? { background: artistAvatar } : undefined}
+            >
+              {artistAvatar ? null : data.artist.name.slice(0, 1).toUpperCase()}
+            </span>
             <div className={styles.heroMeta}>
               <p className={styles.heroLabel}>Исполнитель</p>
               <h1 className={styles.heroTitle}>{data.artist.name}</h1>
               <div className={styles.heroStats}>
                 <span>
+                  <FiHeadphones />
+                  {formatAudience(artistListeners, "listeners")}
+                </span>
+                <span>
                   <FiUsers />
-                  {data.artist.followers} слушателей
+                  {formatAudience(artistFollowers, "followers")}
                 </span>
                 <span>{data.topTracks.length} треков</span>
               </div>
