@@ -1729,10 +1729,8 @@ export default function ProfilePage() {
                 <option key={genre} value={genre} />
               ))}
             </datalist>
-            <p className={styles.genreHelperText}>
-              РњРѕР¶РЅРѕ РІРІРµСЃС‚Рё СЃРІРѕР№ Р¶Р°РЅСЂ РІСЂСѓС‡РЅСѓСЋ РёР»Рё Р±С‹СЃС‚СЂРѕ РІС‹Р±СЂР°С‚СЊ РѕРґРёРЅ РёР· Р»РµРЅС‚С‹ РЅРёР¶Рµ.
-            </p>
-            <div className={styles.genreRail} role="list" aria-label="РџРѕРґСЃРєР°Р·РєРё РїРѕ Р¶Р°РЅСЂР°Рј">
+            <p className={styles.genreHelperText}>{UPLOAD_GENRE_HELP_TEXT}</p>
+            <div className={styles.genreRail} role="list" aria-label={UPLOAD_GENRE_ARIA_LABEL}>
               {visibleUploadGenres.map((genre) => {
                 const isActive = genre.toLowerCase() === normalizedUploadGenre;
                 return (

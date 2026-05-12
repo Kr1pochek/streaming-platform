@@ -283,6 +283,11 @@
   cursor: pointer;
 }
 
+.trackMainButton:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
 .trackRowActive {
   border-color: rgba(245, 204, 70, 0.72);
   background:
@@ -925,6 +930,15 @@
 
 .cardActionButton:hover {
   background: rgba(255, 255, 255, 0.18);
+}
+
+.cardActionButton:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.cardActionButton:disabled:hover {
+  background: rgba(12, 12, 14, 0.88);
 }
 
 .cardActionButtonLike {

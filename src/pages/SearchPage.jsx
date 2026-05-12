@@ -132,6 +132,7 @@ export default function SearchPage() {
   const [searchHistory, setSearchHistory] = useState(() => readSearchHistory());
 
   const normalizedQuery = query.trim();
+  const canPlayTrack = useCallback((trackId) => Boolean(trackMap?.[trackId]), [trackMap]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -468,6 +469,7 @@ export default function SearchPage() {
           recommendationTracks={recommendations}
           pagination={searchState.pagination}
           loadingMore={searchState.loadingMore}
+          canPlayTrack={canPlayTrack}
           onPlay={playTrack}
           onToggleArtistFollow={toggleArtistFollow}
           onToggleLike={toggleLikeTrack}
@@ -527,11 +529,12 @@ export default function SearchPage() {
                   key={`popular-column-${index}`}
                   tracks={column}
                   likedIds={likedIds}
-                currentTrackId={currentTrackId}
-                onPlay={playTrack}
-                onOpenArtist={(id) => navigate(`/artist/${id}`)}
-                onOpenTrackMenu={openTrackMenu}
-              />
+                  currentTrackId={currentTrackId}
+                  canPlayTrack={canPlayTrack}
+                  onPlay={playTrack}
+                  onOpenArtist={(id) => navigate(`/artist/${id}`)}
+                  onOpenTrackMenu={openTrackMenu}
+                />
               ))}
             </div>
           </section>
@@ -548,6 +551,7 @@ export default function SearchPage() {
                   playlist={playlist}
                   subtitle={playlist.artist}
                   likedIds={likedIds}
+                  canPlayTrack={canPlayTrack}
                   onOpenPlaylist={(playlistId) => navigate(`/playlist/${playlistId}`)}
                   onPlay={playTrack}
                   onToggleLike={toggleLikeTrack}
@@ -621,6 +625,7 @@ function SearchResults({
   recommendationTracks,
   pagination,
   loadingMore,
+  canPlayTrack,
   onPlay,
   onToggleArtistFollow,
   onToggleLike,
@@ -692,6 +697,7 @@ function SearchResults({
                 tracks={column}
                 likedIds={likedIds}
                 currentTrackId={currentTrackId}
+                canPlayTrack={canPlayTrack}
                 onPlay={onPlay}
                 onOpenArtist={onOpenArtist}
                 onOpenTrackMenu={onOpenTrackMenu}
@@ -786,6 +792,7 @@ function PlaylistCard({
   playlist,
   subtitle,
   likedIds,
+  canPlayTrack = () => true,
   onOpenPlaylist,
   onPlay,
   onToggleLike,
@@ -793,6 +800,7 @@ function PlaylistCard({
 }) {
   const firstTrackId = playlist.trackIds?.[0] ?? null;
   const isFirstTrackLiked = firstTrackId ? likedIds.includes(firstTrackId) : false;
+  const canPlayFirstTrack = firstTrackId ? canPlayTrack(firstTrackId) : false;
 
   return (
     <article className={styles.moreCard}>
@@ -810,6 +818,7 @@ function PlaylistCard({
               type="button"
               className={styles.cardActionButton}
               aria-label="Слушать"
+              disabled={!canPlayFirstTrack}
               onClick={() => onPlay(firstTrackId)}
             >
               <BsFillPlayFill />
@@ -847,6 +856,7 @@ function TrackListColumn({
   tracks,
   likedIds,
   currentTrackId,
+  canPlayTrack = () => true,
   onPlay,
   onOpenArtist,
   onOpenTrackMenu,
@@ -856,11 +866,13 @@ function TrackListColumn({
       {tracks.map((track) => {
         const liked = likedIds.includes(track.id);
         const isActive = currentTrackId === track.id;
+        const canPlay = canPlayTrack(track.id);
         return (
           <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
             <button
               type="button"
               className={styles.trackMainButton}
+              disabled={!canPlay}
               onClick={() => onPlay(track.id)}
               onContextMenu={(event) => onOpenTrackMenu(event, track.id)}
             >
