@@ -208,6 +208,123 @@
   line-height: 1.55;
 }
 
+.collapsibleStack {
+  display: grid;
+  gap: 14px;
+}
+
+.collapsibleSection {
+  display: grid;
+  gap: 12px;
+}
+
+.collapsibleHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03)),
+    rgba(14, 16, 20, 0.92);
+  color: #f7faf8;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.collapsibleHeader:hover,
+.collapsibleHeaderOpen {
+  border-color: rgba(182, 236, 141, 0.22);
+  background:
+    linear-gradient(135deg, rgba(106, 214, 129, 0.09), rgba(255, 255, 255, 0.04)),
+    rgba(14, 16, 20, 0.94);
+}
+
+.collapsibleHeader:hover {
+  transform: translateY(-1px);
+}
+
+.collapsibleHeaderMain {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.collapsibleIcon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #b7f084;
+}
+
+.collapsibleText {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.collapsibleEyebrow {
+  color: rgba(182, 236, 141, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.collapsibleTitle {
+  color: #f7faf8;
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 850;
+}
+
+.collapsibleDescription {
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.collapsibleAction {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(246, 250, 248, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.collapsibleChevron {
+  transition: transform 0.18s ease;
+}
+
+.collapsibleChevronOpen {
+  transform: rotate(180deg);
+}
+
+.collapsibleBody {
+  display: grid;
+  gap: 16px;
+}
+
 .section {
   display: grid;
   gap: 16px;
@@ -256,6 +373,22 @@
   .section {
     padding: 18px;
     border-radius: 20px;
+  }
+
+  .collapsibleHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .collapsibleHeaderMain {
+    align-items: flex-start;
+  }
+
+  .collapsibleAction {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .heroActions {

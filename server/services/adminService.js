@@ -1,4 +1,10 @@
 import {
+  existsSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
+import path from "node:path";
+import {
   HttpError,
   createReleaseId,
   fetchCatalog,
@@ -6,6 +12,7 @@ import {
   hasHlsManifestForTrack,
   isTrackAudioAvailable,
   isSystemPlaylist,
+  mediaDirectory,
   normalizeTitle,
   pool,
   resolveMediaFilePath,
@@ -17,6 +24,66 @@ import { isElevatedAdminRole, isSuperAdminRole, normalizeAdminRole } from "./aut
 
 const RELEASE_TYPES = new Set(["album", "ep", "single"]);
 const RELEASE_STATUSES = new Set(["draft", "published"]);
+const AVATAR_FILE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+const LOCAL_MEDIA_ROUTE_PREFIX = "/api/media/";
+
+function encodeMediaRelativePath(relativePath = "") {
+  return String(relativePath ?? "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function findLocalAvatarUrl(userId = "") {
+  const normalizedUserId = String(userId ?? "").trim();
+  if (!normalizedUserId) {
+    return "";
+  }
+
+  const avatarRoot = path.resolve(mediaDirectory, "avatars");
+  const avatarDirectory = path.resolve(avatarRoot, normalizedUserId);
+  if (!avatarDirectory.startsWith(`${avatarRoot}${path.sep}`) || !existsSync(avatarDirectory)) {
+    return "";
+  }
+
+  let avatarEntries = [];
+  try {
+    avatarEntries = readdirSync(avatarDirectory, { withFileTypes: true });
+  } catch {
+    return "";
+  }
+
+  const avatarFiles = avatarEntries
+    .filter((entry) => entry.isFile() && AVATAR_FILE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+    .map((entry) => {
+      const absolutePath = path.join(avatarDirectory, entry.name);
+      try {
+        return {
+          absolutePath,
+          modifiedAt: statSync(absolutePath).mtimeMs,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((first, second) => second.modifiedAt - first.modifiedAt);
+
+  const latestAvatar = avatarFiles[0];
+  if (!latestAvatar) {
+    return "";
+  }
+
+  const relativePath = path.relative(mediaDirectory, latestAvatar.absolutePath);
+  return `${LOCAL_MEDIA_ROUTE_PREFIX}${encodeMediaRelativePath(relativePath)}`;
+}
+
+function resolveAdminUserAvatarUrl(row = {}) {
+  const avatarUrl = String(row.avatarUrl ?? row.avatar_url ?? "").trim();
+  return avatarUrl || findLocalAvatarUrl(row.id);
+}
 
 function normalizeAdminQuery(value = "") {
   return String(value ?? "").trim().toLowerCase();
@@ -31,9 +98,12 @@ function mapAdminUserRow(row = {}) {
     row.adminRole ?? row.admin_role,
     row.isAdmin || row.is_admin ? "super_admin" : "user"
   );
+  const avatarUrl = resolveAdminUserAvatarUrl(row);
 
   return {
     ...row,
+    avatarUrl,
+    avatar_url: avatarUrl,
     adminRole,
     isAdmin: isElevatedAdminRole(adminRole),
     isSuperAdmin: isSuperAdminRole(adminRole),
@@ -839,6 +909,7 @@ export async function getUsers({ limit = 20, offset = 0, query = "", status = "a
       u.id,
       u.username as username,
       u.display_name as "displayName",
+      coalesce(u.avatar_url, '') as "avatarUrl",
       ${resolveAdminRoleSql("u")} as "adminRole",
       coalesce(u.is_banned, false) as "isBanned",
       coalesce(u.ban_reason, '') as "banReason",

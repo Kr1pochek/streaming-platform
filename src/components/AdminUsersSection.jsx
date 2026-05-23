@@ -14,6 +14,7 @@ import { banAdminUser, getAdminUsers, unbanAdminUser, updateAdminUserRole } from
 import useAuth from "../hooks/useAuth.js";
 import ResourceState from "./ResourceState.jsx";
 import ModalDialog from "./ModalDialog.jsx";
+import UserAvatar from "./UserAvatar.jsx";
 import styles from "./AdminUsersSection.module.css";
 
 const USERS_LIMIT = 10;
@@ -341,7 +342,11 @@ export default function AdminUsersSection({ refreshToken = 0, onChanged }) {
             <article key={user.id} className={`${styles.card} ${user.isBanned ? styles.cardBanned : ""}`.trim()}>
               <div className={styles.cardHeader}>
                 <div className={styles.identity}>
-                  <span className={styles.avatar}>{String(user.username ?? "?").slice(0, 1).toUpperCase()}</span>
+                  <UserAvatar
+                    avatarUrl={user.avatarUrl}
+                    name={user.displayName || user.username}
+                    className={styles.avatar}
+                  />
                   <div className={styles.identityText}>
                     <h3 className={styles.username}>{user.username}</h3>
                     <p className={styles.displayName}>{user.displayName || "Без display name"}</p>

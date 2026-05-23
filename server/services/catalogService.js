@@ -157,13 +157,32 @@ export function compareBySeed(orderMap, leftId, rightId) {
   return String(leftId).localeCompare(String(rightId), "ru");
 }
 
-export function coverForPlaylist(seed) {
+function playlistCoverIndex(seed) {
   const hash = Math.abs(
     String(seed)
       .split("")
       .reduce((acc, char) => acc * 31 + char.charCodeAt(0), 0)
   );
-  return customPlaylistCovers[hash % customPlaylistCovers.length];
+  return hash % customPlaylistCovers.length;
+}
+
+function coverKey(cover = "") {
+  return String(cover ?? "").trim().toLowerCase();
+}
+
+function fallbackCoverForPlaylist(seed, usedCoverKeys = new Set()) {
+  const startIndex = playlistCoverIndex(seed);
+  for (let offset = 0; offset < customPlaylistCovers.length; offset += 1) {
+    const cover = customPlaylistCovers[(startIndex + offset) % customPlaylistCovers.length];
+    if (!usedCoverKeys.has(coverKey(cover))) {
+      return cover;
+    }
+  }
+  return customPlaylistCovers[startIndex];
+}
+
+export function coverForPlaylist(seed) {
+  return customPlaylistCovers[playlistCoverIndex(seed)];
 }
 
 export function createAutoArtistId() {
@@ -313,6 +332,22 @@ function playlistTrackSignature(trackIds = []) {
   return trackIds.join("|");
 }
 
+function choosePlaylistCover({ playlistId, preferredTracks = [], fallbackTracks = [], usedCoverKeys = new Set() } = {}) {
+  const candidates = [...preferredTracks, ...fallbackTracks];
+  for (const track of candidates) {
+    const cover = String(track?.cover ?? "").trim();
+    const key = coverKey(cover);
+    if (cover && !usedCoverKeys.has(key)) {
+      usedCoverKeys.add(key);
+      return cover;
+    }
+  }
+
+  const fallbackCover = fallbackCoverForPlaylist(playlistId, usedCoverKeys);
+  usedCoverKeys.add(coverKey(fallbackCover));
+  return fallbackCover;
+}
+
 function topArtistFromTracks(tracks = []) {
   const artistSummary = new Map();
 
@@ -374,41 +409,44 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
   const trackIdsByFreshness = tracksByFreshness.map((track) => track.id);
   const trackIdsReversed = [...trackIdsByFreshness].reverse();
   const topArtist = topArtistFromTracks(tracksByFreshness);
+  const usedCoverKeys = new Set(existingPublicPlaylists.map((playlist) => coverKey(playlist.cover)).filter(Boolean));
 
   const candidates = [
-    createSystemPlaylist({
+    {
       id: `${SYSTEM_PLAYLIST_ID_PREFIX}catalog-now`,
       title: "Сейчас в каталоге",
       subtitle: `${trackIdsByFreshness.length} доступных треков`,
-      cover: tracksByFreshness[0]?.cover,
+      preferredTracks: tracksByFreshness,
+      fallbackTracks: tracksByFreshness,
       trackIds: trackIdsByFreshness,
-    }),
-    createSystemPlaylist({
+    },
+    {
       id: `${SYSTEM_PLAYLIST_ID_PREFIX}rotation`,
       title: "Короткая ротация",
       subtitle: "Быстрый микс из того, что уже можно слушать",
-      cover: tracksByFreshness[Math.min(1, tracksByFreshness.length - 1)]?.cover ?? tracksByFreshness[0]?.cover,
+      preferredTracks: tracksByFreshness.slice(1),
+      fallbackTracks: tracksByFreshness,
       trackIds: trackIdsReversed,
-    }),
-    createSystemPlaylist({
+    },
+    {
       id: `${SYSTEM_PLAYLIST_ID_PREFIX}fresh`,
       title: "Свежие загрузки",
       subtitle: "Последние доступные треки",
-      cover: tracksByFreshness[0]?.cover,
+      preferredTracks: tracksByFreshness,
+      fallbackTracks: tracksByFreshness,
       trackIds: trackIdsByFreshness.slice(0, Math.min(trackIdsByFreshness.length, 8)),
-    }),
+    },
   ];
 
   if (topArtist && topArtist.trackIds.length >= 2) {
-    candidates.push(
-      createSystemPlaylist({
-        id: `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`,
-        title: `Фокус: ${topArtist.label}`,
-        subtitle: "Подборка по самому наполненному артисту",
-        cover: tracksByFreshness.find((track) => topArtist.trackIds.includes(track.id))?.cover,
-        trackIds: topArtist.trackIds,
-      })
-    );
+    candidates.push({
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`,
+      title: `Фокус: ${topArtist.label}`,
+      subtitle: "Подборка по самому наполненному артисту",
+      preferredTracks: tracksByFreshness.filter((track) => topArtist.trackIds.includes(track.id)),
+      fallbackTracks: tracksByFreshness,
+      trackIds: topArtist.trackIds,
+    });
   }
 
   const seenSignatures = new Set(
@@ -418,16 +456,27 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
   );
 
   const supplementalPlaylists = [];
-  for (const playlist of candidates) {
-    if (!playlist.trackIds.length) {
+  for (const candidate of candidates) {
+    const trackIds = Array.from(new Set((candidate.trackIds ?? []).filter(Boolean)));
+    if (!trackIds.length) {
       continue;
     }
 
-    const signature = playlistTrackSignature(playlist.trackIds);
+    const signature = playlistTrackSignature(trackIds);
     if (seenSignatures.has(signature)) {
       continue;
     }
 
+    const playlist = createSystemPlaylist({
+      ...candidate,
+      cover: choosePlaylistCover({
+        playlistId: candidate.id,
+        preferredTracks: candidate.preferredTracks,
+        fallbackTracks: candidate.fallbackTracks,
+        usedCoverKeys,
+      }),
+      trackIds,
+    });
     seenSignatures.add(signature);
     supplementalPlaylists.push(playlist);
   }

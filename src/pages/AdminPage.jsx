@@ -4,6 +4,7 @@ import {
   FiActivity,
   FiAlertTriangle,
   FiArrowRight,
+  FiChevronDown,
   FiMusic,
   FiRefreshCw,
   FiSearch,
@@ -69,10 +70,60 @@ function buildAdminAlerts(stats) {
   return alerts;
 }
 
+function AdminCollapsibleSection({
+  id,
+  eyebrow,
+  title,
+  description,
+  icon: Icon,
+  open,
+  onToggle,
+  children,
+}) {
+  const panelId = `${id}-panel`;
+
+  return (
+    <section className={styles.collapsibleSection}>
+      <button
+        type="button"
+        className={`${styles.collapsibleHeader} ${open ? styles.collapsibleHeaderOpen : ""}`.trim()}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+      >
+        <span className={styles.collapsibleHeaderMain}>
+          <span className={styles.collapsibleIcon}>{Icon ? <Icon /> : null}</span>
+          <span className={styles.collapsibleText}>
+            <span className={styles.collapsibleEyebrow}>{eyebrow}</span>
+            <strong className={styles.collapsibleTitle}>{title}</strong>
+            <span className={styles.collapsibleDescription}>{description}</span>
+          </span>
+        </span>
+        <span className={styles.collapsibleAction}>
+          {open ? "Свернуть" : "Развернуть"}
+          <FiChevronDown className={`${styles.collapsibleChevron} ${open ? styles.collapsibleChevronOpen : ""}`.trim()} />
+        </span>
+      </button>
+
+      {open ? (
+        <div id={panelId} className={styles.collapsibleBody}>
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const { status: authStatus, isAuthenticated, user } = useAuth();
   const [refreshToken, setRefreshToken] = useState(0);
+  const [expandedSections, setExpandedSections] = useState({
+    overview: false,
+    tracks: false,
+    releases: false,
+    users: false,
+  });
   const canLoadAdminData = authStatus === "authenticated" && Boolean(user?.isAdmin);
 
   const loadStats = useCallback(() => getAdminStats(), []);
@@ -86,6 +137,13 @@ export default function AdminPage() {
     setRefreshToken((value) => value + 1);
     await reloadStats();
   }, [reloadStats]);
+
+  const toggleSection = useCallback((sectionId) => {
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionId]: !current[sectionId],
+    }));
+  }, []);
 
   if (authStatus === "loading") {
     return (
@@ -218,19 +276,57 @@ export default function AdminPage() {
               ))}
             </section>
 
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.sectionEyebrow}>Диагностика</p>
-                  <h2 className={styles.sectionTitle}>Сводка по платформе</h2>
-                </div>
-              </div>
-              <AdminStatsSection data={stats} />
-            </section>
+            <div className={styles.collapsibleStack}>
+              <AdminCollapsibleSection
+                id="admin-overview"
+                eyebrow="Диагностика"
+                title="Сводка по платформе"
+                description="Каталог, медиа, публичная выдача и быстрые рекомендации."
+                icon={FiActivity}
+                open={expandedSections.overview}
+                onToggle={() => toggleSection("overview")}
+              >
+                <section className={styles.section}>
+                  <AdminStatsSection data={stats} />
+                </section>
+              </AdminCollapsibleSection>
 
-            <AdminTracksSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
-            <AdminReleasesSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
-            <AdminUsersSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
+              <AdminCollapsibleSection
+                id="admin-tracks"
+                eyebrow="Медиа"
+                title="Треки"
+                description="Загрузки, видимость в каталоге, локальные файлы и модерация."
+                icon={FiMusic}
+                open={expandedSections.tracks}
+                onToggle={() => toggleSection("tracks")}
+              >
+                <AdminTracksSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
+              </AdminCollapsibleSection>
+
+              <AdminCollapsibleSection
+                id="admin-releases"
+                eyebrow="Каталог"
+                title="Релизы"
+                description="Альбомы, EP, single и публикация витрин каталога."
+                icon={FiShield}
+                open={expandedSections.releases}
+                onToggle={() => toggleSection("releases")}
+              >
+                <AdminReleasesSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
+              </AdminCollapsibleSection>
+
+              <AdminCollapsibleSection
+                id="admin-users"
+                eyebrow="Доступ"
+                title="Пользователи"
+                description="Роли, блокировки, аватары и вклад аккаунтов в каталог."
+                icon={FiUsers}
+                open={expandedSections.users}
+                onToggle={() => toggleSection("users")}
+              >
+                <AdminUsersSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
+              </AdminCollapsibleSection>
+            </div>
           </>
         ) : null}
       </div>

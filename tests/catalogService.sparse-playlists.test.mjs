@@ -5,12 +5,12 @@ import {
   buildCatalogSupplementalPlaylists,
 } from "../server/services/catalogService.js";
 
-function createTrack(id, title, artist, createdAt) {
+function createTrack(id, title, artist, createdAt, cover = "linear-gradient(135deg, #20252b 0%, #35424f 100%)") {
   return {
     id,
     title,
     artist,
-    cover: "linear-gradient(135deg, #20252b 0%, #35424f 100%)",
+    cover,
     createdAt,
   };
 }
@@ -61,4 +61,20 @@ test("buildCatalogSupplementalPlaylists adds artist focus playlist when one arti
   });
 
   assert.ok(playlists.some((playlist) => playlist.id === `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`));
+});
+
+test("buildCatalogSupplementalPlaylists avoids duplicate covers for generated playlists", () => {
+  const sharedCover = "linear-gradient(135deg, #111 0%, #333 100%)";
+  const tracks = Array.from({ length: 9 }, (_, index) =>
+    createTrack(`track-${index + 1}`, `Track ${index + 1}`, `Artist ${index + 1}`, 900 - index, sharedCover)
+  );
+
+  const playlists = buildCatalogSupplementalPlaylists({
+    tracks,
+    existingPlaylists: [],
+  });
+  const covers = playlists.map((playlist) => playlist.cover);
+
+  assert.ok(covers.length >= 3);
+  assert.equal(new Set(covers).size, covers.length);
 });
