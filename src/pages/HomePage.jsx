@@ -128,6 +128,10 @@ export default function HomePage() {
   }, []);
   const greetingName = user?.displayName ?? user?.username ?? "гость";
   const releaseNotifications = Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : [];
+  const parsedReleaseNotificationWindowDays = Number(data?.releaseNotificationWindowDays ?? 14);
+  const releaseNotificationWindowDays = Number.isFinite(parsedReleaseNotificationWindowDays)
+    ? parsedReleaseNotificationWindowDays
+    : 14;
   const catalogState = data?.catalogState ?? {};
   const updatedArtistCount = new Set(releaseNotifications.map((item) => item.artistId).filter(Boolean)).size;
 
@@ -399,8 +403,8 @@ export default function HomePage() {
                         Лента обновлений
                       </p>
                       <p className={styles.releaseHubText}>
-                        Здесь показываются свежие опубликованные релизы каталога. Если ты подписан на артистов, их
-                        релизы поднимаются выше в этом блоке.
+                        Здесь показываются релизы, опубликованные за последние {releaseNotificationWindowDays} дней.
+                        Если ты подписан на артистов, их релизы поднимаются выше в этом блоке.
                       </p>
                     </div>
                     <div className={styles.releaseHubHeaderMeta}>
@@ -491,8 +495,8 @@ export default function HomePage() {
                 </div>
               ) : (
                 <ResourceState
-                  title="Пока нет опубликованных релизов"
-                  description="Когда в каталоге появятся опубликованные релизы, они сразу покажутся в этом блоке."
+                  title="Пока нет свежих релизов"
+                  description={`Здесь появляются релизы за последние ${releaseNotificationWindowDays} дней, а более старые автоматически уходят из блока.`}
                   actionLabel="Перейти в поиск"
                   onAction={() => navigate("/search")}
                 />

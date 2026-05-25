@@ -1,6 +1,7 @@
 import {
   existsSync,
   readdirSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import path from "node:path";
@@ -9,6 +10,7 @@ import {
   createReleaseId,
   fetchCatalog,
   fetchArtists,
+  hlsDirectory,
   hasHlsManifestForTrack,
   isTrackAudioAvailable,
   isSystemPlaylist,
@@ -23,9 +25,41 @@ import {
 import { isElevatedAdminRole, isSuperAdminRole, normalizeAdminRole } from "./authService.js";
 
 const RELEASE_TYPES = new Set(["album", "ep", "single"]);
-const RELEASE_STATUSES = new Set(["draft", "published"]);
+const RELEASE_STATUSES = new Set(["draft", "pending", "published", "rejected"]);
+const MODERATION_REJECTED_REASON = "Rejected by moderation";
 const AVATAR_FILE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const LOCAL_MEDIA_ROUTE_PREFIX = "/api/media/";
+
+function isPathInside(parentDirectory, targetPath) {
+  const parent = path.resolve(parentDirectory);
+  const target = path.resolve(targetPath);
+  return target === parent || target.startsWith(`${parent}${path.sep}`);
+}
+
+function safeRemoveLocalPath(targetPath, options = {}) {
+  try {
+    rmSync(targetPath, options);
+  } catch (error) {
+    console.warn(`[admin] Failed to remove media path "${targetPath}": ${error.message}`);
+  }
+}
+
+function removeLocalTrackMedia(track) {
+  const audioPath = resolveMediaFilePath(track?.audioUrl);
+  if (audioPath && isPathInside(mediaDirectory, audioPath)) {
+    safeRemoveLocalPath(audioPath, { force: true });
+  }
+
+  const trackId = String(track?.id ?? "").trim();
+  if (!trackId) {
+    return;
+  }
+
+  const hlsPath = path.resolve(hlsDirectory, trackId);
+  if (isPathInside(hlsDirectory, hlsPath)) {
+    safeRemoveLocalPath(hlsPath, { recursive: true, force: true });
+  }
+}
 
 function encodeMediaRelativePath(relativePath = "") {
   return String(relativePath ?? "")
@@ -206,9 +240,11 @@ function buildReleaseFilters({ query = "", status = "all" } = {}) {
   }
 
   const normalizedStatus = String(status ?? "all").trim().toLowerCase();
-  if (normalizedStatus === "draft" || normalizedStatus === "published") {
+  if (RELEASE_STATUSES.has(normalizedStatus)) {
     values.push(normalizedStatus);
     conditions.push(`coalesce(nullif(r.status, ''), 'published') = $${values.length}`);
+  } else {
+    conditions.push("coalesce(nullif(r.status, ''), 'published') in ('draft', 'published')");
   }
 
   const whereClause = conditions.length ? `where ${conditions.join(" and ")}` : "";
@@ -281,6 +317,8 @@ function mapAdminReleaseRow(row = {}) {
     description: row.description ?? "",
     status,
     isPublished: status === "published",
+    isPending: status === "pending",
+    isRejected: status === "rejected",
     createdAt: Number(row.createdAt ?? 0),
     publishedAt: Number(row.publishedAt ?? 0),
     createdByUsername: row.createdByUsername ?? "",
@@ -332,10 +370,18 @@ export async function getAdminStats() {
       (select count(*) from users where admin_role = 'super_admin') as super_admin_users,
       (select count(*) from tracks) as total_tracks,
       (select count(*) from tracks where is_hidden = true) as hidden_tracks,
+      (
+        select count(distinct rt.track_id)
+        from release_tracks rt
+        join releases r on r.id = rt.release_id
+        where coalesce(nullif(r.status, ''), 'published') = 'pending'
+      ) as pending_tracks,
       (select count(*) from artists) as total_artists,
       (select count(*) from playlists) as total_playlists,
       (select count(*) from playlists where is_custom = true or id like 'upl-%') as custom_playlists,
       (select count(*) from releases) as total_releases,
+      (select count(*) from releases where coalesce(nullif(status, ''), 'published') = 'pending') as pending_releases,
+      (select count(*) from releases where coalesce(nullif(status, ''), 'published') = 'rejected') as rejected_releases,
       (select count(distinct user_id) from user_sessions where expires_at > extract(epoch from now()) * 1000) as active_sessions
     `
   );
@@ -398,11 +444,19 @@ export async function getAdminStats() {
       superAdminUsers: Number(base.super_admin_users ?? 0),
       tracks: Number(base.total_tracks ?? 0),
       hiddenTracks: Number(base.hidden_tracks ?? 0),
+      pendingTracks: Number(base.pending_tracks ?? 0),
       artists: Number(base.total_artists ?? 0),
       playlists: Number(base.total_playlists ?? 0),
       customPlaylists: Number(base.custom_playlists ?? 0),
       releases: Number(base.total_releases ?? 0),
+      pendingReleases: Number(base.pending_releases ?? 0),
+      rejectedReleases: Number(base.rejected_releases ?? 0),
       activeSessions: Number(base.active_sessions ?? 0),
+    },
+    validation: {
+      pendingReleases: Number(base.pending_releases ?? 0),
+      pendingTracks: Number(base.pending_tracks ?? 0),
+      rejectedReleases: Number(base.rejected_releases ?? 0),
     },
     catalogHealth: {
       visibleTracks: visibleTracks.length,
@@ -712,6 +766,319 @@ export async function getAdminReleasesCount({ query = "", status = "all" } = {})
   return result.rows[0]?.count || 0;
 }
 
+function buildValidationFilters({ query = "", status = "pending" } = {}) {
+  const conditions = [];
+  const values = [];
+
+  const normalizedStatus = String(status ?? "pending").trim().toLowerCase();
+  if (normalizedStatus !== "all") {
+    values.push(RELEASE_STATUSES.has(normalizedStatus) ? normalizedStatus : "pending");
+    conditions.push(`coalesce(nullif(r.status, ''), 'published') = $${values.length}`);
+  } else {
+    conditions.push("coalesce(nullif(r.status, ''), 'published') in ('pending', 'rejected')");
+  }
+
+  const normalizedQuery = normalizeAdminQuery(query);
+  if (normalizedQuery) {
+    values.push(`%${normalizedQuery}%`);
+    const parameter = `$${values.length}`;
+    conditions.push(`
+      (
+        lower(r.id) like ${parameter}
+        or lower(r.title) like ${parameter}
+        or lower(a.name) like ${parameter}
+        or lower(coalesce(creator.username, '')) like ${parameter}
+        or exists (
+          select 1
+          from release_tracks search_rt
+          join tracks search_t on search_t.id = search_rt.track_id
+          left join users search_uploader on search_uploader.id = search_t.uploaded_by
+          where search_rt.release_id = r.id
+            and (
+              lower(search_t.id) like ${parameter}
+              or lower(search_t.title) like ${parameter}
+              or lower(coalesce(search_uploader.username, '')) like ${parameter}
+            )
+        )
+      )
+    `);
+  }
+
+  return {
+    whereClause: conditions.length ? `where ${conditions.join(" and ")}` : "",
+    values,
+  };
+}
+
+function mapAdminValidationReleaseRow(row = {}) {
+  const release = mapAdminReleaseRow(row);
+  const tracks = (Array.isArray(row.tracks) ? row.tracks : [])
+    .filter((track) => track?.id)
+    .map((track) => ({
+      id: String(track.id ?? ""),
+      title: String(track.title ?? ""),
+      artists: String(track.artists ?? "") || "Unknown",
+      cover: String(track.cover ?? ""),
+      audioUrl: String(track.audioUrl ?? ""),
+      durationSec: Number(track.durationSec ?? 0),
+      explicit: Boolean(track.explicit),
+      isHidden: Boolean(track.isHidden),
+      hiddenReason: String(track.hiddenReason ?? ""),
+      uploaderUsername: String(track.uploaderUsername ?? "") || "system",
+      tags: sanitizeTrackTags(track.tags),
+    }));
+
+  return {
+    ...release,
+    tracks,
+    trackCount: Number(row.trackCount ?? tracks.length),
+    hiddenTrackCount: tracks.filter((track) => track.isHidden).length,
+  };
+}
+
+export async function getAdminValidationQueue({ limit = 20, offset = 0, query = "", status = "pending" } = {}) {
+  const { whereClause, values } = buildValidationFilters({ query, status });
+  values.push(limit, offset);
+
+  const result = await pool.query(
+    `
+    select
+      r.id,
+      r.artist_id as "artistId",
+      a.name as "artistName",
+      r.title,
+      r.type,
+      r.year,
+      r.cover,
+      coalesce(r.description, '') as description,
+      coalesce(nullif(r.status, ''), 'published') as status,
+      coalesce(r.created_at, 0) as "createdAt",
+      coalesce(r.published_at, 0) as "publishedAt",
+      coalesce(creator.username, '') as "createdByUsername",
+      count(t.id)::int as "trackCount",
+      coalesce(
+        json_agg(
+          json_build_object(
+            'id', t.id,
+            'title', t.title,
+            'cover', coalesce(t.cover, ''),
+            'audioUrl', coalesce(t.audio_url, ''),
+            'durationSec', coalesce(t.duration_sec, 0),
+            'explicit', coalesce(t.explicit, false),
+            'isHidden', coalesce(t.is_hidden, false),
+            'hiddenReason', coalesce(t.hidden_reason, ''),
+            'uploaderUsername', coalesce(uploader.username, 'system'),
+            'artists', coalesce(
+              (
+                select string_agg(ta_artist.name, ', ' order by ta.artist_order)
+                from track_artists ta
+                join artists ta_artist on ta_artist.id = ta.artist_id
+                where ta.track_id = t.id
+              ),
+              ''
+            ),
+            'tags', coalesce(
+              (
+                select array_agg(tt.tag order by tt.tag)
+                from track_tags tt
+                where tt.track_id = t.id
+              ),
+              array[]::text[]
+            )
+          )
+          order by rt.position
+        ) filter (where t.id is not null),
+        '[]'::json
+      ) as tracks
+    from releases r
+    join artists a on a.id = r.artist_id
+    left join users creator on creator.id = r.created_by
+    left join release_tracks rt on rt.release_id = r.id
+    left join tracks t on t.id = rt.track_id
+    left join users uploader on uploader.id = t.uploaded_by
+    ${whereClause}
+    group by r.id, a.name, creator.username
+    order by
+      case when coalesce(nullif(r.status, ''), 'published') = 'pending' then 0 else 1 end,
+      coalesce(r.created_at, 0) desc,
+      r.title asc
+    limit $${values.length - 1} offset $${values.length};
+    `,
+    values
+  );
+
+  return result.rows.map((row) => mapAdminValidationReleaseRow(row));
+}
+
+export async function getAdminValidationQueueCount({ query = "", status = "pending" } = {}) {
+  const { whereClause, values } = buildValidationFilters({ query, status });
+  const result = await pool.query(
+    `
+    select count(*)::int as count
+    from releases r
+    join artists a on a.id = r.artist_id
+    left join users creator on creator.id = r.created_by
+    ${whereClause};
+    `,
+    values
+  );
+  return result.rows[0]?.count || 0;
+}
+
+export async function approveValidationRelease(releaseId, adminUserId) {
+  const normalizedReleaseId = String(releaseId ?? "").trim();
+  const normalizedAdminUserId = String(adminUserId ?? "").trim() || null;
+  if (!normalizedReleaseId) {
+    throw new HttpError(400, "Release id is required.");
+  }
+
+  return withTransaction(async (client) => {
+    const existing = await getAdminReleaseById(client, normalizedReleaseId);
+    if (!existing) {
+      throw new HttpError(404, "Release not found.");
+    }
+
+    const trackIds = uniqueReleaseTrackIds(existing.trackIds);
+    assertReleaseTrackCount(existing.type, trackIds);
+    const publishedAt = existing.isPublished && existing.publishedAt > 0 ? existing.publishedAt : Date.now();
+
+    await client.query(
+      `
+      update tracks
+      set is_hidden = false,
+          hidden_reason = null,
+          hidden_by = null,
+          hidden_at = null
+      where id = any($1::text[]);
+      `,
+      [trackIds]
+    );
+
+    await client.query(
+      `
+      update releases
+      set status = 'published',
+          published_at = $2
+      where id = $1;
+      `,
+      [normalizedReleaseId, publishedAt]
+    );
+
+    return {
+      ...(await getAdminReleaseById(client, normalizedReleaseId)),
+      approvedBy: normalizedAdminUserId,
+    };
+  });
+}
+
+export async function rejectValidationRelease(releaseId, adminUserId, reason = "") {
+  const normalizedReleaseId = String(releaseId ?? "").trim();
+  const normalizedAdminUserId = String(adminUserId ?? "").trim() || null;
+  const safeReason = normalizeTitle(reason) || MODERATION_REJECTED_REASON;
+  if (!normalizedReleaseId) {
+    throw new HttpError(400, "Release id is required.");
+  }
+
+  return withTransaction(async (client) => {
+    const existing = await getAdminReleaseById(client, normalizedReleaseId);
+    if (!existing) {
+      throw new HttpError(404, "Release not found.");
+    }
+
+    const trackIds = uniqueReleaseTrackIds(existing.trackIds);
+    const rejectedAt = Date.now();
+
+    await client.query(
+      `
+      update tracks
+      set is_hidden = true,
+          hidden_reason = $2,
+          hidden_by = $3,
+          hidden_at = $4
+      where id = any($1::text[]);
+      `,
+      [trackIds, safeReason, normalizedAdminUserId, rejectedAt]
+    );
+
+    await client.query(
+      `
+      update releases
+      set status = 'rejected',
+          published_at = null
+      where id = $1;
+      `,
+      [normalizedReleaseId]
+    );
+
+    return getAdminReleaseById(client, normalizedReleaseId);
+  });
+}
+
+export async function deleteValidationRelease(releaseId) {
+  const normalizedReleaseId = String(releaseId ?? "").trim();
+  if (!normalizedReleaseId) {
+    throw new HttpError(400, "Release id is required.");
+  }
+
+  const result = await withTransaction(async (client) => {
+    const existing = await getAdminReleaseById(client, normalizedReleaseId);
+    if (!existing) {
+      throw new HttpError(404, "Release not found.");
+    }
+    if (existing.status !== "rejected") {
+      throw new HttpError(409, "Only rejected validation releases can be deleted.");
+    }
+
+    const trackIds = uniqueReleaseTrackIds(existing.trackIds);
+    const deletedRelease = await client.query(
+      `
+      delete from releases
+      where id = $1
+        and coalesce(nullif(status, ''), 'published') = 'rejected'
+      returning id, title;
+      `,
+      [normalizedReleaseId]
+    );
+    if (!deletedRelease.rowCount) {
+      throw new HttpError(404, "Release not found.");
+    }
+
+    const deletedTracks = await client.query(
+      `
+      delete from tracks t
+      where t.id = any($1::text[])
+        and coalesce(t.is_hidden, false) = true
+        and not exists (
+          select 1
+          from release_tracks rt
+          where rt.track_id = t.id
+        )
+        and not exists (
+          select 1
+          from playlist_tracks pt
+          where pt.track_id = t.id
+        )
+      returning t.id, coalesce(t.audio_url, '') as "audioUrl";
+      `,
+      [trackIds]
+    );
+
+    return {
+      release: deletedRelease.rows[0],
+      deletedTracks: deletedTracks.rows,
+    };
+  });
+
+  for (const track of result.deletedTracks) {
+    removeLocalTrackMedia(track);
+  }
+
+  return {
+    release: result.release,
+    deletedTrackCount: result.deletedTracks.length,
+  };
+}
+
 export async function getAdminReleaseFormOptions({ artistId = "" } = {}) {
   const normalizedArtistId = String(artistId ?? "").trim();
   const artists = await fetchArtists();
@@ -879,6 +1246,20 @@ export async function updateAdminRelease(releaseId, payload = {}) {
         values ($1, $2, $3);
         `,
         [normalizedReleaseId, release.trackIds[index], index + 1]
+      );
+    }
+
+    if (release.status === "published") {
+      await client.query(
+        `
+        update tracks
+        set is_hidden = false,
+            hidden_reason = null,
+            hidden_by = null,
+            hidden_at = null
+        where id = any($1::text[]);
+        `,
+        [release.trackIds]
       );
     }
 

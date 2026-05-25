@@ -34,18 +34,38 @@ function createCorsOptions() {
   };
 }
 
+function firstForwardedHeaderValue(value = "") {
+  return String(value ?? "").split(",")[0].trim();
+}
+
+function buildOrigin(protocol, host) {
+  const normalizedHost = firstForwardedHeaderValue(host);
+  if (!normalizedHost) {
+    return "";
+  }
+
+  const normalizedProtocol = firstForwardedHeaderValue(protocol).replace(/:$/, "") || "http";
+  return `${normalizedProtocol}://${normalizedHost}`;
+}
+
+function resolveSameOrigins(req) {
+  const requestHost = String(req.header("host") ?? "").trim();
+  const requestProtocol = String(req.protocol ?? "http").trim() || "http";
+  const forwardedHost = req.header("x-forwarded-host");
+  const forwardedProtocol = req.header("x-forwarded-proto") ?? requestProtocol;
+
+  return new Set([
+    buildOrigin(requestProtocol, requestHost),
+    buildOrigin(forwardedProtocol, forwardedHost),
+  ]);
+}
+
 function createCorsOptionsDelegate() {
   const { configuredOrigins, allowAnyOrigin } = createCorsOptions();
 
   return (req, callback) => {
     const requestOrigin = String(req.header("origin") ?? "").trim();
-    const requestHost = String(req.header("host") ?? "").trim();
-    const requestProtocol = String(req.protocol ?? "http").trim() || "http";
-    const sameOrigin = Boolean(
-      requestOrigin &&
-      requestHost &&
-      requestOrigin === `${requestProtocol}://${requestHost}`
-    );
+    const sameOrigin = Boolean(requestOrigin && resolveSameOrigins(req).has(requestOrigin));
 
     if (!requestOrigin || allowAnyOrigin || sameOrigin || configuredOrigins.includes(requestOrigin)) {
       callback(null, { origin: true });

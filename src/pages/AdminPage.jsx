@@ -4,6 +4,7 @@ import {
   FiActivity,
   FiAlertTriangle,
   FiArrowRight,
+  FiCheckCircle,
   FiChevronDown,
   FiMusic,
   FiRefreshCw,
@@ -17,6 +18,7 @@ import useAsyncResource from "../hooks/useAsyncResource.js";
 import { getAdminStats } from "../api/musicApi.js";
 import ResourceState from "../components/ResourceState.jsx";
 import AdminStatsSection from "../components/AdminStatsSection.jsx";
+import AdminValidationSection from "../components/AdminValidationSection.jsx";
 import AdminReleasesSection from "../components/AdminReleasesSection.jsx";
 import AdminTracksSection from "../components/AdminTracksSection.jsx";
 import AdminUsersSection from "../components/AdminUsersSection.jsx";
@@ -120,6 +122,7 @@ export default function AdminPage() {
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandedSections, setExpandedSections] = useState({
     overview: false,
+    validation: false,
     tracks: false,
     releases: false,
     users: false,
@@ -289,6 +292,18 @@ export default function AdminPage() {
                 <section className={styles.section}>
                   <AdminStatsSection data={stats} />
                 </section>
+              </AdminCollapsibleSection>
+
+              <AdminCollapsibleSection
+                id="admin-validation"
+                eyebrow="Модерация"
+                title="Валидация"
+                description="Новые single, EP и album перед публикацией в релизах."
+                icon={FiCheckCircle}
+                open={expandedSections.validation}
+                onToggle={() => toggleSection("validation")}
+              >
+                <AdminValidationSection refreshToken={refreshToken} onChanged={() => void handleRefreshAll()} />
               </AdminCollapsibleSection>
 
               <AdminCollapsibleSection

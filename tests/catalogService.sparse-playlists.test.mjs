@@ -63,6 +63,24 @@ test("buildCatalogSupplementalPlaylists adds artist focus playlist when one arti
   assert.ok(playlists.some((playlist) => playlist.id === `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`));
 });
 
+test("buildCatalogSupplementalPlaylists keeps artist focus cover on that artist", () => {
+  const slipknotCover = "linear-gradient(135deg, #111 0%, #700 100%)";
+  const otherCover = "linear-gradient(135deg, #004 0%, #66f 100%)";
+  const playlists = buildCatalogSupplementalPlaylists({
+    tracks: [
+      createTrack("slipknot-one", "Wait and Bleed", "Slipknot", 500, slipknotCover),
+      createTrack("other-one", "Blue Noise", "Other Artist", 400, otherCover),
+      createTrack("slipknot-two", "Duality", "Slipknot", 300, slipknotCover),
+    ],
+    existingPlaylists: [],
+  });
+
+  const focusPlaylist = playlists.find((playlist) => playlist.id === `${SYSTEM_PLAYLIST_ID_PREFIX}artist-focus`);
+
+  assert.equal(focusPlaylist?.title, "Фокус: Slipknot");
+  assert.equal(focusPlaylist?.cover, slipknotCover);
+});
+
 test("buildCatalogSupplementalPlaylists avoids duplicate covers for generated playlists", () => {
   const sharedCover = "linear-gradient(135deg, #111 0%, #333 100%)";
   const tracks = Array.from({ length: 9 }, (_, index) =>

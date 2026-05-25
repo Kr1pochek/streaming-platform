@@ -489,11 +489,14 @@
 .authLabel {
   display: grid;
   gap: 6px;
+  min-width: 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.82);
 }
 
 .authInput {
+  width: 100%;
+  box-sizing: border-box;
   min-height: 38px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -661,17 +664,13 @@
 .genreHelperText {
   grid-column: 1 / -1;
   margin: -2px 0 0;
-  font-size: 0;
-  line-height: 0;
-  color: transparent;
-}
-
-.genreHelperText::before {
-  content: "\041c\043e\0436\043d\043e \0432\0432\0435\0441\0442\0438 \0441\0432\043e\0439 \0436\0430\043d\0440 \0432\0440\0443\0447\043d\0443\044e \0438\043b\0438 \0431\044b\0441\0442\0440\043e \0432\044b\0431\0440\0430\0442\044c \043e\0434\0438\043d \0438\0437 \043b\0435\043d\0442\044b \043d\0438\0436\0435.";
-  display: block;
   font-size: 12px;
   line-height: 1.45;
   color: rgba(255, 255, 255, 0.58);
+}
+
+.genreHelperText::before {
+  content: none;
 }
 
 .genreHelperTextSafe {
@@ -723,6 +722,90 @@
   border-color: rgba(255, 214, 126, 0.48);
   background: linear-gradient(135deg, rgba(241, 189, 74, 0.28), rgba(220, 148, 39, 0.16));
   color: rgba(255, 239, 197, 0.98);
+}
+
+.releaseTypeField {
+  grid-column: 1 / -1;
+}
+
+.releaseTypeRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.releaseTypeButton {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.releaseTypeButton:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.releaseTypeButtonActive {
+  border-color: rgba(255, 214, 126, 0.5);
+  background: rgba(241, 189, 74, 0.24);
+  color: rgba(255, 240, 198, 0.98);
+}
+
+.uploadTrackList {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px;
+}
+
+.uploadTrackItem {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.uploadTrackIndex {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 239, 198, 0.95);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.uploadTrackFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.uploadTrackFile {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
 }
 
 .uploadSuccess {
@@ -1115,6 +1198,7 @@
 .authPrimaryButton:focus-visible,
 .authSecondaryButton:focus-visible,
 .filePickerButton:focus-visible,
+.releaseTypeButton:focus-visible,
 .authInput:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
@@ -1161,6 +1245,10 @@
   }
 
   .uploadGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .uploadTrackFields {
     grid-template-columns: 1fr;
   }
 

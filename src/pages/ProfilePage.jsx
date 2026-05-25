@@ -22,7 +22,7 @@ import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
-import { confirmPasswordReset, requestPasswordReset, uploadTrack } from "../api/musicApi.js";
+import { confirmPasswordReset, requestPasswordReset, uploadRelease } from "../api/musicApi.js";
 import ModalDialog from "../components/ModalDialog.jsx";
 import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import UserAvatar from "../components/UserAvatar.jsx";
@@ -41,6 +41,8 @@ const INITIAL_PROFILE_FOLLOWED_ARTISTS_LIMIT = 2;
 const UPLOAD_GENRE_DATALIST_ID = "upload-track-genre-suggestions";
 const EMPTY_UPLOAD_FORM = {
   audio: null,
+  audioFiles: [],
+  releaseType: "single",
   title: "",
   artist: "",
   trackId: "",
@@ -49,7 +51,13 @@ const EMPTY_UPLOAD_FORM = {
   genre: "",
   cover: "",
   tags: "",
+  tracks: [],
 };
+const UPLOAD_RELEASE_TYPE_OPTIONS = [
+  { id: "single", label: "Single" },
+  { id: "ep", label: "EP" },
+  { id: "album", label: "Album" },
+];
 const DASH_SEPARATOR_PATTERN = /\s(?:-|\u2013|\u2014)\s/;
 const UPLOAD_METADATA_LOADING_TEXT =
   "\u0421\u0447\u0438\u0442\u044b\u0432\u0430\u0435\u043c \u0442\u0435\u0433\u0438, \u043e\u0431\u043b\u043e\u0436\u043a\u0443 \u0438 \u0434\u043b\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u044c \u0438\u0437 \u0430\u0443\u0434\u0438\u043e\u0444\u0430\u0439\u043b\u0430...";
@@ -158,6 +166,38 @@ function inferTrackFieldsFromUploadFileName(fileName) {
   };
 }
 
+function resolveDefaultReleaseType(trackCount) {
+  if (trackCount <= 1) {
+    return "single";
+  }
+  return trackCount >= 7 ? "album" : "ep";
+}
+
+function createUploadTrackDraft(file, index, metadata = null) {
+  const fallbackFields = inferTrackFieldsFromUploadFileName(file?.name);
+  return {
+    localId: `${file?.name ?? "track"}-${file?.size ?? 0}-${file?.lastModified ?? index}-${index}`,
+    fileName: file?.name ?? `track-${index + 1}`,
+    title: metadata?.title || fallbackFields.title || `Track ${index + 1}`,
+    artist: metadata?.artist || fallbackFields.artist || "",
+    trackId: "",
+    durationSec: metadata?.durationSec ? String(metadata.durationSec) : "",
+    genre: metadata?.genre || "",
+    cover: metadata?.cover || "",
+    tags: Array.isArray(metadata?.tags) ? metadata.tags.join(", ") : "",
+  };
+}
+
+function resolveReleaseTypeValidationMessage(type, trackCount) {
+  if (type === "single" && trackCount !== 1) {
+    return "Для single нужен ровно один аудиофайл.";
+  }
+  if ((type === "ep" || type === "album") && trackCount < 2) {
+    return "Для EP или album нужно минимум два аудиофайла.";
+  }
+  return "";
+}
+
 function normalizeEmbeddedPictureMimeType(format) {
   const normalized = String(format ?? "").trim().toLowerCase();
   if (!normalized) {
@@ -227,6 +267,7 @@ async function extractTrackMetadataFromAudioFile(file) {
   return {
     title,
     artist: primaryArtist,
+    album: String(metadata?.common?.album ?? "").trim(),
     genre: genres[0] ?? "",
     tags: genres.slice(1),
     durationSec,
@@ -375,6 +416,14 @@ export default function ProfilePage() {
     canToggleHistory && !showAllHistory ? historyTracks.slice(0, INITIAL_PROFILE_HISTORY_LIMIT) : historyTracks;
   const accountHandle = user?.username ? `@${user.username}` : "";
   const hasAvatar = Boolean(user?.avatarUrl);
+  const uploadFiles = uploadForm.audioFiles.length ? uploadForm.audioFiles : uploadForm.audio ? [uploadForm.audio] : [];
+  const uploadTrackCount = uploadFiles.length;
+  const uploadFilePickerLabel =
+    uploadTrackCount > 1
+      ? `${uploadTrackCount} файлов выбрано`
+      : uploadForm.audio
+        ? uploadForm.audio.name
+        : "Файл не выбран";
   const normalizedUploadGenre = uploadForm.genre.trim().toLowerCase();
   const visibleUploadGenres = useMemo(() => {
     if (!normalizedUploadGenre) {
@@ -628,6 +677,15 @@ export default function ProfilePage() {
     setUploadForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleUploadTrackFieldChange = (index, field, value) => {
+    setUploadForm((prev) => ({
+      ...prev,
+      tracks: prev.tracks.map((track, trackIndex) =>
+        trackIndex === index ? { ...track, [field]: value } : track
+      ),
+    }));
+  };
+
   const resetUploadFormState = () => {
     uploadAudioMetadataRequestRef.current += 1;
     setUploadForm({ ...EMPTY_UPLOAD_FORM });
@@ -655,89 +713,94 @@ export default function ProfilePage() {
   };
 
   const handleUploadAudioFileChange = async (event) => {
-    const nextFile = event.target.files?.[0] ?? null;
+    const nextFiles = Array.from(event.target.files ?? []).filter(Boolean);
     uploadAudioMetadataRequestRef.current += 1;
     const requestId = uploadAudioMetadataRequestRef.current;
 
-    if (!nextFile) {
+    if (!nextFiles.length) {
       setUploadMetadataProcessing(false);
       setUploadMetadataStatus("");
-      setUploadForm((prev) => ({ ...prev, audio: null }));
+      setUploadForm((prev) => ({ ...prev, audio: null, audioFiles: [], tracks: [] }));
       setUploadCoverFileName("");
       return;
     }
 
-    const fallbackFields = inferTrackFieldsFromUploadFileName(nextFile.name);
+    const fallbackDrafts = nextFiles.map((file, index) => createUploadTrackDraft(file, index));
+    const firstFallback = fallbackDrafts[0] ?? {};
     setUploadError("");
     setUploadedTrackId("");
     setUploadMetadataProcessing(true);
     setUploadMetadataStatus(UPLOAD_METADATA_LOADING_TEXT);
-    setUploadMetadataStatus("Считываем теги, обложку и длительность из аудиофайла...");
     setUploadCoverFileName("");
     setUploadForm((prev) => ({
       ...prev,
-      audio: nextFile,
-      title: fallbackFields.title,
-      artist: fallbackFields.artist,
+      audio: nextFiles[0],
+      audioFiles: nextFiles,
+      releaseType: resolveDefaultReleaseType(nextFiles.length),
+      title: firstFallback.title || "",
+      artist: firstFallback.artist || "",
       trackId: "",
       durationSec: "",
       genre: "",
       cover: "",
       tags: "",
+      tracks: fallbackDrafts,
     }));
-    setUploadMetadataStatus(UPLOAD_METADATA_LOADING_TEXT);
 
-    try {
-      const metadata = await extractTrackMetadataFromAudioFile(nextFile);
-      if (uploadAudioMetadataRequestRef.current !== requestId) {
-        return;
-      }
-
-      setUploadForm((prev) => ({
-        ...prev,
-        audio: nextFile,
-        title: metadata.title || fallbackFields.title,
-        artist: metadata.artist || fallbackFields.artist,
-        trackId: "",
-        durationSec: metadata.durationSec ? String(metadata.durationSec) : "",
-        genre: metadata.genre || "",
-        cover: metadata.cover || "",
-        tags: metadata.tags.join(", "),
-      }));
-      setUploadCoverFileName(metadata.cover ? "Встроенная обложка из аудиофайла" : "");
-      if (metadata.cover) {
-        setUploadCoverFileName(UPLOAD_METADATA_EMBEDDED_COVER_TEXT);
-      }
-      setUploadMetadataStatus(buildUploadMetadataSummary(metadata));
-    } catch {
-      if (uploadAudioMetadataRequestRef.current !== requestId) {
-        return;
-      }
-
-      setUploadForm((prev) => ({
-        ...prev,
-        audio: nextFile,
-        title: fallbackFields.title,
-        artist: fallbackFields.artist,
-        trackId: "",
-        durationSec: "",
-        genre: "",
-        cover: "",
-        tags: "",
-      }));
-      setUploadCoverFileName("");
-      setUploadMetadataStatus(UPLOAD_METADATA_FALLBACK_TEXT);
-      window.setTimeout(() => {
-        if (uploadAudioMetadataRequestRef.current === requestId) {
-          setUploadMetadataStatus(UPLOAD_METADATA_FALLBACK_TEXT);
+    const metadataResults = await Promise.all(
+      nextFiles.map(async (file) => {
+        try {
+          return await extractTrackMetadataFromAudioFile(file);
+        } catch {
+          return null;
         }
-      }, 0);
-      setUploadMetadataStatus("Не удалось прочитать встроенные теги. Остальное можно заполнить вручную.");
-    } finally {
-      if (uploadAudioMetadataRequestRef.current === requestId) {
-        setUploadMetadataProcessing(false);
-      }
+      })
+    );
+
+    if (uploadAudioMetadataRequestRef.current !== requestId) {
+      return;
     }
+
+    const firstMetadata = metadataResults.find(Boolean);
+    const trackDrafts = nextFiles.map((file, index) => createUploadTrackDraft(file, index, metadataResults[index]));
+    const firstTrack = trackDrafts[0] ?? firstFallback;
+    const firstCover = metadataResults.find((metadata) => metadata?.cover)?.cover || "";
+    const firstGenre = metadataResults.find((metadata) => metadata?.genre)?.genre || "";
+    const firstTags = metadataResults.find((metadata) => metadata?.tags?.length)?.tags ?? [];
+    const albumTitle = metadataResults.find((metadata) => metadata?.album)?.album || "";
+
+    setUploadForm((prev) => ({
+      ...prev,
+      audio: nextFiles[0],
+      audioFiles: nextFiles,
+      releaseType: resolveDefaultReleaseType(nextFiles.length),
+      title: albumTitle || (nextFiles.length === 1 ? firstTrack.title : firstTrack.title || ""),
+      artist: firstTrack.artist || prev.artist,
+      trackId: "",
+      durationSec: firstTrack.durationSec || "",
+      genre: firstGenre || firstTrack.genre || "",
+      cover: firstCover,
+      tags: firstTags.join(", "),
+      tracks: trackDrafts,
+    }));
+
+    if (firstCover) {
+      setUploadCoverFileName(UPLOAD_METADATA_EMBEDDED_COVER_TEXT);
+    } else {
+      setUploadCoverFileName("");
+    }
+
+    if (firstMetadata && nextFiles.length === 1) {
+      setUploadMetadataStatus(buildUploadMetadataSummary(firstMetadata));
+    } else if (firstMetadata) {
+      setUploadMetadataStatus(
+        `Выбрано ${nextFiles.length} файлов. Названия, обложка и длительность подтянуты из доступных аудиотегов.`
+      );
+    } else {
+      setUploadMetadataStatus(UPLOAD_METADATA_FALLBACK_TEXT);
+    }
+
+    setUploadMetadataProcessing(false);
   };
 
   const handleUploadCoverFileChange = async (event) => {
@@ -779,20 +842,26 @@ export default function ProfilePage() {
       return;
     }
 
-    const title = uploadForm.title.trim();
+    const releaseTitle = uploadForm.title.trim();
     const artist = uploadForm.artist.trim();
     const genre = uploadForm.genre.trim();
+    const releaseType = uploadForm.releaseType || resolveDefaultReleaseType(uploadTrackCount);
+    const releaseTypeError = resolveReleaseTypeValidationMessage(releaseType, uploadTrackCount);
 
-    if (!uploadForm.audio) {
-      setUploadError("Выбери аудиофайл.");
+    if (!uploadFiles.length) {
+      setUploadError("Выбери один или несколько аудиофайлов.");
       return;
     }
-    if (!title || !artist) {
-      setUploadError("Название и исполнители обязательны.");
+    if (!releaseTitle || !artist) {
+      setUploadError("Название релиза и исполнитель обязательны.");
       return;
     }
     if (!genre) {
       setUploadError("Жанр обязателен.");
+      return;
+    }
+    if (releaseTypeError) {
+      setUploadError(releaseTypeError);
       return;
     }
     if (uploadCoverProcessing) {
@@ -818,24 +887,62 @@ export default function ProfilePage() {
         .filter(Boolean);
       const tags = Array.from(new Set([normalizedGenre, ...customTags]));
 
-      const response = await uploadTrack({
-        audio: uploadForm.audio,
-        title,
-        artist,
-        trackId: uploadForm.trackId.trim() || undefined,
-        durationSec: Number.isFinite(duration) ? duration : undefined,
-        explicit: uploadForm.explicit,
-        cover: uploadForm.cover.trim() || undefined,
-        tags: tags.join(","),
+      const tracks = uploadFiles.map((file, index) => {
+        const draft = uploadForm.tracks[index] ?? createUploadTrackDraft(file, index);
+        const trackDuration = Number.parseInt(String(draft.durationSec ?? "").trim(), 10);
+        return {
+          title: String(draft.title || (uploadFiles.length === 1 ? releaseTitle : "")).trim(),
+          artist,
+          trackId:
+            uploadFiles.length === 1
+              ? uploadForm.trackId.trim() || String(draft.trackId ?? "").trim() || undefined
+              : String(draft.trackId ?? "").trim() || undefined,
+          durationSec:
+            uploadFiles.length === 1
+              ? Number.isFinite(duration)
+                ? duration
+                : Number.isFinite(trackDuration)
+                  ? trackDuration
+                  : undefined
+              : Number.isFinite(trackDuration)
+                ? trackDuration
+                : undefined,
+          explicit: uploadForm.explicit,
+          tags: tags.join(","),
+        };
       });
 
-      const nextTrackId = String(response?.track?.id ?? "").trim();
+      const missingTrackIndex = tracks.findIndex((track) => !track.title);
+      if (missingTrackIndex >= 0) {
+        setUploadError(`Укажи название трека ${missingTrackIndex + 1}.`);
+        setUploadSubmitting(false);
+        return;
+      }
+
+      const response = await uploadRelease({
+        audioFiles: uploadFiles,
+        releaseTitle,
+        releaseType,
+        artist,
+        explicit: uploadForm.explicit,
+        genre,
+        cover: uploadForm.cover.trim() || undefined,
+        tags: tags.join(","),
+        tracks,
+      });
+
+      const nextReleaseId = String(response?.release?.id ?? "").trim();
+      const nextTrackIds = Array.isArray(response?.tracks)
+        ? response.tracks.map((track) => String(track?.id ?? "").trim()).filter(Boolean)
+        : [];
       resetUploadFormState();
 
-      if (nextTrackId) {
-        setUploadedTrackId(nextTrackId);
+      if (nextReleaseId) {
+        setUploadedTrackId(nextReleaseId);
+      } else if (nextTrackIds.length) {
+        setUploadedTrackId(nextTrackIds.join(", "));
       }
-      notify("Трек успешно загружен.");
+      notify(releaseType === "single" ? "Single отправлен на модерацию." : "Релиз отправлен на модерацию.");
       try {
         await refreshCatalog({ silent: true });
       } catch {
@@ -1402,7 +1509,7 @@ export default function ProfilePage() {
               onClick={handleOpenUploadDialog}
             >
               <FiUpload />
-              Загрузить трек
+              Загрузить релиз
             </button>
             <button type="button" className={styles.logoutButton} onClick={signOut}>
               <FiLogOut />
@@ -1661,39 +1768,39 @@ export default function ProfilePage() {
 
       <ModalDialog
         open={uploadDialogOpen}
-        title="Загрузка трека"
-        description="Заполни данные трека и укажи жанр. Этот жанр попадет в любимые жанры профиля."
+        title="Загрузка релиза"
+        description="Выбери один или несколько аудиофайлов, укажи тип релиза и общий жанр."
         onClose={handleCloseUploadDialog}
       >
         <form className={`${styles.authForm} ${styles.modalForm}`.trim()} onSubmit={handleUploadTrack}>
           <label className={styles.authLabel}>
-            Аудиофайл
+            Аудиофайлы
             <input
               ref={uploadAudioInputRef}
               className={styles.fileInputHidden}
               type="file"
               accept="audio/*"
+              multiple
               onChange={handleUploadAudioFileChange}
             />
             <div className={styles.filePickerRow}>
               <button type="button" className={styles.filePickerButton} onClick={handleSelectUploadAudioFile}>
-                Выбрать файл
+                Выбрать аудио
               </button>
-              <span className={styles.filePickerText}>
-                {uploadForm.audio ? uploadForm.audio.name : "Файл не выбран"}
-              </span>
+              <span className={styles.filePickerText}>{uploadFilePickerLabel}</span>
             </div>
             {uploadMetadataStatus ? <p className={styles.uploadMetaStatus}>{uploadMetadataStatus}</p> : null}
           </label>
 
           <div className={styles.uploadGrid}>
             <label className={styles.authLabel}>
-              Название
+              Название релиза
               <input
                 className={styles.authInput}
                 value={uploadForm.title}
                 maxLength={120}
                 required
+                placeholder="Например: Ночной EP"
                 onChange={(event) => handleUploadFieldChange("title", event.target.value)}
               />
             </label>
@@ -1711,6 +1818,29 @@ export default function ProfilePage() {
             </label>
 
             <p className={styles.uploadHint}>Несколько артистов можно указывать через запятую или `feat./ft.`.</p>
+
+            <div className={`${styles.authLabel} ${styles.releaseTypeField}`.trim()}>
+              Тип релиза
+              <div className={styles.releaseTypeRow}>
+                {UPLOAD_RELEASE_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`${styles.releaseTypeButton} ${
+                      uploadForm.releaseType === option.id ? styles.releaseTypeButtonActive : ""
+                    }`.trim()}
+                    onClick={() => handleUploadFieldChange("releaseType", option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {resolveReleaseTypeValidationMessage(uploadForm.releaseType, uploadTrackCount) ? (
+                <span className={styles.uploadHint}>
+                  {resolveReleaseTypeValidationMessage(uploadForm.releaseType, uploadTrackCount)}
+                </span>
+              ) : null}
+            </div>
 
             <label className={styles.authLabel}>
               Жанр
@@ -1746,27 +1876,66 @@ export default function ProfilePage() {
               })}
             </div>
 
-            <label className={styles.authLabel}>
-              Track ID (опционально)
-              <input
-                className={styles.authInput}
-                value={uploadForm.trackId}
-                maxLength={80}
-                onChange={(event) => handleUploadFieldChange("trackId", event.target.value)}
-              />
-            </label>
+            {uploadForm.tracks.length > 1 ? (
+              <div className={styles.uploadTrackList}>
+                <p className={styles.coverUploadTitle}>Треки релиза</p>
+                {uploadForm.tracks.map((track, index) => (
+                  <div key={track.localId} className={styles.uploadTrackItem}>
+                    <span className={styles.uploadTrackIndex}>{index + 1}</span>
+                    <div className={styles.uploadTrackFields}>
+                      <label className={styles.authLabel}>
+                        Название трека
+                        <input
+                          className={styles.authInput}
+                          value={track.title}
+                          maxLength={120}
+                          required
+                          onChange={(event) => handleUploadTrackFieldChange(index, "title", event.target.value)}
+                        />
+                      </label>
+                      <label className={styles.authLabel}>
+                        Длительность, сек
+                        <input
+                          className={styles.authInput}
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={track.durationSec}
+                          onChange={(event) => handleUploadTrackFieldChange(index, "durationSec", event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <span className={styles.uploadTrackFile}>{track.fileName}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
-            <label className={styles.authLabel}>
-              Длительность, сек (опционально)
-              <input
-                className={styles.authInput}
-                type="number"
-                min={1}
-                step={1}
-                value={uploadForm.durationSec}
-                onChange={(event) => handleUploadFieldChange("durationSec", event.target.value)}
-              />
-            </label>
+            {uploadTrackCount <= 1 ? (
+              <>
+                <label className={styles.authLabel}>
+                  Track ID (опционально)
+                  <input
+                    className={styles.authInput}
+                    value={uploadForm.trackId}
+                    maxLength={80}
+                    onChange={(event) => handleUploadFieldChange("trackId", event.target.value)}
+                  />
+                </label>
+
+                <label className={styles.authLabel}>
+                  Длительность, сек (опционально)
+                  <input
+                    className={styles.authInput}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={uploadForm.durationSec}
+                    onChange={(event) => handleUploadFieldChange("durationSec", event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
 
             <div className={styles.coverUploadBlock}>
               <p className={styles.coverUploadTitle}>Обложка (опционально)</p>
@@ -1827,10 +1996,10 @@ export default function ProfilePage() {
             Explicit
           </label>
 
-          <p className={styles.uploadHint}>Трек появится в каталоге после загрузки и обновления данных плеера.</p>
+          <p className={styles.uploadHint}>Релиз появится в каталоге после загрузки и обновления данных плеера.</p>
 
           {uploadError ? <p className={styles.authError}>{uploadError}</p> : null}
-          {uploadedTrackId ? <p className={styles.uploadSuccess}>Загружено: {uploadedTrackId}</p> : null}
+          {uploadedTrackId ? <p className={styles.uploadSuccess}>Загружен релиз: {uploadedTrackId}</p> : null}
 
           <div className={styles.authActions}>
             <button
@@ -1838,7 +2007,7 @@ export default function ProfilePage() {
               className={styles.authPrimaryButton}
               disabled={uploadSubmitting || uploadCoverProcessing || uploadMetadataProcessing}
             >
-              {uploadSubmitting ? "Загружаем..." : "Загрузить трек"}
+              {uploadSubmitting ? "Загружаем..." : "Загрузить релиз"}
             </button>
             <button
               type="button"

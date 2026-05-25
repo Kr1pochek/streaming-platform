@@ -244,7 +244,7 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
   );
   const editorCover = editor.form.cover || selectedTracks[0]?.cover || "linear-gradient(135deg, #303640, #14171b)";
   const editorTypeLabel = resolveOptionLabel(releaseTypeOptions, editor.form.type, "Релиз");
-  const editorStatusLabel = resolveOptionLabel(releaseStatusOptions, editor.form.status, "Черновик");
+  const editorStatusLabel = resolveOptionLabel(releaseStatusOptions, editor.form.status, "На проверке");
 
   const openCreateDialog = () => {
     setTrackQuery("");
@@ -437,9 +437,11 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
   };
 
   const summary = useMemo(() => {
-    const draftCount = releasesData.releases.filter((release) => !release.isPublished).length;
+    const draftCount = releasesData.releases.filter((release) => release.status === "draft").length;
+    const pendingCount = releasesData.releases.filter((release) => release.status === "pending").length;
+    const rejectedCount = releasesData.releases.filter((release) => release.status === "rejected").length;
     const publishedCount = releasesData.releases.filter((release) => release.isPublished).length;
-    return { draftCount, publishedCount };
+    return { draftCount, pendingCount, publishedCount, rejectedCount };
   }, [releasesData.releases]);
 
   const editorValidationMessage = useMemo(() => resolveEditorValidationMessage(editor.form), [editor.form]);
@@ -496,7 +498,9 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
       <div className={styles.summaryBar}>
         <span>Всего релизов: {releasesData.total}</span>
         <span>Опубликованы на странице: {summary.publishedCount}</span>
+        <span>На проверке: {summary.pendingCount}</span>
         <span>Черновики на странице: {summary.draftCount}</span>
+        <span>Отклонены: {summary.rejectedCount}</span>
       </div>
 
       {feedback ? <p className={styles.feedback}>{feedback}</p> : null}
@@ -520,7 +524,9 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
 
       {releasesData.releases.length ? (
         <div className={styles.cardList}>
-          {releasesData.releases.map((release) => (
+          {releasesData.releases.map((release) => {
+            const validationLocked = release.status === "pending";
+            return (
             <article key={release.id} className={`${styles.card} ${!release.isPublished ? styles.cardDraft : ""}`.trim()}>
               <div className={styles.cardMain}>
                 <div className={styles.cover} style={{ background: release.cover || "linear-gradient(135deg, #303640, #14171b)" }} />
@@ -530,7 +536,7 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
                     <span
                       className={`${styles.statusBadge} ${release.isPublished ? styles.statusBadgePublished : styles.statusBadgeDraft}`.trim()}
                     >
-                      {release.isPublished ? "Опубликован" : "Черновик"}
+                      {resolveOptionLabel(releaseStatusOptions, release.status, release.isPublished ? "Опубликован" : "На проверке")}
                     </span>
                     <span className={styles.smallBadge}>{String(release.type).toUpperCase()}</span>
                   </div>
@@ -582,11 +588,11 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
                 <button
                   type="button"
                   className={styles.actionPrimaryButton}
-                  disabled={actionReleaseId === release.id}
+                  disabled={actionReleaseId === release.id || validationLocked}
                   onClick={() => void handleQuickStatusToggle(release)}
                 >
                   <FiUploadCloud />
-                  {release.isPublished ? "В черновик" : "Опубликовать"}
+                  {validationLocked ? "Через валидацию" : release.isPublished ? "В черновик" : "Опубликовать"}
                 </button>
                 <button
                   type="button"
@@ -598,7 +604,8 @@ export default function AdminReleasesSection({ refreshToken = 0, onChanged }) {
                 </button>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : null}
 

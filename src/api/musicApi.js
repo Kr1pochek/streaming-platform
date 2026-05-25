@@ -494,6 +494,7 @@ function normalizeHomeFeedPayload(payload = {}) {
       trackIds: normalizeTrackIds(item.trackIds),
     })),
     releaseNotifications: asArray(payload.releaseNotifications).map(normalizeReleaseNotification),
+    releaseNotificationWindowDays: asNumber(payload.releaseNotificationWindowDays, 14),
     freshTrackIds: normalizeIdList(payload.freshTrackIds),
     vibeTags: asArray(payload.vibeTags)
       .map((tag) => String(tag ?? "").trim())
@@ -577,6 +578,7 @@ function normalizeArtistPagePayload(payload = {}) {
     popularAlbums: asArray(payload.popularAlbums).map(normalizeReleaseSummary),
     eps: asArray(payload.eps).map(normalizeReleaseSummary),
     singles: asArray(payload.singles).map(normalizeReleaseSummary),
+    releaseCardWindowDays: asNumber(payload.releaseCardWindowDays, 14),
     relatedArtists: asArray(payload.relatedArtists).map(normalizeArtistSummary),
   };
 }
@@ -844,6 +846,58 @@ export async function uploadTrack(payload = {}) {
   });
 }
 
+export async function uploadRelease(payload = {}) {
+  const formData = new FormData();
+  const canCheckFile = typeof File !== "undefined";
+  const canCheckBlob = typeof Blob !== "undefined";
+  const audioFiles = Array.isArray(payload.audioFiles)
+    ? payload.audioFiles
+    : Array.isArray(payload.audios)
+      ? payload.audios
+      : payload.audio
+        ? [payload.audio]
+        : [];
+
+  audioFiles.forEach((audio, index) => {
+    const isFile = canCheckFile && audio instanceof File;
+    const isBlob = canCheckBlob && audio instanceof Blob;
+    if (!isFile && !isBlob) {
+      return;
+    }
+    const fileName = isFile ? audio.name : `track-${index + 1}.mp3`;
+    formData.append("audio", audio, fileName);
+  });
+
+  const optionalFields = [
+    ["releaseTitle", payload.releaseTitle],
+    ["releaseType", payload.releaseType],
+    ["year", payload.year],
+    ["artist", payload.artist],
+    ["genre", payload.genre],
+    ["cover", payload.cover],
+    ["description", payload.description],
+    ["explicit", payload.explicit],
+    ["tags", payload.tags],
+    ["tracks", Array.isArray(payload.tracks) ? JSON.stringify(payload.tracks) : payload.tracks],
+  ];
+  for (const [key, value] of optionalFields) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      formData.append(key, value.join(","));
+      continue;
+    }
+    formData.append(key, String(value));
+  }
+
+  return requestMultipart("/tracks/upload-release", {
+    method: "POST",
+    formData,
+    fallbackMessage: "Не удалось загрузить релиз. Попробуй снова.",
+  });
+}
+
 export async function getAdminStats() {
   return request("/admin/stats");
 }
@@ -861,6 +915,41 @@ export async function getAdminTracks(optionsOrLimit = 20, offset = 0) {
       query: options.query ?? "",
       status: options.status ?? "all",
     },
+  });
+}
+
+export async function getAdminValidationQueue(optionsOrLimit = 20, offset = 0) {
+  const options =
+    typeof optionsOrLimit === "object" && optionsOrLimit !== null
+      ? optionsOrLimit
+      : { limit: optionsOrLimit, offset };
+
+  return request("/admin/validation", {
+    query: {
+      limit: options.limit ?? 20,
+      offset: options.offset ?? 0,
+      query: options.query ?? "",
+      status: options.status ?? "pending",
+    },
+  });
+}
+
+export async function approveAdminValidationRelease(releaseId) {
+  return request(`/admin/validation/${encodeURIComponent(releaseId)}/approve`, {
+    method: "POST",
+  });
+}
+
+export async function rejectAdminValidationRelease(releaseId, reason = "") {
+  return request(`/admin/validation/${encodeURIComponent(releaseId)}/reject`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+export async function deleteAdminValidationRelease(releaseId) {
+  return request(`/admin/validation/${encodeURIComponent(releaseId)}`, {
+    method: "DELETE",
   });
 }
 

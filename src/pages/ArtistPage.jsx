@@ -84,6 +84,7 @@ export default function ArtistPage() {
   }, [artistTrackIds, historyIds]);
   const artistListeners = Math.max(audienceNumber(data?.artist?.listeners), hasLocalArtistListen ? 1 : 0);
   const artistFollowers = Math.max(audienceNumber(data?.artist?.followers), artistFollowed ? 1 : 0);
+  const releaseCardWindowDays = Number(data?.releaseCardWindowDays ?? 14);
 
   return (
     <PageShell>
@@ -259,7 +260,7 @@ export default function ArtistPage() {
                   </div>
                 </article>
               ) : (
-                <p className={styles.emptyText}>У автора пока нет новых релизов.</p>
+                <p className={styles.emptyText}>У автора нет свежих релизов за последние {releaseCardWindowDays} дней.</p>
               )}
             </aside>
           </section>
@@ -312,7 +313,7 @@ export default function ArtistPage() {
                 ))}
               </div>
             ) : (
-              <p className={styles.emptyText}>Пока нет альбомов в каталоге.</p>
+              <p className={styles.emptyText}>Свежих альбомов за последние {releaseCardWindowDays} дней нет.</p>
             )}
           </section>
 
@@ -347,7 +348,7 @@ export default function ArtistPage() {
                 ))}
               </div>
             ) : (
-              <p className={styles.emptyText}>EP и синглы пока не добавлены.</p>
+              <p className={styles.emptyText}>Свежих EP и синглов за последние {releaseCardWindowDays} дней нет.</p>
             )}
           </section>
 

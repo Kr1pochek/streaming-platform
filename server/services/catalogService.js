@@ -20,7 +20,7 @@ export { splitArtistNames };
 
 export const USER_PLAYLIST_ID_PREFIX = "upl-";
 export const SYSTEM_PLAYLIST_ID_PREFIX = "sys-";
-export const DEFAULT_ERROR_MESSAGE = "Failed to load data. Please refresh the page.";
+export const DEFAULT_ERROR_MESSAGE = "Не удалось загрузить данные. Обнови страницу и попробуй снова.";
 export const CUSTOM_PLAYLIST_SUBTITLE = "Custom playlist";
 const LEGACY_CUSTOM_PLAYLIST_SUBTITLES = new Set([
   "Пользовательский плейлист",
@@ -332,9 +332,41 @@ function playlistTrackSignature(trackIds = []) {
   return trackIds.join("|");
 }
 
-function choosePlaylistCover({ playlistId, preferredTracks = [], fallbackTracks = [], usedCoverKeys = new Set() } = {}) {
-  const candidates = [...preferredTracks, ...fallbackTracks];
-  for (const track of candidates) {
+function firstTrackCover(tracks = []) {
+  for (const track of tracks) {
+    const cover = String(track?.cover ?? "").trim();
+    if (cover) {
+      return cover;
+    }
+  }
+  return "";
+}
+
+function choosePlaylistCover({
+  playlistId,
+  preferredTracks = [],
+  fallbackTracks = [],
+  usedCoverKeys = new Set(),
+  allowUsedPreferredCover = false,
+} = {}) {
+  for (const track of preferredTracks) {
+    const cover = String(track?.cover ?? "").trim();
+    const key = coverKey(cover);
+    if (cover && !usedCoverKeys.has(key)) {
+      usedCoverKeys.add(key);
+      return cover;
+    }
+  }
+
+  if (allowUsedPreferredCover) {
+    const preferredCover = firstTrackCover(preferredTracks);
+    if (preferredCover) {
+      usedCoverKeys.add(coverKey(preferredCover));
+      return preferredCover;
+    }
+  }
+
+  for (const track of fallbackTracks) {
     const cover = String(track?.cover ?? "").trim();
     const key = coverKey(cover);
     if (cover && !usedCoverKeys.has(key)) {
@@ -446,6 +478,7 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
       preferredTracks: tracksByFreshness.filter((track) => topArtist.trackIds.includes(track.id)),
       fallbackTracks: tracksByFreshness,
       trackIds: topArtist.trackIds,
+      allowUsedPreferredCover: true,
     });
   }
 
@@ -474,6 +507,7 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
         preferredTracks: candidate.preferredTracks,
         fallbackTracks: candidate.fallbackTracks,
         usedCoverKeys,
+        allowUsedPreferredCover: candidate.allowUsedPreferredCover,
       }),
       trackIds,
     });

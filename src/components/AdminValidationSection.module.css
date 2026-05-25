@@ -1,0 +1,496 @@
+.section {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(18, 20, 24, 0.95), rgba(14, 16, 20, 0.92));
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: rgba(255, 220, 149, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.description {
+  margin: 0;
+  max-width: 760px;
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.refreshButton,
+.filterButton,
+.actionPrimaryButton,
+.actionDangerButton,
+.paginationButton,
+.dialogGhostButton,
+.dialogDangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.refreshButton,
+.paginationButton,
+.dialogGhostButton {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #f5faf7;
+}
+
+.actionPrimaryButton {
+  background: rgba(106, 214, 129, 0.14);
+  border-color: rgba(106, 214, 129, 0.24);
+  color: #9ee37d;
+}
+
+.actionDangerButton,
+.dialogDangerButton {
+  background: rgba(255, 111, 101, 0.16);
+  border-color: rgba(255, 111, 101, 0.24);
+  color: #ffb0ab;
+}
+
+.refreshButton:hover,
+.filterButton:hover,
+.actionPrimaryButton:hover,
+.actionDangerButton:hover,
+.paginationButton:hover,
+.dialogGhostButton:hover,
+.dialogDangerButton:hover {
+  transform: translateY(-1px);
+}
+
+.refreshButton:disabled,
+.filterButton:disabled,
+.actionPrimaryButton:disabled,
+.actionDangerButton:disabled,
+.paginationButton:disabled,
+.dialogGhostButton:disabled,
+.dialogDangerButton:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(240, 245, 242, 0.65);
+}
+
+.searchField input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f7faf8;
+  font-size: 14px;
+}
+
+.searchField input::placeholder {
+  color: rgba(236, 242, 238, 0.42);
+}
+
+.filters,
+.summaryBar,
+.badges,
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterButton {
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(240, 245, 242, 0.82);
+}
+
+.filterButtonActive {
+  background: rgba(255, 220, 149, 0.14);
+  border-color: rgba(255, 220, 149, 0.28);
+  color: #ffe6a3;
+}
+
+.summaryBar {
+  color: rgba(236, 242, 238, 0.66);
+  font-size: 12px;
+}
+
+.summaryBar span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.feedback,
+.inlineError {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.feedback {
+  background: rgba(106, 214, 129, 0.12);
+  border: 1px solid rgba(106, 214, 129, 0.18);
+  color: #a8ebb5;
+}
+
+.inlineError {
+  background: rgba(255, 111, 101, 0.12);
+  border: 1px solid rgba(255, 111, 101, 0.18);
+  color: #ffb4af;
+}
+
+.emptyState {
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.emptyTitle {
+  margin: 0 0 6px;
+  color: #f7faf8;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.emptyDescription {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.cardList {
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cardPending {
+  border-color: rgba(255, 220, 149, 0.2);
+}
+
+.cardRejected {
+  border-color: rgba(255, 111, 101, 0.2);
+}
+
+.cardMain {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.cover {
+  width: 104px;
+  height: 104px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-position: center;
+  background-size: cover;
+}
+
+.meta {
+  display: grid;
+  gap: 10px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.releaseTitle {
+  margin: 0;
+  color: #f7faf8;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.releaseArtist {
+  margin: 0;
+  color: rgba(236, 242, 238, 0.78);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.statusBadge,
+.smallBadge,
+.badge,
+.trackStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 220, 149, 0.12);
+  color: #ffe1a1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.smallBadge,
+.badge {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(240, 245, 242, 0.78);
+}
+
+.statusBadgeRejected,
+.trackStatusHidden {
+  background: rgba(255, 111, 101, 0.16);
+  border-color: rgba(255, 111, 101, 0.24);
+  color: #ffb0ab;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detailItem {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.detailLabel {
+  color: rgba(236, 242, 238, 0.54);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.detailValue {
+  color: #f7faf8;
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.trackList {
+  display: grid;
+  gap: 8px;
+}
+
+.trackItem {
+  display: grid;
+  grid-template-columns: 24px 42px minmax(0, 1fr) minmax(190px, 280px) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.trackIndex {
+  color: rgba(236, 242, 238, 0.54);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.trackCover {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-position: center;
+  background-size: cover;
+}
+
+.trackMeta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trackTitle {
+  color: #f7faf8;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackArtist {
+  color: rgba(236, 242, 238, 0.64);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audioPreview {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  filter: invert(0.92) hue-rotate(178deg) saturate(0.62);
+  opacity: 0.92;
+}
+
+.audioUnavailable {
+  color: rgba(236, 242, 238, 0.5);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.paginationLabel {
+  color: rgba(236, 242, 238, 0.68);
+  font-size: 13px;
+}
+
+.dialogField {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dialogField span {
+  color: rgba(236, 242, 238, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dialogTextarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 108px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f7faf8;
+  font: inherit;
+  outline: none;
+}
+
+.dialogTextarea:focus {
+  border-color: rgba(255, 181, 93, 0.48);
+}
+
+@media (max-width: 860px) {
+  .header,
+  .pagination,
+  .cardActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cardMain,
+  .details {
+    grid-template-columns: 1fr;
+  }
+
+  .cover {
+    width: 100%;
+    height: 180px;
+  }
+
+  .trackItem {
+    grid-template-columns: 24px 42px minmax(0, 1fr);
+  }
+
+  .audioPreview,
+  .audioUnavailable {
+    grid-column: 1 / -1;
+  }
+
+  .trackStatus {
+    grid-column: 3;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .refreshButton,
+  .paginationButton,
+  .actionPrimaryButton,
+  .actionDangerButton {
+    width: 100%;
+  }
+}

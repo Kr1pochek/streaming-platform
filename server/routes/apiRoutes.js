@@ -52,13 +52,20 @@ import {
 } from "../services/playbackService.js";
 import { getSmartRecommendations } from "../services/recommendationService.js";
 import { fetchUserState, updateUserState } from "../services/userStateService.js";
-import { ingestUploadedTrack } from "../services/trackUploadService.js";
+import {
+  createPendingUploadedRelease,
+  ingestUploadedRelease,
+  ingestUploadedTrack,
+} from "../services/trackUploadService.js";
 import { ingestUploadedAvatar, removeUploadedAvatar } from "../services/avatarUploadService.js";
 import {
   getAdminStats,
+  approveValidationRelease,
   getAdminReleaseFormOptions,
   getAdminReleases,
   getAdminReleasesCount,
+  getAdminValidationQueue,
+  getAdminValidationQueueCount,
   getUploadedTracks,
   getUploadedTracksCount,
   getUsers,
@@ -69,6 +76,8 @@ import {
   unbanUser,
   createAdminRelease,
   deleteAdminRelease,
+  deleteValidationRelease,
+  rejectValidationRelease,
   updateAdminRelease,
   updateUserAdminRole,
 } from "../services/adminService.js";
@@ -86,6 +95,9 @@ const MAX_PLAYLIST_DESCRIPTION_LENGTH = 280;
 const MAX_PLAYLIST_COVER_LENGTH = 2_000_000;
 const DEFAULT_STREAM_CHUNK_SIZE = 1024 * 1024;
 const MAX_STREAM_CHUNK_SIZE = 8 * 1024 * 1024;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_HOME_RELEASE_VISIBILITY_DAYS = 14;
+const MAX_HOME_RELEASE_VISIBILITY_DAYS = 365;
 const mimeTypeByExtension = new Map([
   [".mp3", "audio/mpeg"],
   [".wav", "audio/wav"],
@@ -142,6 +154,14 @@ function parseLimit(value, fallback = 12) {
     return fallback;
   }
   return Math.min(Math.max(parsed, 1), 50);
+}
+
+function parseHomeReleaseVisibilityDays(value = process.env.HOME_RELEASE_VISIBILITY_DAYS) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_HOME_RELEASE_VISIBILITY_DAYS;
+  }
+  return Math.min(Math.max(parsed, 1), MAX_HOME_RELEASE_VISIBILITY_DAYS);
 }
 
 function parseOffset(value, fallback = 0) {
@@ -372,6 +392,16 @@ function mapHomeReleaseItem(release, artistNameById = new Map()) {
   };
 }
 
+function isReleaseVisibleOnHome(release, nowMs, visibilityDays) {
+  const publishedAt = Number(release?.publishedAt ?? 0);
+  const normalizedNow = Number(nowMs ?? Date.now());
+  if (!Number.isFinite(publishedAt) || publishedAt <= 0 || !Number.isFinite(normalizedNow)) {
+    return false;
+  }
+
+  return publishedAt <= normalizedNow && normalizedNow - publishedAt <= visibilityDays * DAY_MS;
+}
+
 function buildHomeShowcases(playlists = []) {
   const availablePlaylists = playlistsWithTracks(playlists).filter((playlist) => !isCustomPlaylist(playlist));
   if (!availablePlaylists.length) {
@@ -453,6 +483,7 @@ export function createApiRouter({
   statFile = fs.statSync,
   readStreamFactory = fs.createReadStream,
   nowProvider = () => Date.now(),
+  homeReleaseVisibilityDays = process.env.HOME_RELEASE_VISIBILITY_DAYS,
   readinessCheck = defaultReadinessCheck,
 } = {}) {
   const router = express.Router();
@@ -697,19 +728,68 @@ export function createApiRouter({
           tags: req.body?.tags,
           uploaderUserId: req.auth.userId,
         });
-
-        const { trackMap } = await catalogFetcher();
-        const track = trackMap[uploadResult.id] ?? null;
-        if (!track) {
-          throw new HttpError(500, "Track was uploaded but is not available in catalog.");
-        }
+        const release = await createPendingUploadedRelease({
+          releaseTitle: req.body?.releaseTitle ?? req.body?.title,
+          releaseType: "single",
+          year: req.body?.year,
+          cover: req.body?.cover,
+          description: req.body?.description,
+          trackIds: [uploadResult.id],
+          actorUserId: req.auth.userId,
+        });
 
         res.status(201).json({
-          track,
+          track: uploadResult,
+          release,
           hlsGenerated: uploadResult.hlsGenerated,
+          moderationStatus: release.status ?? uploadResult.moderationStatus ?? "pending",
         });
       } finally {
         fs.rmSync(uploadedFile.path, { force: true });
+      }
+    })
+  );
+
+  router.post(
+    "/tracks/upload-release",
+    requireAuth,
+    trackUploadMiddleware.array("audio", 40),
+    asyncHandler(async (req, res) => {
+      const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+      if (!uploadedFiles.length) {
+        throw new HttpError(400, "At least one audio file is required.");
+      }
+
+      try {
+        const uploadResult = await ingestUploadedRelease({
+          files: uploadedFiles.map((uploadedFile) => ({
+            uploadFilePath: uploadedFile.path,
+            originalFileName: uploadedFile.originalname,
+            mimetype: uploadedFile.mimetype,
+          })),
+          releaseTitle: req.body?.releaseTitle,
+          releaseType: req.body?.releaseType ?? req.body?.type,
+          year: req.body?.year,
+          artist: req.body?.artist,
+          genre: req.body?.genre,
+          cover: req.body?.cover,
+          description: req.body?.description,
+          tags: req.body?.tags,
+          explicit: req.body?.explicit,
+          tracks: req.body?.tracks,
+          uploaderUserId: req.auth.userId,
+        });
+
+        res.status(201).json({
+          release: uploadResult.release,
+          tracks: uploadResult.tracks,
+          hlsGenerated: uploadResult.hlsGenerated,
+          moderationStatus: uploadResult.release?.status ?? "pending",
+        });
+      } finally {
+        for (const uploadedFile of uploadedFiles) {
+          fs.rmSync(uploadedFile.path, { force: true });
+        }
       }
     })
   );
@@ -1035,6 +1115,8 @@ export function createApiRouter({
       const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
       const fallbackFreshTrackIds = tracks.slice(0, 6).map((track) => track.id);
       const enrichedShowcases = buildHomeShowcases(visiblePlaylists);
+      const releaseVisibilityDays = parseHomeReleaseVisibilityDays(homeReleaseVisibilityDays);
+      const nowMs = nowProvider();
 
       const artistNameById = new Map((artists ?? []).map((artist) => [artist.id, artist.name]));
       const sortedReleases = [...(releases ?? [])].sort(
@@ -1043,13 +1125,16 @@ export function createApiRouter({
           Number(second.year ?? 0) - Number(first.year ?? 0) ||
           String(second.id).localeCompare(String(first.id))
       );
+      const visibleHomeReleases = sortedReleases.filter((release) =>
+        isReleaseVisibleOnHome(release, nowMs, releaseVisibilityDays)
+      );
 
-      let releaseNotifications = sortedReleases;
+      let releaseNotifications = visibleHomeReleases;
       if (userId) {
         const userState = await fetchUserState(userId);
         const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
-        const followedReleases = sortedReleases.filter((release) => followedArtistIdSet.has(release.artistId));
-        const remainingReleases = sortedReleases.filter((release) => !followedArtistIdSet.has(release.artistId));
+        const followedReleases = visibleHomeReleases.filter((release) => followedArtistIdSet.has(release.artistId));
+        const remainingReleases = visibleHomeReleases.filter((release) => !followedArtistIdSet.has(release.artistId));
         releaseNotifications = [...followedReleases, ...remainingReleases];
       }
       releaseNotifications = releaseNotifications.slice(0, 8).map((release) => mapHomeReleaseItem(release, artistNameById));
@@ -1060,6 +1145,7 @@ export function createApiRouter({
         vibeTags: buildHomeGenreTags({ tracks, fallbackTags: vibeTags }),
         freshTrackIds: freshTrackIds.length ? freshTrackIds : fallbackFreshTrackIds,
         releaseNotifications,
+        releaseNotificationWindowDays: releaseVisibilityDays,
         catalogState,
       });
     })
@@ -1345,7 +1431,7 @@ export function createApiRouter({
     "/artists/:artistId",
     asyncHandler(async (req, res) => {
       const { artistId } = req.params;
-      const { artists, tracks, trackMap, playlists, releases } = await fetchCatalog();
+      const { artists, tracks, trackMap, playlists, releases } = await catalogFetcher();
       const artist = artists.find((item) => item.id === artistId);
       if (!artist) {
         throw new HttpError(404, "Artist not found.");
@@ -1368,10 +1454,14 @@ export function createApiRouter({
             Number(second.year ?? 0) - Number(first.year ?? 0)
         );
 
-      const albums = artistReleasesEnriched.filter((release) => release.type === "album");
-      const eps = artistReleasesEnriched.filter((release) => release.type === "ep");
-      const singles = artistReleasesEnriched.filter((release) => release.type === "single");
-      const latestRelease = artistReleasesEnriched[0] ?? null;
+      const releaseVisibilityDays = parseHomeReleaseVisibilityDays(homeReleaseVisibilityDays);
+      const freshArtistReleases = artistReleasesEnriched.filter((release) =>
+        isReleaseVisibleOnHome(release, nowProvider(), releaseVisibilityDays)
+      );
+      const albums = freshArtistReleases.filter((release) => release.type === "album");
+      const eps = freshArtistReleases.filter((release) => release.type === "ep");
+      const singles = freshArtistReleases.filter((release) => release.type === "single");
+      const latestRelease = freshArtistReleases[0] ?? null;
       const popularAlbums = albums.slice(0, 10);
       const visiblePlaylists = filterPlaylistsForUser(playlists, requestUserId(req));
 
@@ -1409,6 +1499,7 @@ export function createApiRouter({
         albums,
         eps,
         singles,
+        releaseCardWindowDays: releaseVisibilityDays,
         featuredPlaylists,
         relatedArtists,
       });
@@ -1486,6 +1577,58 @@ export function createApiRouter({
     asyncHandler(async (req, res) => {
       const stats = await getAdminStats();
       res.json(stats);
+    })
+  );
+
+  router.get(
+    "/admin/validation",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const limit = parseLimit(req.query.limit, 20);
+      const offset = parseOffset(req.query.offset, 0);
+      const query = normalizeTitle(req.query.query);
+      const status = normalizeTitle(req.query.status).toLowerCase() || "pending";
+      const releases = await getAdminValidationQueue({ limit, offset, query, status });
+      const count = await getAdminValidationQueueCount({ query, status });
+      res.json({ releases, total: count, limit, offset });
+    })
+  );
+
+  router.post(
+    "/admin/validation/:id/approve",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const releaseId = String(req.params.id ?? "").trim();
+      const release = await approveValidationRelease(releaseId, req.auth.userId);
+      await invalidateCatalogCache();
+      res.json({ success: true, release, message: "Release approved" });
+    })
+  );
+
+  router.post(
+    "/admin/validation/:id/reject",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const releaseId = String(req.params.id ?? "").trim();
+      const reason = String(req.body?.reason ?? "").trim() || "Rejected by moderation";
+      const release = await rejectValidationRelease(releaseId, req.auth.userId, reason);
+      await invalidateCatalogCache();
+      res.json({ success: true, release, message: "Release rejected" });
+    })
+  );
+
+  router.delete(
+    "/admin/validation/:id",
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const releaseId = String(req.params.id ?? "").trim();
+      const result = await deleteValidationRelease(releaseId);
+      await invalidateCatalogCache();
+      res.json({ success: true, ...result, message: "Validation release deleted" });
     })
   );
 

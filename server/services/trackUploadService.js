@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import {
   HttpError,
   createAutoArtistId,
+  createReleaseId,
   coverForPlaylist,
   hlsDirectory,
   invalidateCatalogCache,
@@ -36,6 +37,9 @@ const hlsAudioProfiles = [
   { name: "medium", bitrateKbps: 128 },
   { name: "low", bitrateKbps: 64 },
 ];
+const RELEASE_TYPES = new Set(["single", "ep", "album"]);
+const MAX_RELEASE_UPLOAD_TRACKS = 40;
+const UPLOAD_PENDING_REASON = "Awaiting moderation";
 
 function toFfmpegPath(value) {
   return String(value ?? "").replace(/\\/g, "/");
@@ -61,6 +65,81 @@ function parseDurationSec(value) {
     return null;
   }
   return Math.min(Math.max(parsed, MIN_DURATION_SEC), MAX_DURATION_SEC);
+}
+
+function parseYear(value) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  const currentYear = new Date().getFullYear();
+  if (!Number.isFinite(parsed)) {
+    return currentYear;
+  }
+  return Math.min(Math.max(parsed, 1900), currentYear + 2);
+}
+
+function normalizeReleaseType(value, trackCount) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (RELEASE_TYPES.has(normalized)) {
+    return normalized;
+  }
+  return trackCount === 1 ? "single" : trackCount >= 7 ? "album" : "ep";
+}
+
+function assertReleaseUploadTrackCount(type, trackCount) {
+  if (trackCount <= 0) {
+    throw new HttpError(400, "At least one audio file is required.");
+  }
+  if (trackCount > MAX_RELEASE_UPLOAD_TRACKS) {
+    throw new HttpError(400, `Upload up to ${MAX_RELEASE_UPLOAD_TRACKS} tracks in one release.`);
+  }
+  if (type === "single" && trackCount !== 1) {
+    throw new HttpError(400, "Single must contain exactly one track.");
+  }
+  if ((type === "ep" || type === "album") && trackCount < 2) {
+    throw new HttpError(400, "EP and album must contain at least two tracks.");
+  }
+}
+
+function parseReleaseTracksPayload(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    throw new HttpError(400, "Track metadata must be valid JSON.");
+  }
+}
+
+function normalizeTrackPayload(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function inferTitleFromUploadName(fileName) {
+  return normalizeTitle(
+    path
+      .basename(String(fileName ?? ""))
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_]+/g, " ")
+  );
+}
+
+function combineUploadTags({ genre, sharedTags, trackTags }) {
+  return [genre, sharedTags, trackTags]
+    .map((value) => {
+      if (Array.isArray(value)) {
+        return value.join(",");
+      }
+      return String(value ?? "");
+    })
+    .filter((value) => value.trim())
+    .join(",");
 }
 
 function slugify(value) {
@@ -307,14 +386,28 @@ async function upsertTrackMetadata({
   audioUrl,
   tags,
   uploaderUserId,
+  moderationReason = UPLOAD_PENDING_REASON,
 }) {
   const createdAt = Date.now();
 
   await withTransaction(async (client) => {
     await client.query(
       `
-      insert into tracks (id, title, duration_sec, explicit, cover, audio_url, created_at, uploaded_by)
-      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      insert into tracks (
+        id,
+        title,
+        duration_sec,
+        explicit,
+        cover,
+        audio_url,
+        created_at,
+        uploaded_by,
+        is_hidden,
+        hidden_reason,
+        hidden_by,
+        hidden_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, null, $10)
       on conflict (id) do update
         set title = excluded.title,
             duration_sec = excluded.duration_sec,
@@ -322,9 +415,13 @@ async function upsertTrackMetadata({
             cover = excluded.cover,
             audio_url = excluded.audio_url,
             created_at = coalesce(tracks.created_at, excluded.created_at),
-            uploaded_by = coalesce(tracks.uploaded_by, excluded.uploaded_by);
+            uploaded_by = coalesce(tracks.uploaded_by, excluded.uploaded_by),
+            is_hidden = true,
+            hidden_reason = excluded.hidden_reason,
+            hidden_by = null,
+            hidden_at = excluded.hidden_at;
     `,
-      [trackId, title, durationSec, explicit, cover, audioUrl, createdAt, uploaderUserId ?? null]
+      [trackId, title, durationSec, explicit, cover, audioUrl, createdAt, uploaderUserId ?? null, moderationReason, createdAt]
     );
 
     const artistNames = splitArtistNames(artistLine);
@@ -500,11 +597,228 @@ export async function ingestUploadedTrack({
 
     return {
       id: normalizedTrackId,
+      title: safeTitle,
+      artist: safeArtist,
       audioUrl: rows[0]?.audioUrl ?? persisted.publicUrl,
+      rawAudioUrl: rows[0]?.audioUrl ?? persisted.publicUrl,
       durationSec: finalDurationSec,
+      explicit: explicitFlag,
+      cover: safeCover,
+      tags: safeTags,
+      isHidden: true,
+      moderationStatus: "pending",
       hlsGenerated,
     };
   } finally {
     fs.rmSync(workDirectory, { recursive: true, force: true });
   }
+}
+
+async function resolveUploadedReleaseDefaults(client, trackIds) {
+  const { rows } = await client.query(
+    `
+    select
+      t.id,
+      t.title,
+      t.cover,
+      primary_artist.artist_id as "artistId"
+    from tracks t
+    left join lateral (
+      select ta.artist_id
+      from track_artists ta
+      where ta.track_id = t.id
+      order by ta.artist_order asc
+      limit 1
+    ) primary_artist on true
+    where t.id = any($1::text[]);
+    `,
+    [trackIds]
+  );
+
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows = trackIds.map((trackId) => rowById.get(trackId)).filter(Boolean);
+  if (orderedRows.length !== trackIds.length) {
+    throw new HttpError(500, "Uploaded tracks are not available for release creation.");
+  }
+
+  const firstTrack = orderedRows[0];
+  if (!firstTrack?.artistId) {
+    throw new HttpError(500, "Uploaded tracks are missing artist metadata.");
+  }
+
+  return {
+    artistId: firstTrack.artistId,
+    firstTrack,
+    orderedRows,
+  };
+}
+
+export async function createPendingUploadedRelease({
+  releaseTitle,
+  releaseType,
+  year,
+  cover,
+  description,
+  trackIds,
+  actorUserId,
+}) {
+  return withTransaction(async (client) => {
+    const { artistId, firstTrack } = await resolveUploadedReleaseDefaults(client, trackIds);
+    const releaseId = createReleaseId();
+    const createdAt = Date.now();
+    const safeTitle = normalizeTitle(releaseTitle) || firstTrack.title;
+    const safeCover = normalizeTitle(cover) || firstTrack.cover || coverForPlaylist(releaseId);
+    const safeYear = parseYear(year);
+
+    if (!safeTitle) {
+      throw new HttpError(400, "Release title is required.");
+    }
+    if (!safeCover) {
+      throw new HttpError(400, "Release cover is required.");
+    }
+
+    await client.query(
+      `
+      insert into releases (
+        id,
+        artist_id,
+        title,
+        type,
+        year,
+        cover,
+        description,
+        status,
+        created_at,
+        published_at,
+        created_by
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, null, $9);
+      `,
+      [
+        releaseId,
+        artistId,
+        safeTitle,
+        releaseType,
+        safeYear,
+        safeCover,
+        normalizeTitle(description) || null,
+        createdAt,
+        String(actorUserId ?? "").trim() || null,
+      ]
+    );
+
+    for (let index = 0; index < trackIds.length; index += 1) {
+      await client.query(
+        `
+        insert into release_tracks (release_id, track_id, position)
+        values ($1, $2, $3);
+        `,
+        [releaseId, trackIds[index], index + 1]
+      );
+    }
+
+    return {
+      id: releaseId,
+      artistId,
+      title: safeTitle,
+      type: releaseType,
+      year: safeYear,
+      cover: safeCover,
+      status: "pending",
+      isPublished: false,
+      isPending: true,
+      createdAt,
+      publishedAt: 0,
+      trackIds,
+    };
+  });
+}
+
+export async function ingestUploadedRelease({
+  files,
+  releaseTitle,
+  releaseType,
+  year,
+  artist,
+  genre,
+  cover,
+  description,
+  tags,
+  explicit,
+  tracks,
+  uploaderUserId,
+  env = process.env,
+} = {}) {
+  const uploadFiles = (Array.isArray(files) ? files : [])
+    .map((file) => ({
+      uploadFilePath: file?.uploadFilePath,
+      originalFileName: file?.originalFileName,
+      mimetype: file?.mimetype,
+    }))
+    .filter((file) => file.uploadFilePath);
+  const type = normalizeReleaseType(releaseType, uploadFiles.length);
+  assertReleaseUploadTrackCount(type, uploadFiles.length);
+
+  const safeArtist = normalizeTitle(artist);
+  if (!safeArtist) {
+    throw new HttpError(400, "Release artist is required.");
+  }
+
+  const trackPayloads = parseReleaseTracksPayload(tracks).map(normalizeTrackPayload);
+  const sharedGenre = normalizeTitle(genre).toLowerCase();
+  const sharedTags = tags;
+  const sharedExplicit = parseBoolean(explicit, false);
+  const uploadedTracks = [];
+
+  for (let index = 0; index < uploadFiles.length; index += 1) {
+    const file = uploadFiles[index];
+    const trackPayload = trackPayloads[index] ?? {};
+    const title = normalizeTitle(trackPayload.title) || inferTitleFromUploadName(file.originalFileName);
+    if (!title) {
+      throw new HttpError(400, `Track ${index + 1} title is required.`);
+    }
+
+    const uploadResult = await ingestUploadedTrack({
+      uploadFilePath: file.uploadFilePath,
+      originalFileName: file.originalFileName,
+      mimetype: file.mimetype,
+      trackId: trackPayload.trackId,
+      title,
+      artist: normalizeTitle(trackPayload.artist) || safeArtist,
+      durationSec: trackPayload.durationSec,
+      explicit: trackPayload.explicit ?? sharedExplicit,
+      cover: normalizeTitle(trackPayload.cover) || cover,
+      tags: combineUploadTags({
+        genre: trackPayload.genre || sharedGenre,
+        sharedTags,
+        trackTags: trackPayload.tags,
+      }),
+      uploaderUserId,
+      env,
+    });
+
+    uploadedTracks.push({
+      ...uploadResult,
+      title,
+    });
+  }
+
+  const trackIds = uploadedTracks.map((track) => track.id);
+  const release = await createPendingUploadedRelease({
+    releaseTitle: normalizeTitle(releaseTitle) || uploadedTracks[0]?.title,
+    releaseType: type,
+    year: parseYear(year),
+    cover,
+    description,
+    trackIds,
+    actorUserId: uploaderUserId,
+  });
+  invalidateCatalogCache();
+
+  return {
+    release,
+    tracks: uploadedTracks,
+    trackIds,
+    hlsGenerated: uploadedTracks.some((track) => track.hlsGenerated),
+  };
 }
