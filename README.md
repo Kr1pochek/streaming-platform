@@ -44,6 +44,19 @@ npm run smoke -- --client
 `npm run start:app` waits for PostgreSQL, applies migrations, restores a committed portable snapshot when available, and starts the API.
 If some old local audio files are missing, the app still starts and hides unavailable local tracks from the user catalog. Set `STRICT_AUDIO_VALIDATION=true` if you want startup to fail on missing media.
 
+Demo account from `.env.demo`:
+- username: `demo_user`
+- password: `demo_password_123`
+
+The profile page also has a `Демо-вход` button. Override it with `VITE_DEMO_USERNAME` and `VITE_DEMO_PASSWORD` if you seed another demo user.
+
+Demo checklist:
+- `/` shows the playable home feed, wave button, and new releases entry point.
+- `/releases` opens the full new releases grid.
+- `/search` handles typo genre queries and still shows contextual tracks while searching.
+- `/profile` covers login, demo sign-in, uploads, likes, history, and account settings.
+- `/admin` shows catalog health, validation queue, releases, tracks, and users for an admin account.
+
 ## 3. Portable clone with current data
 
 If you want another device to get the same accounts, uploaded tracks, playlists, likes, and local media after just:
@@ -120,6 +133,8 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # MEDIA_S3_PUBLIC_BASE_URL=
 # MEDIA_S3_ACL=
 # SMOKE_BASE_URL=http://127.0.0.1:4000
+# VITE_DEMO_USERNAME=demo_user
+# VITE_DEMO_PASSWORD=demo_password_123
 ```
 
 For a quick local demo config, use tracked `.env.demo`.

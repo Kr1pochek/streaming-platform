@@ -76,6 +76,30 @@
   gap: 8px;
 }
 
+.searchSuggestions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.searchSuggestionButton {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(110, 162, 255, 0.26);
+  background: rgba(110, 162, 255, 0.1);
+  color: rgba(226, 235, 255, 0.94);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.searchSuggestionButton:hover {
+  background: rgba(110, 162, 255, 0.16);
+}
+
 .filterButton {
   min-height: 34px;
   border-radius: 999px;
@@ -118,6 +142,11 @@
 }
 
 .filterButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 2px;
+}
+
+.searchSuggestionButton:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }

@@ -48,7 +48,7 @@ test("rankFuzzySearchItems keeps close genre matches for typo queries", () => {
       { id: "trap-metal-track", tags: ["trap metal"] },
       { id: "ambient-track", tags: ["ambient"] },
     ],
-    "трэп-металл",
+    "трэп-металлл",
     (item) => item.tags,
     2
   );

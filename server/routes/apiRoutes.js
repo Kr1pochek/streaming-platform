@@ -1499,6 +1499,7 @@ export function createApiRouter({
         albums,
         eps,
         singles,
+        allReleases: artistReleasesEnriched,
         releaseCardWindowDays: releaseVisibilityDays,
         featuredPlaylists,
         relatedArtists,

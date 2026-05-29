@@ -1068,6 +1068,42 @@
   text-overflow: ellipsis;
 }
 
+.trackStateRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.trackStateRow .trackArtist {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.waveBadge {
+  flex: 0 0 auto;
+  min-height: 19px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 204, 70, 0.34);
+  background: rgba(245, 204, 70, 0.14);
+  color: rgba(255, 239, 184, 0.98);
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.waveBadge svg {
+  width: 11px;
+  height: 11px;
+}
+
 .trackArtistButton {
   border: none;
   background: transparent;
@@ -2055,6 +2091,12 @@
   .trackArtistButton,
   .trackArtistText {
     font-size: 11px;
+  }
+
+  .waveBadge {
+    min-height: 18px;
+    padding: 0 6px;
+    font-size: 9px;
   }
 
   .playerContent {

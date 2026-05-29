@@ -578,6 +578,7 @@ function normalizeArtistPagePayload(payload = {}) {
     popularAlbums: asArray(payload.popularAlbums).map(normalizeReleaseSummary),
     eps: asArray(payload.eps).map(normalizeReleaseSummary),
     singles: asArray(payload.singles).map(normalizeReleaseSummary),
+    allReleases: asArray(payload.allReleases).map(normalizeReleaseSummary),
     releaseCardWindowDays: asNumber(payload.releaseCardWindowDays, 14),
     relatedArtists: asArray(payload.relatedArtists).map(normalizeArtistSummary),
   };

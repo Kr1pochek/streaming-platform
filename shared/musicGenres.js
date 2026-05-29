@@ -85,6 +85,7 @@ export const COMMON_MUSIC_GENRES = [
   "techno",
   "trance",
   "trap",
+  "trap metal",
   "trip-hop",
   "uk garage",
 ];

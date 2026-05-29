@@ -89,6 +89,10 @@ test("GET /api/artists/:artistId exposes only fresh release cards", async (t) =>
     ["release-fresh"]
   );
   assert.deepEqual(payload.popularAlbums, []);
+  assert.deepEqual(
+    payload.allReleases.map((release) => release.id),
+    ["release-fresh", "release-old"]
+  );
 });
 
 test("GET /api/artists/:artistId hides all release cards after the freshness window", async (t) => {
@@ -119,4 +123,8 @@ test("GET /api/artists/:artistId hides all release cards after the freshness win
   assert.deepEqual(payload.popularAlbums, []);
   assert.deepEqual(payload.eps, []);
   assert.deepEqual(payload.singles, []);
+  assert.deepEqual(
+    payload.allReleases.map((release) => release.id),
+    ["release-old"]
+  );
 });

@@ -589,6 +589,47 @@
   gap: 6px;
 }
 
+.releaseTabs {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.releaseTabButton {
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.releaseTabButtonActive {
+  border-color: rgba(245, 204, 70, 0.62);
+  background: rgba(245, 204, 70, 0.18);
+  color: rgba(255, 241, 189, 0.98);
+}
+
+.releaseTabCount {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
 .releaseList {
   margin-top: 14px;
   display: grid;
@@ -670,6 +711,7 @@
 .latestReleaseSecondaryButton:focus-visible,
 .albumMainButton:focus-visible,
 .albumPlayButton:focus-visible,
+.releaseTabButton:focus-visible,
 .releaseRow:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
@@ -737,5 +779,14 @@
 
   .latestReleaseActions {
     grid-template-columns: 1fr;
+  }
+
+  .releaseRow {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .releaseDurationBadge {
+    grid-column: 2;
+    justify-self: start;
   }
 }

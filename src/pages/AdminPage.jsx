@@ -121,8 +121,8 @@ export default function AdminPage() {
   const { status: authStatus, isAuthenticated, user } = useAuth();
   const [refreshToken, setRefreshToken] = useState(0);
   const [expandedSections, setExpandedSections] = useState({
-    overview: false,
-    validation: false,
+    overview: true,
+    validation: true,
     tracks: false,
     releases: false,
     users: false,
@@ -240,6 +240,13 @@ export default function AdminPage() {
               <span className={styles.metricValue}>{stats?.totals?.activeSessions ?? "—"}</span>
               <span className={styles.metricLabel}>Активных сессий</span>
             </article>
+            <article className={styles.metricCard}>
+              <span className={styles.metricIcon}>
+                <FiCheckCircle />
+              </span>
+              <span className={styles.metricValue}>{stats?.validation?.pendingReleases ?? "—"}</span>
+              <span className={styles.metricLabel}>Релизов ждут модерации</span>
+            </article>
           </div>
         </section>
 
@@ -298,7 +305,7 @@ export default function AdminPage() {
                 id="admin-validation"
                 eyebrow="Модерация"
                 title="Валидация"
-                description="Новые single, EP и album перед публикацией в релизах."
+                description={`${stats.validation.pendingReleases} релизов на проверке, ${stats.validation.pendingTracks} треков внутри заявок.`}
                 icon={FiCheckCircle}
                 open={expandedSections.validation}
                 onToggle={() => toggleSection("validation")}

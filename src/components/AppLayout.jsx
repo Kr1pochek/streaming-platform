@@ -7,6 +7,7 @@ import {
   FiHome,
   FiList,
   FiMusic,
+  FiRadio,
   FiRepeat,
   FiSearch,
   FiSettings,
@@ -65,6 +66,8 @@ export default function AppLayout() {
     currentTrack,
     currentIndex,
     queueTracks,
+    queueSource,
+    isWaveActive,
     isPlaying,
     volume,
     streamQuality,
@@ -111,6 +114,7 @@ export default function AppLayout() {
   const toastTimerMapRef = useRef(new Map());
   const lastNonZeroVolumeRef = useRef(volume > 0 ? volume : 70);
   const hasCurrentTrack = Boolean(currentTrack);
+  const showWaveBadge = Boolean(hasCurrentTrack && (isWaveActive || queueSource === "wave"));
 
   const repeatEnabled = repeatMode !== "off";
   const accountName = user?.displayName ?? user?.username ?? "Гость";
@@ -695,13 +699,21 @@ export default function AppLayout() {
                   {currentTrack?.title ?? "Нет трека"}
                 </button>
                 {currentTrack?.artist ? (
-                  <ArtistInlineLinks
-                    artistLine={currentTrack.artist}
-                    className={styles.trackArtist}
-                    linkClassName={styles.trackArtistButton}
-                    textClassName={styles.trackArtistText}
-                    onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                  />
+                  <div className={styles.trackStateRow}>
+                    <ArtistInlineLinks
+                      artistLine={currentTrack.artist}
+                      className={styles.trackArtist}
+                      linkClassName={styles.trackArtistButton}
+                      textClassName={styles.trackArtistText}
+                      onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                    />
+                    {showWaveBadge ? (
+                      <span className={styles.waveBadge} title="Играет скрытая очередь Моей волны">
+                        <FiRadio aria-hidden="true" />
+                        Моя волна
+                      </span>
+                    ) : null}
+                  </div>
                 ) : (
                   <div className={styles.trackArtist}>Очередь пуста</div>
                 )}

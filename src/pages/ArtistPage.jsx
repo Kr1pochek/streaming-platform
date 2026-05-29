@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FiArrowLeft,
@@ -28,6 +28,18 @@ import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 const audienceForms = {
   listeners: ["слушатель", "слушателя", "слушателей"],
   followers: ["подписчик", "подписчика", "подписчиков"],
+};
+const releaseFilterOptions = [
+  { id: "all", label: "Все" },
+  { id: "album", label: "Albums" },
+  { id: "ep", label: "EP" },
+  { id: "single", label: "Singles" },
+];
+const releaseTypeLabels = {
+  all: "все",
+  album: "Albums",
+  ep: "EP",
+  single: "Singles",
 };
 
 function pluralizeRu(value, one, few, many) {
@@ -65,11 +77,20 @@ function resolveArtistAvatar(data) {
   );
 }
 
+function getReleaseDurationSec(release) {
+  return (release?.tracks ?? []).reduce((sum, track) => sum + (track.durationSec ?? 0), 0);
+}
+
 export default function ArtistPage() {
   const { artistId = "" } = useParams();
   const navigate = useNavigate();
   const loadArtistPage = useCallback(() => fetchArtistPage(artistId), [artistId]);
   const { status, data, error, reload } = useAsyncResource(loadArtistPage);
+  const [releaseFilter, setReleaseFilter] = useState("all");
+
+  useEffect(() => {
+    setReleaseFilter("all");
+  }, [artistId]);
 
   const { likedIds, currentTrackId, historyIds, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
 
@@ -85,6 +106,43 @@ export default function ArtistPage() {
   const artistListeners = Math.max(audienceNumber(data?.artist?.listeners), hasLocalArtistListen ? 1 : 0);
   const artistFollowers = Math.max(audienceNumber(data?.artist?.followers), artistFollowed ? 1 : 0);
   const releaseCardWindowDays = Number(data?.releaseCardWindowDays ?? 14);
+  const allArtistReleases = useMemo(() => {
+    const source = data?.allReleases?.length
+      ? data.allReleases
+      : [...(data?.popularAlbums ?? []), ...(data?.eps ?? []), ...(data?.singles ?? [])];
+    const seen = new Set();
+
+    return source.filter((release) => {
+      if (!release?.id || seen.has(release.id)) {
+        return false;
+      }
+      seen.add(release.id);
+      return true;
+    });
+  }, [data]);
+  const artistAlbums = useMemo(
+    () => allArtistReleases.filter((release) => release.type === "album").slice(0, 10),
+    [allArtistReleases]
+  );
+  const filteredArtistReleases = useMemo(
+    () =>
+      releaseFilter === "all"
+        ? allArtistReleases
+        : allArtistReleases.filter((release) => release.type === releaseFilter),
+    [allArtistReleases, releaseFilter]
+  );
+  const releaseFilterCounts = useMemo(
+    () =>
+      releaseFilterOptions.reduce((counts, option) => {
+        counts[option.id] =
+          option.id === "all"
+            ? allArtistReleases.length
+            : allArtistReleases.filter((release) => release.type === option.id).length;
+        return counts;
+      }, {}),
+    [allArtistReleases]
+  );
+  const releaseFilterLabel = releaseTypeLabels[releaseFilter] ?? "релизы";
 
   return (
     <PageShell>
@@ -270,9 +328,9 @@ export default function ArtistPage() {
               <h2 className={styles.sectionTitle}>Популярные альбомы</h2>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
             </div>
-            {data.popularAlbums.length ? (
+            {artistAlbums.length ? (
               <div className={styles.albumScroller}>
-                {data.popularAlbums.map((album) => (
+                {artistAlbums.map((album) => (
                   <article key={album.id} className={styles.albumCard}>
                     <button
                       type="button"
@@ -313,7 +371,7 @@ export default function ArtistPage() {
                 ))}
               </div>
             ) : (
-              <p className={styles.emptyText}>Свежих альбомов за последние {releaseCardWindowDays} дней нет.</p>
+              <p className={styles.emptyText}>У автора пока нет альбомов.</p>
             )}
           </section>
 
@@ -322,9 +380,25 @@ export default function ArtistPage() {
               <h2 className={styles.sectionTitle}>Релизы автора</h2>
               <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
             </div>
-            {data.eps.length || data.singles.length ? (
+            {allArtistReleases.length ? (
+              <div className={styles.releaseTabs} role="tablist" aria-label="Фильтр релизов автора">
+                {releaseFilterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`${styles.releaseTabButton} ${releaseFilter === option.id ? styles.releaseTabButtonActive : ""}`.trim()}
+                    aria-pressed={releaseFilter === option.id}
+                    onClick={() => setReleaseFilter(option.id)}
+                  >
+                    <span>{option.label}</span>
+                    <span className={styles.releaseTabCount}>{releaseFilterCounts[option.id] ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {filteredArtistReleases.length ? (
               <div className={styles.releaseList}>
-                {[...data.eps, ...data.singles].map((release) => (
+                {filteredArtistReleases.map((release) => (
                   <button
                     key={release.id}
                     type="button"
@@ -340,15 +414,17 @@ export default function ArtistPage() {
                     </span>
                     <span className={styles.releaseDurationBadge}>
                       <FiClock />
-                      {release.tracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0) > 0
-                        ? formatDurationClock(release.tracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0))
+                      {getReleaseDurationSec(release) > 0
+                        ? formatDurationClock(getReleaseDurationSec(release))
                         : "--:--"}
                     </span>
                   </button>
                 ))}
               </div>
             ) : (
-              <p className={styles.emptyText}>Свежих EP и синглов за последние {releaseCardWindowDays} дней нет.</p>
+              <p className={styles.emptyText}>
+                {allArtistReleases.length ? `В категории ${releaseFilterLabel} релизов нет.` : "У автора пока нет релизов."}
+              </p>
             )}
           </section>
 

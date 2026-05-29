@@ -19,6 +19,7 @@ import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import SmartRecommendations from "../components/SmartRecommendations.jsx";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import useCardActionMenu from "../hooks/useCardActionMenu.js";
+import { COMMON_MUSIC_GENRES } from "../../shared/musicGenres.js";
 
 const tabs = [
   { id: "popular", label: "Популярное" },
@@ -42,6 +43,7 @@ const defaultPagination = {
   hasMore: false,
   nextOffset: null,
 };
+const SEARCH_SUGGESTION_LIMIT = 6;
 
 const emptySearchState = {
   status: "idle",
@@ -50,6 +52,107 @@ const emptySearchState = {
   pagination: defaultPagination,
   loadingMore: false,
 };
+
+function normalizeSuggestionText(value = "") {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[_-]+/g, " ")
+    .replace(/(^|\s)т[рp][еэ]п(?=\s|$)/g, "$1trap")
+    .replace(/(^|\s)метал+л?(?=\s|$)/g, "$1metal")
+    .replace(/(^|\s)рок(?=\s|$)/g, "$1rock")
+    .replace(/\s+/g, " ");
+}
+
+function editDistance(left = "", right = "") {
+  if (!left.length) {
+    return right.length;
+  }
+  if (!right.length) {
+    return left.length;
+  }
+
+  let previousRow = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const currentRow = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      currentRow[rightIndex] = Math.min(
+        currentRow[rightIndex - 1] + 1,
+        previousRow[rightIndex] + 1,
+        previousRow[rightIndex - 1] + substitutionCost
+      );
+    }
+    previousRow = currentRow;
+  }
+  return previousRow[right.length];
+}
+
+function suggestionSimilarity(left = "", right = "") {
+  const maxLength = Math.max(left.length, right.length);
+  return maxLength ? 1 - editDistance(left, right) / maxLength : 1;
+}
+
+function scoreSearchSuggestion(query = "", value = "") {
+  const normalizedQuery = normalizeSuggestionText(query);
+  const normalizedValue = normalizeSuggestionText(value);
+  if (!normalizedQuery || !normalizedValue || normalizedQuery === normalizedValue) {
+    return 0;
+  }
+  if (normalizedValue.startsWith(normalizedQuery)) {
+    return 98;
+  }
+  if (normalizedValue.includes(normalizedQuery)) {
+    return 88;
+  }
+  if (normalizedQuery.includes(normalizedValue)) {
+    return Math.max(62, Math.round((normalizedValue.length / normalizedQuery.length) * 90));
+  }
+
+  const queryTokens = normalizedQuery.split(/\s+/g).filter(Boolean);
+  const valueTokens = normalizedValue.split(/\s+/g).filter(Boolean);
+  const tokenScore =
+    queryTokens.reduce((total, queryToken) => {
+      const best = valueTokens.reduce((currentBest, valueToken) => {
+        if (valueToken.startsWith(queryToken) || queryToken.startsWith(valueToken)) {
+          return Math.max(currentBest, 0.9);
+        }
+        return Math.max(currentBest, suggestionSimilarity(queryToken, valueToken));
+      }, 0);
+      return total + best;
+    }, 0) / Math.max(queryTokens.length, 1);
+
+  return Math.round(Math.max(suggestionSimilarity(normalizedQuery, normalizedValue), tokenScore) * 100);
+}
+
+function buildSearchSuggestions(query = "", searchHistory = [], collections = []) {
+  const candidates = [
+    ...COMMON_MUSIC_GENRES,
+    ...searchHistory,
+    ...collections.flatMap((item) => [item?.query, item?.title, item?.subtitle]),
+  ];
+  const seen = new Set();
+
+  return candidates
+    .map((candidate) => String(candidate ?? "").trim())
+    .filter(Boolean)
+    .map((candidate) => {
+      const normalizedCandidate = normalizeSuggestionText(candidate);
+      if (!normalizedCandidate || seen.has(normalizedCandidate)) {
+        return null;
+      }
+      seen.add(normalizedCandidate);
+      return {
+        value: candidate,
+        score: scoreSearchSuggestion(query, candidate),
+      };
+    })
+    .filter((item) => item && item.score >= 55)
+    .sort((first, second) => second.score - first.score || first.value.localeCompare(second.value, "ru"))
+    .slice(0, SEARCH_SUGGESTION_LIMIT)
+    .map((item) => item.value);
+}
 
 function splitColumns(items) {
   const splitPoint = Math.ceil(items.length / 2);
@@ -307,6 +410,10 @@ export default function SearchPage() {
   const collections = Array.isArray(data?.collections) ? data.collections : [];
   const morePlaylists = Array.isArray(data?.morePlaylists) ? data.morePlaylists : [];
   const isSparseCatalog = Boolean(data?.catalogState?.sparseCatalog);
+  const searchSuggestions = useMemo(
+    () => (normalizedQuery ? buildSearchSuggestions(normalizedQuery, searchHistory, collections) : []),
+    [collections, normalizedQuery, searchHistory]
+  );
 
   const hasSearchQuery = normalizedQuery.length > 0;
   const searchResults = searchState.data;
@@ -390,6 +497,12 @@ export default function SearchPage() {
     handleQueryChange(value);
   }, []);
 
+  const handleSearchSuggestionSelect = useCallback((value) => {
+    setActiveTab("popular");
+    setResultFilter("all");
+    handleQueryChange(value);
+  }, []);
+
   return (
     <PageShell>
       <div className={styles.searchBlock}>
@@ -439,6 +552,10 @@ export default function SearchPage() {
             ))}
           </div>
         ) : null}
+
+        {hasSearchQuery && searchSuggestions.length ? (
+          <SearchSuggestionChips suggestions={searchSuggestions} onSelect={handleSearchSuggestionSelect} />
+        ) : null}
       </div>
 
       {status === "success" && !hasSearchQuery && isSparseCatalog ? (
@@ -467,6 +584,7 @@ export default function SearchPage() {
           searchState={searchState}
           searchResults={searchResults}
           searchEmpty={searchEmpty}
+          suggestions={searchSuggestions}
           isArtistFollowed={isArtistFollowed}
           likedIds={likedIds}
           currentTrackId={currentTrackId}
@@ -481,6 +599,7 @@ export default function SearchPage() {
           onOpenArtist={(id) => navigate(`/artist/${id}`)}
           onOpenRelease={(id) => navigate(`/release/${id}`)}
           onClearQuery={resetSearch}
+          onSelectSuggestion={handleSearchSuggestionSelect}
           onLoadMore={() =>
             setSearchOffset((prev) =>
               Number.isFinite(searchState.pagination?.nextOffset)
@@ -618,11 +737,33 @@ export default function SearchPage() {
   );
 }
 
+function SearchSuggestionChips({ suggestions = [], onSelect }) {
+  if (!suggestions.length) {
+    return null;
+  }
+
+  return (
+    <div className={styles.searchSuggestions} aria-label="Похожие запросы">
+      {suggestions.map((suggestion) => (
+        <button
+          key={suggestion}
+          type="button"
+          className={styles.searchSuggestionButton}
+          onClick={() => onSelect(suggestion)}
+        >
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SearchResults({
   query,
   searchState,
   searchResults,
   searchEmpty,
+  suggestions,
   isArtistFollowed,
   likedIds,
   currentTrackId,
@@ -637,6 +778,7 @@ function SearchResults({
   onOpenArtist,
   onOpenRelease,
   onClearQuery,
+  onSelectSuggestion,
   onLoadMore,
   onOpenTrackMenu,
   onOpenPlaylistMenu,
@@ -645,6 +787,13 @@ function SearchResults({
     return (
       <section className={styles.section}>
         <ResourceState loading title="Ищем совпадения" description={`По запросу "${query}"`} />
+        <SmartRecommendations
+          title="Пока ищем, можно включить"
+          tracks={recommendationTracks}
+          onPlayTrack={onPlay}
+          onLikeTrack={onToggleLike}
+          onOpenTrackMenu={onOpenTrackMenu}
+        />
       </section>
     );
   }
@@ -671,6 +820,7 @@ function SearchResults({
           actionLabel="Сбросить"
           onAction={onClearQuery}
         />
+        <SearchSuggestionChips suggestions={suggestions} onSelect={onSelectSuggestion} />
         <SmartRecommendations
           title="Пока нет совпадений, можно включить"
           tracks={recommendationTracks}
