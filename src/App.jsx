@@ -12,6 +12,7 @@ const PlaylistPage = lazyWithRecovery(() => import("./pages/PlaylistPage.jsx"), 
 const TrackPage = lazyWithRecovery(() => import("./pages/TrackPage.jsx"), "track");
 const ArtistPage = lazyWithRecovery(() => import("./pages/ArtistPage.jsx"), "artist");
 const ReleasePage = lazyWithRecovery(() => import("./pages/ReleasePage.jsx"), "release");
+const NewReleasesPage = lazyWithRecovery(() => import("./pages/NewReleasesPage.jsx"), "new-releases");
 const ProfilePage = lazyWithRecovery(() => import("./pages/ProfilePage.jsx"), "profile");
 const AdminPage = lazyWithRecovery(() => import("./pages/AdminPage.jsx"), "admin");
 const NotFoundPage = lazyWithRecovery(() => import("./pages/NotFoundPage.jsx"), "not-found");
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="playlist/:playlistId" element={withSuspense(<PlaylistPage />)} />
         <Route path="track/:trackId" element={withSuspense(<TrackPage />)} />
         <Route path="artist/:artistId" element={withSuspense(<ArtistPage />)} />
+        <Route path="releases" element={withSuspense(<NewReleasesPage />)} />
         <Route path="release/:releaseId" element={withSuspense(<ReleasePage />)} />
         <Route path="profile" element={withSuspense(<ProfilePage />)} />
         <Route path="admin" element={withSuspense(<AdminPage />)} />

@@ -11,6 +11,7 @@ import {
   FiSearch,
   FiSettings,
   FiShuffle,
+  FiSliders,
   FiSkipBack,
   FiSkipForward,
   FiTrash2,
@@ -52,6 +53,11 @@ const STREAM_QUALITY_OPTIONS = [
   },
 ];
 
+function formatEqualizerGain(gain) {
+  const roundedGain = Math.round(Number(gain) || 0);
+  return `${roundedGain > 0 ? "+" : ""}${roundedGain}`;
+}
+
 export default function AppLayout() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
@@ -62,6 +68,8 @@ export default function AppLayout() {
     isPlaying,
     volume,
     streamQuality,
+    equalizer,
+    equalizerPresets,
     progressPercent,
     progressLabel,
     durationLabel,
@@ -82,27 +90,26 @@ export default function AppLayout() {
     likeTrack,
     unlikeTrack,
     setStreamQuality,
+    setEqualizerPreset,
+    setEqualizerBand,
+    setEqualizerPreamp,
     toastItems,
     dismissToast,
   } = usePlayer();
 
   const [queueOpen, setQueueOpen] = useState(false);
   const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
+  const [equalizerOpen, setEqualizerOpen] = useState(false);
+  const [equalizerPresetOpen, setEqualizerPresetOpen] = useState(false);
   const [playerPalette, setPlayerPalette] = useState(DEFAULT_PLAYER_PALETTE);
-  const [displayProgressPercent, setDisplayProgressPercent] = useState(0);
   const [timelineDragging, setTimelineDragging] = useState(false);
   const queuePanelRef = useRef(null);
   const queueToggleRef = useRef(null);
   const qualityMenuRef = useRef(null);
+  const equalizerPanelRef = useRef(null);
+  const equalizerToggleRef = useRef(null);
   const toastTimerMapRef = useRef(new Map());
   const lastNonZeroVolumeRef = useRef(volume > 0 ? volume : 70);
-  const visualProgressRef = useRef(0);
-  const progressAnchorRef = useRef({
-    durationSec: 0,
-    percent: 0,
-    timeMs: 0,
-    trackId: null,
-  });
   const hasCurrentTrack = Boolean(currentTrack);
 
   const repeatEnabled = repeatMode !== "off";
@@ -121,14 +128,21 @@ export default function AppLayout() {
   const selectedQualityOption =
     STREAM_QUALITY_OPTIONS.find((option) => option.value === streamQualitySelected) ??
     STREAM_QUALITY_OPTIONS[0];
+  const equalizerPresetLabel = equalizer?.presetLabel ?? "По умолчанию";
+  const equalizerBands = Array.isArray(equalizer?.bands) ? equalizer.bands : [];
+  const equalizerPreampDb = Math.round(Number(equalizer?.preampDb ?? 0));
+  const equalizerPreampMinDb = Number(equalizer?.preampMinDb ?? -12);
+  const equalizerPreampMaxDb = Number(equalizer?.preampMaxDb ?? 12);
+  const equalizerCustomPresetId = equalizer?.customPresetId ?? "custom";
+  const equalizerPresetOptions = [
+    { id: equalizerCustomPresetId, label: "Своя настройка" },
+    ...(Array.isArray(equalizerPresets) ? equalizerPresets : []),
+  ];
   const timelineProgressValue = Math.min(
     100,
     Math.max(0, Number.isFinite(progressPercent) ? progressPercent : 0),
   );
-  const visualProgressPercent = Math.min(
-    100,
-    Math.max(0, Number.isFinite(displayProgressPercent) ? displayProgressPercent : 0),
-  );
+  const visualProgressPercent = timelineProgressValue;
   const progressTailRoundRatio = Math.min(1, Math.max(0, 0.18 + (visualProgressPercent / 100) * 0.82));
   const progressTailRadiusPx = 6 + progressTailRoundRatio * 16;
   const progressEdgeHighlightOpacity = 0.03 * (1 - progressTailRoundRatio);
@@ -170,74 +184,6 @@ export default function AppLayout() {
     }
   }, [volume]);
 
-  useEffect(() => {
-    visualProgressRef.current = visualProgressPercent;
-  }, [visualProgressPercent]);
-
-  useEffect(() => {
-    const trackId = currentTrack?.id ?? null;
-    const durationSec = currentTrack?.durationSec ?? 0;
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const previousAnchor = progressAnchorRef.current;
-    const trackChanged = previousAnchor.trackId !== trackId;
-    const currentVisual = visualProgressRef.current;
-    let syncFrameId = 0;
-
-    progressAnchorRef.current = {
-      durationSec,
-      percent: timelineProgressValue,
-      timeMs: now,
-      trackId,
-    };
-
-    if (
-      trackChanged ||
-      timelineDragging ||
-      !hasCurrentTrack ||
-      !isPlaying ||
-      durationSec <= 0 ||
-      timelineProgressValue < currentVisual - 0.75 ||
-      Math.abs(timelineProgressValue - currentVisual) > 1.5
-    ) {
-      syncFrameId = window.requestAnimationFrame(() => {
-        setDisplayProgressPercent(timelineProgressValue);
-      });
-    }
-
-    return () => {
-      if (syncFrameId) {
-        window.cancelAnimationFrame(syncFrameId);
-      }
-    };
-  }, [currentTrack?.durationSec, currentTrack?.id, hasCurrentTrack, isPlaying, timelineDragging, timelineProgressValue]);
-
-  useEffect(() => {
-    if (timelineDragging || !hasCurrentTrack || !isPlaying || !(currentTrack?.durationSec > 0)) {
-      return undefined;
-    }
-
-    let frameId = 0;
-
-    const animateProgress = () => {
-      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-      const anchor = progressAnchorRef.current;
-      const elapsedSec = Math.max(0, (now - anchor.timeMs) / 1000);
-      const predictedPercent = Math.min(100, anchor.percent + (elapsedSec / anchor.durationSec) * 100);
-
-      if (Math.abs(predictedPercent - visualProgressRef.current) >= 0.02) {
-        setDisplayProgressPercent(predictedPercent);
-      }
-
-      frameId = window.requestAnimationFrame(animateProgress);
-    };
-
-    frameId = window.requestAnimationFrame(animateProgress);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [currentTrack?.durationSec, hasCurrentTrack, isPlaying, timelineDragging]);
-
   const handleVolumeChange = (nextVolume) => {
     const safeVolume = Number(nextVolume);
     if (Number.isFinite(safeVolume) && safeVolume > 0) {
@@ -255,6 +201,47 @@ export default function AppLayout() {
 
     const restoredVolume = Number(lastNonZeroVolumeRef.current);
     setVolume(Number.isFinite(restoredVolume) && restoredVolume > 0 ? restoredVolume : 70);
+  };
+
+  const handleToggleQueuePanel = () => {
+    setQueueOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setEqualizerOpen(false);
+        setQualityMenuOpen(false);
+      }
+      return nextOpen;
+    });
+  };
+
+  const handleToggleEqualizerPanel = () => {
+    setEqualizerOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setQueueOpen(false);
+        setQualityMenuOpen(false);
+      } else {
+        setEqualizerPresetOpen(false);
+      }
+      return nextOpen;
+    });
+  };
+
+  const handleToggleQualityMenu = () => {
+    setQualityMenuOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setEqualizerOpen(false);
+        setEqualizerPresetOpen(false);
+        setQueueOpen(false);
+      }
+      return nextOpen;
+    });
+  };
+
+  const handleSelectEqualizerPreset = (presetId) => {
+    setEqualizerPreset(presetId);
+    setEqualizerPresetOpen(false);
   };
 
   const handleToggleCurrentLike = () => {
@@ -293,6 +280,45 @@ export default function AppLayout() {
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [queueOpen]);
+
+  useEffect(() => {
+    if (!equalizerOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (equalizerPanelRef.current?.contains(target) || equalizerToggleRef.current?.contains(target)) {
+        return;
+      }
+
+      setEqualizerPresetOpen(false);
+      setEqualizerOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        if (equalizerPresetOpen) {
+          setEqualizerPresetOpen(false);
+          return;
+        }
+        setEqualizerPresetOpen(false);
+        setEqualizerOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [equalizerOpen, equalizerPresetOpen]);
 
   useEffect(() => {
     if (!qualityMenuOpen) {
@@ -528,6 +554,102 @@ export default function AppLayout() {
           </aside>
         ) : null}
 
+        {equalizerOpen ? (
+          <aside
+            ref={equalizerPanelRef}
+            className={styles.equalizerPanel}
+            aria-label="Эквалайзер"
+            data-testid="player-equalizer-panel"
+          >
+            <header className={styles.equalizerHeader}>
+              <h2 className={styles.equalizerTitle}>Эквалайзер</h2>
+            </header>
+
+            <div className={styles.equalizerGraph}>
+              <label className={styles.equalizerLevelBand}>
+                <input
+                  className={styles.equalizerLevelSlider}
+                  type="range"
+                  min={equalizerPreampMinDb}
+                  max={equalizerPreampMaxDb}
+                  step="1"
+                  value={equalizerPreampDb}
+                  aria-label="Уровень усиления эквалайзера"
+                  aria-valuetext={`${formatEqualizerGain(equalizerPreampDb)} dB`}
+                  onChange={(event) => setEqualizerPreamp(Number(event.target.value))}
+                />
+                <span className={styles.equalizerLevelLabel}>уровень</span>
+              </label>
+              <div className={styles.equalizerDbScale} aria-hidden="true">
+                <span>12dB</span>
+                <span>0dB</span>
+                <span>-12dB</span>
+              </div>
+              <div className={styles.equalizerBands}>
+                {equalizerBands.map((band, index) => {
+                  const gain = Number(band.gain) || 0;
+
+                  return (
+                    <label key={band.id} className={styles.equalizerBand}>
+                      <input
+                        className={styles.equalizerBandSlider}
+                        type="range"
+                        min="-12"
+                        max="12"
+                        step="1"
+                        value={gain}
+                        aria-label={`Полоса ${band.label}`}
+                        aria-valuetext={`${formatEqualizerGain(gain)} dB`}
+                        onChange={(event) => setEqualizerBand(index, Number(event.target.value))}
+                      />
+                      <span className={styles.equalizerBandLabel}>{band.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className={styles.equalizerPresetWrap}>
+              <button
+                type="button"
+                className={`${styles.equalizerPresetSelect} ${
+                  equalizerPresetOpen ? styles.equalizerPresetSelectOpen : ""
+                }`.trim()}
+                aria-label="Выбрать пресет эквалайзера"
+                aria-haspopup="listbox"
+                aria-expanded={equalizerPresetOpen}
+                onClick={() => setEqualizerPresetOpen((current) => !current)}
+              >
+                <span>{equalizerPresetLabel}</span>
+                <FiChevronDown />
+              </button>
+            </div>
+
+            {equalizerPresetOpen ? (
+              <div className={styles.equalizerPresetMenu} role="listbox" aria-label="Пресеты эквалайзера">
+                {equalizerPresetOptions.map((preset) => {
+                  const isActive = equalizer?.presetId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isActive}
+                      className={`${styles.equalizerPresetOption} ${
+                        isActive ? styles.equalizerPresetOptionActive : ""
+                      }`.trim()}
+                      onClick={() => handleSelectEqualizerPreset(preset.id)}
+                    >
+                      <span>{preset.label}</span>
+                      {isActive ? <FiCheck /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </aside>
+        ) : null}
+
         <footer className={styles.player} aria-label="Плеер" data-testid="player-footer" style={playerThemeStyle}>
           <div className={styles.playerTimelineWrap}>
             <div className={styles.playerTimelineTrack}>
@@ -670,7 +792,7 @@ export default function AppLayout() {
                         aria-haspopup="menu"
                         aria-expanded={qualityMenuOpen}
                         disabled={!canControlStreamQuality}
-                        onClick={() => setQualityMenuOpen((current) => !current)}
+                        onClick={handleToggleQualityMenu}
                       >
                         <span className={styles.streamQualityTriggerMeta}>
                           <span className={styles.streamQualityTriggerEyebrow}>QUALITY</span>
@@ -717,12 +839,23 @@ export default function AppLayout() {
                 ) : null}
                 <button
                   type="button"
+                  ref={equalizerToggleRef}
+                  className={`${styles.iconButton} ${equalizerOpen ? styles.iconButtonActive : ""}`.trim()}
+                  aria-label="Открыть эквалайзер"
+                  aria-pressed={equalizerOpen}
+                  data-testid="player-equalizer-toggle"
+                  onClick={handleToggleEqualizerPanel}
+                >
+                  <FiSliders />
+                </button>
+                <button
+                  type="button"
                   ref={queueToggleRef}
                   className={`${styles.iconButton} ${queueOpen ? styles.iconButtonActive : ""}`.trim()}
                   aria-label="Показать очередь"
                   aria-pressed={queueOpen}
                   data-testid="player-queue-toggle"
-                  onClick={() => setQueueOpen((value) => !value)}
+                  onClick={handleToggleQueuePanel}
                 >
                   <FiList />
                 </button>

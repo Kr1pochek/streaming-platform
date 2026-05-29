@@ -7,6 +7,8 @@ import {
   createReleaseId,
   coverForPlaylist,
   hlsDirectory,
+  hlsManifestUrlForTrack,
+  hasHlsManifestForTrack,
   invalidateCatalogCache,
   normalizeTitle,
   pool,
@@ -595,12 +597,16 @@ export async function ingestUploadedTrack({
       [normalizedTrackId]
     );
 
+    const hasHls = hasHlsManifestForTrack(normalizedTrackId);
+
     return {
       id: normalizedTrackId,
       title: safeTitle,
       artist: safeArtist,
       audioUrl: rows[0]?.audioUrl ?? persisted.publicUrl,
       rawAudioUrl: rows[0]?.audioUrl ?? persisted.publicUrl,
+      hlsUrl: hasHls ? hlsManifestUrlForTrack(normalizedTrackId) : null,
+      hasHls,
       durationSec: finalDurationSec,
       explicit: explicitFlag,
       cover: safeCover,

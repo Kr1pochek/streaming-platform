@@ -49,7 +49,7 @@ export const searchCollections = [
   },
   {
     id: "genres",
-    title: "Жанры",
+    title: "Genres",
     gradient: "linear-gradient(135deg, #fde64b 0%, #f7a5a7 52%, #f49dd3 100%)",
   },
 ];

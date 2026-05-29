@@ -186,11 +186,15 @@ export default function SearchPage() {
   };
 
   const handleQueryChange = (value) => {
+    const nextNormalizedQuery = value.trim();
     setQuery(value);
     setSearchOffset(0);
-    if (!value.trim()) {
+    if (!nextNormalizedQuery) {
       setResultFilter("all");
       setSearchState(emptySearchState);
+      return;
+    }
+    if (nextNormalizedQuery === normalizedQuery && searchOffset === 0) {
       return;
     }
     setSearchState((prev) => ({

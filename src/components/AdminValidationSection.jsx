@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FiCheckCircle,
   FiChevronLeft,
@@ -31,6 +31,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat("ru-RU", {
   dateStyle: "medium",
   timeStyle: "short",
 });
+let validationHlsLoaderPromise = null;
+
+function loadValidationHlsLibrary() {
+  if (!validationHlsLoaderPromise) {
+    validationHlsLoaderPromise = import("hls.js").then((module) => module.default ?? module);
+  }
+  return validationHlsLoaderPromise;
+}
 
 function getInitialStatusFilter() {
   if (typeof window === "undefined") {
@@ -64,6 +72,117 @@ function resolveStatusLabel(status = "") {
     return "Черновик";
   }
   return "На проверке";
+}
+
+function ValidationAudioPreview({ track }) {
+  const audioRef = useRef(null);
+  const audioUrl = String(track?.audioUrl ?? "").trim();
+  const hlsUrl = String(track?.hlsUrl ?? "").trim();
+  const title = String(track?.title ?? "").trim() || "track";
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let hls = null;
+
+    const resetAudio = () => {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    };
+
+    const fallbackToAudio = () => {
+      if (cancelled || !audioUrl) {
+        return;
+      }
+      audio.src = audioUrl;
+      audio.load();
+    };
+
+    resetAudio();
+
+    if (!hlsUrl) {
+      fallbackToAudio();
+      return () => {
+        cancelled = true;
+        resetAudio();
+      };
+    }
+
+    const canUseNativeHls = audio.canPlayType("application/vnd.apple.mpegurl") !== "";
+
+    loadValidationHlsLibrary()
+      .then((HlsLibrary) => {
+        if (cancelled) {
+          return;
+        }
+
+        const canUseHlsJs = Boolean(
+          HlsLibrary && typeof HlsLibrary.isSupported === "function" && HlsLibrary.isSupported()
+        );
+
+        if (canUseHlsJs) {
+          hls = new HlsLibrary({
+            enableWorker: true,
+            backBufferLength: 90,
+          });
+          hls.attachMedia(audio);
+          hls.on(HlsLibrary.Events.MEDIA_ATTACHED, () => {
+            if (!cancelled) {
+              hls.loadSource(hlsUrl);
+            }
+          });
+          hls.on(HlsLibrary.Events.ERROR, (_event, data) => {
+            if (!data?.fatal || cancelled) {
+              return;
+            }
+            hls.destroy();
+            hls = null;
+            fallbackToAudio();
+          });
+          return;
+        }
+
+        if (canUseNativeHls) {
+          audio.src = hlsUrl;
+          audio.load();
+          return;
+        }
+
+        fallbackToAudio();
+      })
+      .catch(() => {
+        if (canUseNativeHls && !cancelled) {
+          audio.src = hlsUrl;
+          audio.load();
+          return;
+        }
+        fallbackToAudio();
+      });
+
+    return () => {
+      cancelled = true;
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      resetAudio();
+    };
+  }, [audioUrl, hlsUrl]);
+
+  return (
+    <audio
+      ref={audioRef}
+      className={styles.audioPreview}
+      controls
+      preload="none"
+      aria-label={`Preview ${title}`}
+    />
+  );
 }
 
 export default function AdminValidationSection({ refreshToken = 0, onChanged }) {
@@ -169,16 +288,34 @@ export default function AdminValidationSection({ refreshToken = 0, onChanged }) 
     });
   };
 
+  const updateReleaseInQueue = (releaseId, updates) => {
+    setQueueData((current) => ({
+      ...current,
+      releases: current.releases.map((release) => (release.id === releaseId ? { ...release, ...updates } : release)),
+    }));
+  };
+
   const handleApprove = async (release) => {
     setActionReleaseId(release.id);
     setError("");
     setFeedback("");
 
     try {
-      await approveAdminValidationRelease(release.id);
+      const response = await approveAdminValidationRelease(release.id);
+      const publishedAt = Number(response?.release?.publishedAt ?? Date.now());
+      updateReleaseInQueue(release.id, {
+        status: "published",
+        isPublished: true,
+        isPending: false,
+        publishedAt,
+        hiddenTrackCount: 0,
+        tracks: (release.tracks ?? []).map((track) => ({
+          ...track,
+          isHidden: false,
+          hiddenReason: "",
+        })),
+      });
       setFeedback(`Релиз "${release.title}" опубликован.`);
-      await loadQueue({ nextOffset: offset });
-      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось одобрить релиз.");
     } finally {
@@ -309,6 +446,7 @@ export default function AdminValidationSection({ refreshToken = 0, onChanged }) 
         <div className={styles.cardList}>
           {queueData.releases.map((release) => {
             const isRejected = release.status === "rejected";
+            const isPublished = release.status === "published";
             return (
               <article
                 key={release.id}
@@ -361,14 +499,8 @@ export default function AdminValidationSection({ refreshToken = 0, onChanged }) 
                           {track.artists} · {formatDurationClock(track.durationSec)} · {track.uploaderUsername}
                         </span>
                       </span>
-                      {track.audioUrl ? (
-                        <audio
-                          className={styles.audioPreview}
-                          controls
-                          preload="none"
-                          src={track.audioUrl}
-                          aria-label={`Прослушать ${track.title}`}
-                        />
+                      {track.audioUrl || track.hlsUrl ? (
+                        <ValidationAudioPreview track={track} />
                       ) : (
                         <span className={styles.audioUnavailable}>Нет аудио</span>
                       )}
@@ -380,16 +512,23 @@ export default function AdminValidationSection({ refreshToken = 0, onChanged }) 
                 </div>
 
                 <div className={styles.cardActions}>
-                  <button
-                    type="button"
-                    className={styles.actionPrimaryButton}
-                    disabled={actionReleaseId === release.id}
-                    onClick={() => void handleApprove(release)}
-                  >
-                    <FiCheckCircle />
-                    Одобрить и опубликовать
-                  </button>
-                  {isRejected ? (
+                  {isPublished ? (
+                    <button type="button" className={styles.actionPrimaryButton} disabled>
+                      <FiCheckCircle />
+                      Опубликовано
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.actionPrimaryButton}
+                      disabled={actionReleaseId === release.id}
+                      onClick={() => void handleApprove(release)}
+                    >
+                      <FiCheckCircle />
+                      Одобрить и опубликовать
+                    </button>
+                  )}
+                  {isPublished ? null : isRejected ? (
                     <button
                       type="button"
                       className={styles.actionDangerButton}

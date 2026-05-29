@@ -11,6 +11,7 @@ import {
   fetchCatalog,
   fetchArtists,
   hlsDirectory,
+  hlsManifestUrlForTrack,
   hasHlsManifestForTrack,
   isTrackAudioAvailable,
   isSystemPlaylist,
@@ -814,19 +815,26 @@ function mapAdminValidationReleaseRow(row = {}) {
   const release = mapAdminReleaseRow(row);
   const tracks = (Array.isArray(row.tracks) ? row.tracks : [])
     .filter((track) => track?.id)
-    .map((track) => ({
-      id: String(track.id ?? ""),
-      title: String(track.title ?? ""),
-      artists: String(track.artists ?? "") || "Unknown",
-      cover: String(track.cover ?? ""),
-      audioUrl: String(track.audioUrl ?? ""),
-      durationSec: Number(track.durationSec ?? 0),
-      explicit: Boolean(track.explicit),
-      isHidden: Boolean(track.isHidden),
-      hiddenReason: String(track.hiddenReason ?? ""),
-      uploaderUsername: String(track.uploaderUsername ?? "") || "system",
-      tags: sanitizeTrackTags(track.tags),
-    }));
+    .map((track) => {
+      const trackId = String(track.id ?? "");
+      const hasHls = hasHlsManifestForTrack(trackId);
+
+      return {
+        id: trackId,
+        title: String(track.title ?? ""),
+        artists: String(track.artists ?? "") || "Unknown",
+        cover: String(track.cover ?? ""),
+        audioUrl: String(track.audioUrl ?? ""),
+        hlsUrl: hasHls ? hlsManifestUrlForTrack(trackId) : null,
+        hasHls,
+        durationSec: Number(track.durationSec ?? 0),
+        explicit: Boolean(track.explicit),
+        isHidden: Boolean(track.isHidden),
+        hiddenReason: String(track.hiddenReason ?? ""),
+        uploaderUsername: String(track.uploaderUsername ?? "") || "system",
+        tags: sanitizeTrackTags(track.tags),
+      };
+    });
 
   return {
     ...release,

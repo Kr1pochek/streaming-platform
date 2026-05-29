@@ -318,6 +318,320 @@
   text-overflow: ellipsis;
 }
 
+.equalizerPanel {
+  position: absolute;
+  right: 28px;
+  bottom: 166px;
+  width: 426px;
+  min-height: 328px;
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #191919;
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.5);
+  color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  z-index: 6;
+}
+
+.equalizerHeader {
+  min-height: 52px;
+  padding: 24px 20px 0 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.equalizerTitle {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 800;
+}
+
+.equalizerGraph {
+  position: relative;
+  height: 190px;
+  padding: 0 28px 0 20px;
+}
+
+.equalizerBands {
+  position: absolute;
+  top: 0;
+  right: 28px;
+  left: 116px;
+  height: 174px;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 6px;
+}
+
+.equalizerBand {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 148px 20px;
+  justify-items: center;
+  align-items: end;
+  gap: 6px;
+  position: relative;
+}
+
+.equalizerBand::after {
+  content: "";
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  width: 9px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.equalizerBandLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.equalizerBandSlider {
+  width: 16px;
+  height: 148px;
+  margin: 0;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+.equalizerBandSlider:focus {
+  outline: none;
+}
+
+.equalizerBandSlider::-webkit-slider-runnable-track {
+  width: 2px;
+  height: 148px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: none;
+}
+
+.equalizerBandSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  margin-left: -6.5px;
+  background: #191919;
+  border: 1.5px solid #fff200;
+  box-shadow: none;
+}
+
+.equalizerBandSlider::-moz-range-track {
+  width: 2px;
+  height: 148px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.equalizerBandSlider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid #fff200;
+  background: #191919;
+  box-shadow: none;
+}
+
+.equalizerDbScale {
+  position: absolute;
+  top: 8px;
+  left: 68px;
+  height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.equalizerLevelBand {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 46px;
+  height: 174px;
+  display: grid;
+  grid-template-rows: 148px 20px;
+  justify-items: center;
+  align-items: end;
+  gap: 6px;
+}
+
+.equalizerLevelLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.equalizerLevelSlider {
+  width: 16px;
+  height: 148px;
+  margin: 0;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  background: transparent;
+  cursor: pointer;
+}
+
+.equalizerLevelSlider:focus {
+  outline: none;
+}
+
+.equalizerLevelSlider::-webkit-slider-runnable-track {
+  width: 2px;
+  height: 148px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: none;
+}
+
+.equalizerLevelSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  margin-left: -6.5px;
+  background: #191919;
+  border: 1.5px solid #fff200;
+  box-shadow: none;
+}
+
+.equalizerLevelSlider::-moz-range-track {
+  width: 2px;
+  height: 148px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.equalizerLevelSlider::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid #fff200;
+  background: #191919;
+  box-shadow: none;
+}
+
+.equalizerPresetWrap {
+  padding: 0 27px 30px 21px;
+}
+
+.equalizerPresetSelect {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 0 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.equalizerPresetSelect svg {
+  width: 17px;
+  height: 17px;
+  color: rgba(255, 255, 255, 0.78);
+  transition: transform 0.16s ease;
+}
+
+.equalizerPresetSelectOpen svg {
+  transform: rotate(180deg);
+}
+
+.equalizerPresetMenu {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 10px 0 14px;
+  background: #191919;
+  border-radius: inherit;
+  overflow-y: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.equalizerPresetMenu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.equalizerPresetMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.equalizerPresetMenu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.equalizerPresetOption {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.95);
+  padding: 0 26px 0 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.equalizerPresetOption:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.equalizerPresetOption svg {
+  width: 17px;
+  height: 17px;
+  justify-self: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
 .player {
   --player-radius: 20px;
   --player-timeline-padding: 12px;
@@ -688,7 +1002,7 @@
   display: grid;
   width: 100%;
   margin: 0;
-  grid-template-columns: minmax(208px, 1fr) minmax(336px, 392px) minmax(272px, 1fr);
+  grid-template-columns: minmax(190px, 0.85fr) minmax(336px, 392px) minmax(340px, 1.15fr);
   align-items: center;
   justify-content: stretch;
   gap: clamp(12px, 1.6vw, 22px);
@@ -1275,6 +1589,10 @@
 .queueClearButton:focus-visible,
 .queueItem:focus-visible,
 .queueActionButton:focus-visible,
+.equalizerBandSlider:focus-visible,
+.equalizerLevelSlider:focus-visible,
+.equalizerPresetSelect:focus-visible,
+.equalizerPresetOption:focus-visible,
 .iconButton:focus-visible,
 .playButton:focus-visible,
 .playerTimelineQualityButton:focus-visible,
@@ -1320,6 +1638,12 @@
     bottom: 158px;
   }
 
+  .equalizerPanel {
+    right: 22px;
+    bottom: 158px;
+    width: 384px;
+  }
+
   .player {
     --player-radius: 22px;
     min-height: 100px;
@@ -1334,7 +1658,7 @@
 
   .playerContent {
     width: 100%;
-    grid-template-columns: minmax(180px, 1fr) minmax(316px, 372px) minmax(236px, 1fr);
+    grid-template-columns: minmax(168px, 0.85fr) minmax(316px, 372px) minmax(318px, 1.15fr);
     gap: clamp(10px, 1.3vw, 16px);
   }
 
@@ -1389,6 +1713,14 @@
     width: auto;
     bottom: 232px;
     max-height: min(46vh, 430px);
+  }
+
+  .equalizerPanel {
+    right: 0;
+    left: 0;
+    width: auto;
+    bottom: 232px;
+    max-height: min(54vh, 500px);
   }
 
   .player {
@@ -1508,6 +1840,59 @@
     border-radius: 22px 22px 0 0;
     z-index: 12;
     box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.58);
+  }
+
+  .equalizerPanel {
+    left: 0;
+    right: 0;
+    bottom: 92px;
+    max-height: min(68dvh, 560px);
+    border-radius: 22px 22px 0 0;
+    z-index: 12;
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.58);
+  }
+
+  .equalizerGraph {
+    height: 172px;
+    padding: 0 12px;
+  }
+
+  .equalizerBands {
+    left: 100px;
+    right: 12px;
+    height: 154px;
+    gap: 4px;
+  }
+
+  .equalizerLevelBand {
+    left: 12px;
+    height: 154px;
+    grid-template-rows: 126px 18px;
+    gap: 5px;
+  }
+
+  .equalizerBand {
+    grid-template-rows: 126px 18px;
+    gap: 5px;
+  }
+
+  .equalizerLevelSlider,
+  .equalizerLevelSlider::-webkit-slider-runnable-track,
+  .equalizerLevelSlider::-moz-range-track,
+  .equalizerBandSlider,
+  .equalizerBandSlider::-webkit-slider-runnable-track,
+  .equalizerBandSlider::-moz-range-track {
+    height: 126px;
+  }
+
+  .equalizerBand::after {
+    top: 63px;
+  }
+
+  .equalizerDbScale {
+    top: 6px;
+    left: 56px;
+    height: 125px;
   }
 
   .queueRow {
@@ -1648,6 +2033,11 @@
   }
 
   .queuePanel {
+    bottom: 94px;
+    max-height: min(70dvh, 560px);
+  }
+
+  .equalizerPanel {
     bottom: 94px;
     max-height: min(70dvh, 560px);
   }

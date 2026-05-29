@@ -38,7 +38,7 @@ const EMBEDDED_TRACK_COVER_JPEG_QUALITY = 0.62;
 const MAX_EMBEDDED_TRACK_COVER_BACKGROUND_LENGTH = 1_400_000;
 const INITIAL_PROFILE_HISTORY_LIMIT = 6;
 const INITIAL_PROFILE_FOLLOWED_ARTISTS_LIMIT = 2;
-const UPLOAD_GENRE_DATALIST_ID = "upload-track-genre-suggestions";
+const UPLOAD_GENRE_SUGGESTIONS_ID = "upload-track-genre-suggestions";
 const EMPTY_UPLOAD_FORM = {
   audio: null,
   audioFiles: [],
@@ -68,7 +68,7 @@ const UPLOAD_METADATA_FALLBACK_TEXT =
 const UPLOAD_METADATA_SUBMIT_WAIT_TEXT =
   "\u041f\u043e\u0434\u043e\u0436\u0434\u0438, \u043f\u043e\u043a\u0430 \u0434\u043e\u0447\u0438\u0442\u0430\u044e\u0442\u0441\u044f \u043c\u0435\u0442\u0430\u0434\u0430\u043d\u043d\u044b\u0435 \u0444\u0430\u0439\u043b\u0430.";
 const UPLOAD_GENRE_HELP_TEXT =
-  "\u041c\u043e\u0436\u043d\u043e \u0432\u0432\u0435\u0441\u0442\u0438 \u0441\u0432\u043e\u0439 \u0436\u0430\u043d\u0440 \u0432\u0440\u0443\u0447\u043d\u0443\u044e \u0438\u043b\u0438 \u0431\u044b\u0441\u0442\u0440\u043e \u0432\u044b\u0431\u0440\u0430\u0442\u044c \u043e\u0434\u0438\u043d \u0438\u0437 \u043b\u0435\u043d\u0442\u044b \u043d\u0438\u0436\u0435.";
+  "\u041d\u0430\u0447\u043d\u0438 \u0432\u0432\u043e\u0434\u0438\u0442\u044c \u0436\u0430\u043d\u0440 - \u043f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0438 \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u043d\u0438\u0436\u0435. \u041c\u043e\u0436\u043d\u043e \u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0441\u0432\u043e\u0439 \u0432\u0430\u0440\u0438\u0430\u043d\u0442.";
 const UPLOAD_GENRE_ARIA_LABEL = "\u041f\u043e\u0434\u0441\u043a\u0430\u0437\u043a\u0438 \u043f\u043e \u0436\u0430\u043d\u0440\u0430\u043c";
 
 function readFileAsDataUrl(file) {
@@ -373,6 +373,7 @@ export default function ProfilePage() {
   const [uploadCoverFileName, setUploadCoverFileName] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadedTrackId, setUploadedTrackId] = useState("");
+  const [uploadGenreFocused, setUploadGenreFocused] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllFollowedArtists, setShowAllFollowedArtists] = useState(false);
   const uploadAudioMetadataRequestRef = useRef(0);
@@ -427,7 +428,7 @@ export default function ProfilePage() {
   const normalizedUploadGenre = uploadForm.genre.trim().toLowerCase();
   const visibleUploadGenres = useMemo(() => {
     if (!normalizedUploadGenre) {
-      return COMMON_MUSIC_GENRES;
+      return [];
     }
 
     const startsWithMatches = [];
@@ -445,8 +446,9 @@ export default function ProfilePage() {
     });
 
     const matchedGenres = [...startsWithMatches, ...containsMatches];
-    return matchedGenres.length ? matchedGenres : COMMON_MUSIC_GENRES;
+    return matchedGenres.slice(0, 8);
   }, [normalizedUploadGenre]);
+  const showUploadGenreSuggestions = uploadGenreFocused && visibleUploadGenres.length > 0;
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
@@ -670,6 +672,7 @@ export default function ProfilePage() {
       return;
     }
     setUploadError("");
+    setUploadGenreFocused(false);
     setUploadDialogOpen(false);
   };
 
@@ -692,6 +695,7 @@ export default function ProfilePage() {
     setUploadCoverFileName("");
     setUploadMetadataStatus("");
     setUploadMetadataProcessing(false);
+    setUploadGenreFocused(false);
     if (uploadAudioInputRef.current) {
       uploadAudioInputRef.current.value = "";
     }
@@ -710,6 +714,7 @@ export default function ProfilePage() {
 
   const handleSelectUploadGenre = (genre) => {
     handleUploadFieldChange("genre", genre);
+    setUploadGenreFocused(false);
   };
 
   const handleUploadAudioFileChange = async (event) => {
@@ -1842,38 +1847,54 @@ export default function ProfilePage() {
               ) : null}
             </div>
 
-            <label className={styles.authLabel}>
-              Жанр
-              <input
-                className={styles.authInput}
-                value={uploadForm.genre}
-                maxLength={40}
-                required
-                list={UPLOAD_GENRE_DATALIST_ID}
-                placeholder="Например, synthwave"
-                onChange={(event) => handleUploadFieldChange("genre", event.target.value)}
-              />
-            </label>
-            <datalist id={UPLOAD_GENRE_DATALIST_ID}>
-              {COMMON_MUSIC_GENRES.map((genre) => (
-                <option key={genre} value={genre} />
-              ))}
-            </datalist>
-            <p className={styles.genreHelperText}>{UPLOAD_GENRE_HELP_TEXT}</p>
-            <div className={styles.genreRail} role="list" aria-label={UPLOAD_GENRE_ARIA_LABEL}>
-              {visibleUploadGenres.map((genre) => {
-                const isActive = genre.toLowerCase() === normalizedUploadGenre;
-                return (
-                  <button
-                    key={genre}
-                    type="button"
-                    className={`${styles.genreChip} ${isActive ? styles.genreChipActive : ""}`.trim()}
-                    onClick={() => handleSelectUploadGenre(genre)}
-                  >
-                    {genre}
-                  </button>
-                );
-              })}
+            <div className={styles.genreField}>
+              <label className={styles.authLabel}>
+                Жанр
+                <input
+                  className={styles.authInput}
+                  value={uploadForm.genre}
+                  maxLength={40}
+                  required
+                  placeholder="Например, synthwave"
+                  aria-autocomplete="list"
+                  aria-controls={UPLOAD_GENRE_SUGGESTIONS_ID}
+                  aria-expanded={showUploadGenreSuggestions}
+                  onBlur={() => setUploadGenreFocused(false)}
+                  onChange={(event) => {
+                    handleUploadFieldChange("genre", event.target.value);
+                    setUploadGenreFocused(true);
+                  }}
+                  onFocus={() => setUploadGenreFocused(true)}
+                />
+              </label>
+              <p className={styles.genreHelperText}>{UPLOAD_GENRE_HELP_TEXT}</p>
+              {showUploadGenreSuggestions ? (
+                <div
+                  id={UPLOAD_GENRE_SUGGESTIONS_ID}
+                  className={styles.genreSuggestions}
+                  role="listbox"
+                  aria-label={UPLOAD_GENRE_ARIA_LABEL}
+                >
+                  {visibleUploadGenres.map((genre) => {
+                    const isActive = genre.toLowerCase() === normalizedUploadGenre;
+                    return (
+                      <button
+                        key={genre}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        className={`${styles.genreSuggestionButton} ${
+                          isActive ? styles.genreSuggestionButtonActive : ""
+                        }`.trim()}
+                        onClick={() => handleSelectUploadGenre(genre)}
+                        onPointerDown={(event) => event.preventDefault()}
+                      >
+                        {genre}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             {uploadForm.tracks.length > 1 ? (

@@ -51,6 +51,13 @@ const artistOrderMap = new Map(seedArtists.map((item, index) => [item.id, index]
 const artistNameMap = new Map(seedArtists.map((item) => [normalizeArtistName(item.name), item.id]));
 const CATALOG_CACHE_TTL_MS = Number(process.env.CATALOG_CACHE_TTL_MS ?? 4000);
 const blockedTrackTagKeys = new Set(["locura"]);
+const canonicalTrackTagMap = new Map([
+  ["рок", "rock"],
+  ["трэп", "trap"],
+  ["трэп метал", "trap metal"],
+  ["трэп-метал", "trap metal"],
+]);
+const MIN_FUZZY_SEARCH_SCORE = 48;
 let catalogCache = {
   value: null,
   expiresAt: 0,
@@ -81,7 +88,165 @@ export function normalizeTitle(value = "") {
 }
 
 function normalizeTrackTagKey(value = "") {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function canonicalizeTrackTag(value = "") {
+  const trimmedTag = String(value ?? "").trim();
+  const normalizedTagKey = normalizeTrackTagKey(trimmedTag);
+  return canonicalTrackTagMap.get(normalizedTagKey) ?? trimmedTag;
+}
+
+function canonicalTrackTagSql(alias = "tt") {
+  return `
+    lower(
+      case
+        when lower(replace(${alias}.tag, '-', ' ')) = 'трэп метал' then 'trap metal'
+        when lower(${alias}.tag) = 'трэп' then 'trap'
+        when lower(${alias}.tag) = 'рок' then 'rock'
+        else ${alias}.tag
+      end
+    )
+  `;
+}
+
+function uniqueNonEmptyValues(values = []) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    const normalizedValue = String(value ?? "").trim();
+    if (!normalizedValue || seen.has(normalizedValue)) {
+      continue;
+    }
+    seen.add(normalizedValue);
+    result.push(normalizedValue);
+  }
+  return result;
+}
+
+function normalizeKnownGenreWords(value = "") {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[_-]+/g, " ")
+    .replace(/(^|\s)т[рp][еэ]п(?=\s|$)/g, "$1trap")
+    .replace(/(^|\s)метал+л?(?=\s|$)/g, "$1metal")
+    .replace(/(^|\s)рок(?=\s|$)/g, "$1rock")
+    .replace(/\s+/g, " ");
+}
+
+function normalizeFuzzySearchText(value = "") {
+  return normalizeKnownGenreWords(canonicalizeTrackTag(value));
+}
+
+export function buildSearchQueryVariants(query = "") {
+  const rawQuery = normalizeTitle(query).toLowerCase();
+  return uniqueNonEmptyValues([
+    rawQuery,
+    normalizeTrackTagKey(rawQuery),
+    normalizeTrackTagKey(canonicalizeTrackTag(rawQuery)),
+    normalizeFuzzySearchText(rawQuery),
+  ]);
+}
+
+function levenshteinDistance(left = "", right = "") {
+  const leftLength = left.length;
+  const rightLength = right.length;
+  if (!leftLength) {
+    return rightLength;
+  }
+  if (!rightLength) {
+    return leftLength;
+  }
+
+  let previousRow = Array.from({ length: rightLength + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= leftLength; leftIndex += 1) {
+    const currentRow = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= rightLength; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      currentRow[rightIndex] = Math.min(
+        currentRow[rightIndex - 1] + 1,
+        previousRow[rightIndex] + 1,
+        previousRow[rightIndex - 1] + substitutionCost
+      );
+    }
+    previousRow = currentRow;
+  }
+
+  return previousRow[rightLength];
+}
+
+function editSimilarity(left = "", right = "") {
+  const maxLength = Math.max(left.length, right.length);
+  if (!maxLength) {
+    return 1;
+  }
+  return 1 - levenshteinDistance(left, right) / maxLength;
+}
+
+function tokenSimilarity(queryToken, fieldToken) {
+  if (!queryToken || !fieldToken) {
+    return 0;
+  }
+  if (queryToken === fieldToken) {
+    return 1;
+  }
+  if (fieldToken.startsWith(queryToken) || queryToken.startsWith(fieldToken)) {
+    return 0.9;
+  }
+  if (fieldToken.includes(queryToken) || queryToken.includes(fieldToken)) {
+    return 0.78;
+  }
+  return editSimilarity(queryToken, fieldToken);
+}
+
+function fuzzySearchScore(query = "", field = "") {
+  const normalizedQuery = normalizeFuzzySearchText(query);
+  const normalizedField = normalizeFuzzySearchText(field);
+  if (!normalizedQuery || !normalizedField) {
+    return 0;
+  }
+  if (normalizedField.includes(normalizedQuery)) {
+    return 100;
+  }
+  if (normalizedQuery.includes(normalizedField)) {
+    return Math.max(55, Math.round((normalizedField.length / normalizedQuery.length) * 90));
+  }
+
+  const queryTokens = normalizedQuery.split(/\s+/g).filter(Boolean);
+  const fieldTokens = normalizedField.split(/\s+/g).filter(Boolean);
+  if (!queryTokens.length || !fieldTokens.length) {
+    return 0;
+  }
+
+  const tokenScore =
+    queryTokens.reduce((total, queryToken) => {
+      const bestTokenScore = fieldTokens.reduce(
+        (best, fieldToken) => Math.max(best, tokenSimilarity(queryToken, fieldToken)),
+        0
+      );
+      return total + bestTokenScore;
+    }, 0) / queryTokens.length;
+
+  return Math.round(Math.max(editSimilarity(normalizedQuery, normalizedField), tokenScore) * 100);
+}
+
+export function rankFuzzySearchItems(items = [], query = "", getFields = () => [], limit = 12) {
+  return items
+    .map((item) => {
+      const fields = uniqueNonEmptyValues(getFields(item));
+      const score = fields.reduce((best, field) => Math.max(best, fuzzySearchScore(query, field)), 0);
+      return { item, score };
+    })
+    .filter(({ score }) => score >= MIN_FUZZY_SEARCH_SCORE)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit)
+    .map(({ item }) => item);
 }
 
 export function sanitizeTrackTags(tags = []) {
@@ -90,13 +255,13 @@ export function sanitizeTrackTags(tags = []) {
   const filteredTags = [];
 
   for (const tag of safeTags) {
-    const trimmedTag = String(tag ?? "").trim();
-    const normalizedTagKey = normalizeTrackTagKey(trimmedTag);
+    const canonicalTag = canonicalizeTrackTag(tag);
+    const normalizedTagKey = normalizeTrackTagKey(canonicalTag);
     if (!normalizedTagKey || blockedTrackTagKeys.has(normalizedTagKey) || seen.has(normalizedTagKey)) {
       continue;
     }
     seen.add(normalizedTagKey);
-    filteredTags.push(trimmedTag);
+    filteredTags.push(canonicalTag);
   }
 
   return filteredTags;
@@ -1079,6 +1244,94 @@ function clampInteger(value, fallback, min, max) {
   return Math.min(Math.max(parsed, min), max);
 }
 
+function hasSearchResultItems(result = {}) {
+  return Boolean(
+    result.tracks?.length ||
+      result.playlists?.length ||
+      result.artists?.length ||
+      result.albums?.length
+  );
+}
+
+function buildFuzzySearchResult({
+  catalog,
+  query,
+  normalizedFilter,
+  limit,
+  offset,
+} = {}) {
+  const includeTracks = normalizedFilter === "all" || normalizedFilter === "tracks";
+  const includePlaylists = normalizedFilter === "all" || normalizedFilter === "playlists";
+  const includeArtists = normalizedFilter === "all" || normalizedFilter === "artists";
+  const includeAlbums = normalizedFilter === "all" || normalizedFilter === "albums";
+  const trackMap = catalog?.trackMap ?? Object.fromEntries((catalog?.tracks ?? []).map((track) => [track.id, track]));
+
+  const tracks = includeTracks
+    ? rankFuzzySearchItems(
+        catalog?.tracks ?? [],
+        query,
+        (track) => [track.title, track.artist, ...(Array.isArray(track.tags) ? track.tags : [])],
+        limit
+      )
+    : [];
+
+  const playlists = includePlaylists
+    ? rankFuzzySearchItems(
+        catalog?.playlists ?? [],
+        query,
+        (playlist) => [
+          playlist.title,
+          normalizePlaylistSubtitle(playlist.subtitle),
+          ...(playlist.trackIds ?? []).flatMap((trackId) => {
+            const track = trackMap[trackId];
+            return track ? [track.title, track.artist, ...(Array.isArray(track.tags) ? track.tags : [])] : [];
+          }),
+        ],
+        limit
+      )
+    : [];
+
+  const artists = includeArtists
+    ? rankFuzzySearchItems(catalog?.artists ?? [], query, (artist) => [artist.name], limit)
+    : [];
+
+  const albums = includeAlbums
+    ? rankFuzzySearchItems(
+        catalog?.releases ?? [],
+        query,
+        (release) => [
+          release.title,
+          release.artistName,
+          release.type,
+          release.year,
+          ...(release.trackIds ?? []).flatMap((trackId) => {
+            const track = trackMap[trackId];
+            return track ? [track.title, track.artist, ...(Array.isArray(track.tags) ? track.tags : [])] : [];
+          }),
+        ],
+        limit
+      )
+    : [];
+
+  return {
+    tracks,
+    playlists,
+    artists,
+    albums,
+    pagination: {
+      limit,
+      offset,
+      hasMore: false,
+      nextOffset: null,
+      tracksHasMore: false,
+      playlistsHasMore: false,
+      artistsHasMore: false,
+      albumsHasMore: false,
+      fuzzy: true,
+    },
+  };
+}
+
 export async function searchCatalogInDatabase({
   query,
   filter = "all",
@@ -1089,8 +1342,9 @@ export async function searchCatalogInDatabase({
   const normalizedFilter = normalizeTitle(filter).toLowerCase() || "all";
   const safeLimit = clampInteger(limit, 12, 1, 50);
   const safeOffset = clampInteger(offset, 0, 0, 10_000);
+  const queryVariants = buildSearchQueryVariants(normalizedQuery);
 
-  if (!normalizedQuery) {
+  if (!queryVariants.length) {
     return {
       tracks: [],
       playlists: [],
@@ -1105,7 +1359,7 @@ export async function searchCatalogInDatabase({
     };
   }
 
-  const pattern = `%${normalizedQuery}%`;
+  const patterns = queryVariants.map((queryVariant) => `%${queryVariant}%`);
   const limitPlusOne = safeLimit + 1;
   const trackLimitWithBuffer = safeLimit * 4 + 1;
   const includeTracks = normalizedFilter === "all" || normalizedFilter === "tracks";
@@ -1152,26 +1406,26 @@ export async function searchCatalogInDatabase({
       where
         coalesce(t.is_hidden, false) = false
         and (
-          lower(t.title) like $1
+          lower(t.title) like any($1::text[])
         or exists (
           select 1
           from track_tags tt
           where tt.track_id = t.id
-            and lower(tt.tag) like $1
+            and ${canonicalTrackTagSql("tt")} like any($1::text[])
         )
         or exists (
           select 1
           from track_artists ta
           join artists a on a.id = ta.artist_id
           where ta.track_id = t.id
-            and lower(a.name) like $1
+            and lower(a.name) like any($1::text[])
         )
         )
       order by t.title
       limit $2
       offset $3;
     `,
-      [pattern, trackLimitWithBuffer, safeOffset]
+      [patterns, trackLimitWithBuffer, safeOffset]
     );
     rawTracks = rows;
   }
@@ -1198,20 +1452,20 @@ export async function searchCatalogInDatabase({
         ) as "trackIds"
       from playlists p
       where
-        lower(p.title) like $1
-        or lower(coalesce(p.subtitle, '')) like $1
+        lower(p.title) like any($1::text[])
+        or lower(coalesce(p.subtitle, '')) like any($1::text[])
         or exists (
           select 1
           from playlist_tracks pt
           join track_tags tt on tt.track_id = pt.track_id
           where pt.playlist_id = p.id
-            and lower(tt.tag) like $1
+            and ${canonicalTrackTagSql("tt")} like any($1::text[])
         )
       order by p.title
       limit $2
       offset $3;
     `,
-      [pattern, limitPlusOne, safeOffset]
+      [patterns, limitPlusOne, safeOffset]
     );
     rawPlaylists = rows;
   }
@@ -1222,19 +1476,19 @@ export async function searchCatalogInDatabase({
       select
         ${artistSummarySelect("a")}
       from artists a
-      where lower(a.name) like $1
+      where lower(a.name) like any($1::text[])
          or exists (
            select 1
            from track_artists ta
            join track_tags tt on tt.track_id = ta.track_id
            where ta.artist_id = a.id
-             and lower(tt.tag) like $1
+             and ${canonicalTrackTagSql("tt")} like any($1::text[])
          )
       order by a.name
       limit $2
       offset $3;
     `,
-      [pattern, limitPlusOne, safeOffset]
+      [patterns, limitPlusOne, safeOffset]
     );
     rawArtists = rows;
   }
@@ -1263,21 +1517,21 @@ export async function searchCatalogInDatabase({
       where
         coalesce(nullif(r.status, ''), 'published') = 'published'
         and (
-          lower(r.title) like $1
-        or lower(a.name) like $1
+          lower(r.title) like any($1::text[])
+        or lower(a.name) like any($1::text[])
         or exists (
           select 1
           from release_tracks rt
           join track_tags tt on tt.track_id = rt.track_id
           where rt.release_id = r.id
-            and lower(tt.tag) like $1
+            and ${canonicalTrackTagSql("tt")} like any($1::text[])
         )
         )
       order by coalesce(r.published_at, r.created_at, 0) desc, r.year desc, r.title
       limit $2
       offset $3;
     `,
-      [pattern, limitPlusOne, safeOffset]
+      [patterns, limitPlusOne, safeOffset]
     );
     rawAlbums = rows;
   }
@@ -1318,7 +1572,7 @@ export async function searchCatalogInDatabase({
   }))
     .filter((album) => visibleReleaseIdSet.has(album.id));
 
-  return {
+  const result = {
     tracks,
     playlists,
     artists,
@@ -1334,6 +1588,21 @@ export async function searchCatalogInDatabase({
       albumsHasMore,
     },
   };
+
+  if (safeOffset > 0 || hasSearchResultItems(result)) {
+    return result;
+  }
+
+  const fuzzyCatalog = catalog ?? await fetchCatalog();
+  const fuzzyResult = buildFuzzySearchResult({
+    catalog: fuzzyCatalog,
+    query: normalizedQuery,
+    normalizedFilter,
+    limit: safeLimit,
+    offset: safeOffset,
+  });
+
+  return hasSearchResultItems(fuzzyResult) ? fuzzyResult : result;
 }
 
 export async function fetchCatalog() {

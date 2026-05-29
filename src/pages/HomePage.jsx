@@ -1,21 +1,29 @@
 ﻿import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FiArrowRight,
   FiBell,
+  FiCheck,
+  FiChevronDown,
   FiChevronLeft,
   FiChevronRight,
+  FiChevronUp,
+  FiCloudRain,
+  FiCoffee,
   FiHeadphones,
   FiHeart,
   FiMoreHorizontal,
+  FiMoon,
   FiMusic,
   FiRadio,
+  FiSun,
+  FiTarget,
   FiTrendingUp,
+  FiX,
   FiZap,
 } from "react-icons/fi";
 import { BsFillPauseFill, BsFillPlayFill, BsHeartFill } from "react-icons/bs";
 import { LuHeart } from "react-icons/lu";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./HomePage.module.css";
 import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
@@ -28,8 +36,83 @@ import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
 import { buildWaveQueuePlan } from "../../shared/waveRecommendations.js";
+import { COMMON_MUSIC_GENRES } from "../../shared/musicGenres.js";
 import CardActionMenu from "../components/CardActionMenu.jsx";
 import useCardActionMenu from "../hooks/useCardActionMenu.js";
+
+const genreLabelOverrides = new Map([
+  ["edm", "EDM"],
+  ["hip-hop", "Hip-Hop"],
+  ["j-pop", "J-Pop"],
+  ["j-rock", "J-Rock"],
+  ["k-pop", "K-Pop"],
+  ["lo-fi", "Lo-Fi"],
+  ["r&b", "R&B"],
+  ["uk garage", "UK Garage"],
+]);
+
+const homeGenreAliases = new Map([
+  ["рок", "rock"],
+  ["трэп", "trap"],
+  ["трэп метал", "trap metal"],
+]);
+
+function normalizeHomeGenreAliasKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function resolveHomeGenreValue(value) {
+  const rawValue = String(value ?? "").trim();
+  const normalizedValue = normalizeHomeGenreAliasKey(rawValue);
+  const looseValue = normalizedValue.replace(/-/g, " ");
+  return homeGenreAliases.get(normalizedValue) ?? homeGenreAliases.get(looseValue) ?? rawValue;
+}
+
+function formatHomeGenreLabel(value) {
+  const rawValue = resolveHomeGenreValue(value);
+  const normalizedValue = rawValue.toLowerCase();
+  if (!normalizedValue) {
+    return "";
+  }
+  if (genreLabelOverrides.has(normalizedValue)) {
+    return genreLabelOverrides.get(normalizedValue);
+  }
+
+  return normalizedValue
+    .split(/([\s-]+)/)
+    .map((part) => {
+      if (/^[\s-]+$/.test(part)) {
+        return part;
+      }
+      return part ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : part;
+    })
+    .join("");
+}
+
+function normalizeHomeGenreKey(value) {
+  return resolveHomeGenreValue(value)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function collectTrackGenreKeys(track) {
+  const values = [track?.genre, ...(Array.isArray(track?.tags) ? track.tags : [])];
+  return new Set(values.map((value) => normalizeHomeGenreKey(value)).filter(Boolean));
+}
+
+function getHomeMoodTracks(mood, tracks = []) {
+  const moodGenreKeys = new Set(mood.genres.map((genre) => normalizeHomeGenreKey(genre)).filter(Boolean));
+
+  return tracks.filter((track) => {
+    const trackGenreKeys = collectTrackGenreKeys(track);
+    return [...trackGenreKeys].some((genreKey) => moodGenreKeys.has(genreKey));
+  });
+}
 
 const actionIcons = {
   wave: FiRadio,
@@ -40,6 +123,82 @@ const releaseDateFormatter = new Intl.DateTimeFormat("ru-RU", {
   day: "numeric",
   month: "short",
 });
+const HOME_GENRE_PREVIEW_LIMIT = 18;
+const HOME_MOOD_GROUPS = [
+  {
+    id: "calm",
+    label: "Спокойное",
+    icon: FiCoffee,
+    accent: "#8ed7ff",
+    glow: "rgba(142, 215, 255, 0.32)",
+    wash: "rgba(142, 215, 255, 0.13)",
+    genres: ["ambient", "lo-fi", "neo-soul", "piano", "folk", "dream pop", "classical", "minimal"],
+  },
+  {
+    id: "sad",
+    label: "Грустное",
+    icon: FiCloudRain,
+    accent: "#aab9ff",
+    glow: "rgba(170, 185, 255, 0.32)",
+    wash: "rgba(170, 185, 255, 0.13)",
+    genres: ["emo", "blues", "shoegaze", "post-punk", "indie rock", "screamo", "soul"],
+  },
+  {
+    id: "bright",
+    label: "Бодрое",
+    icon: FiSun,
+    accent: "#ffdf5a",
+    glow: "rgba(255, 223, 90, 0.34)",
+    wash: "rgba(255, 223, 90, 0.15)",
+    genres: ["dance", "edm", "house", "techno", "hyperpop", "pop", "synth-pop", "electro", "trap"],
+  },
+  {
+    id: "dark",
+    label: "Мрачное",
+    icon: FiMoon,
+    accent: "#ff6f8f",
+    glow: "rgba(255, 111, 143, 0.32)",
+    wash: "rgba(255, 111, 143, 0.13)",
+    genres: [
+      "dark ambient",
+      "death metal",
+      "industrial",
+      "industrial metal",
+      "phonk",
+      "horrorcore",
+      "metal",
+      "nu metal",
+      "trap metal",
+    ],
+  },
+  {
+    id: "romantic",
+    label: "Романтичное",
+    icon: FiHeart,
+    accent: "#ff9fba",
+    glow: "rgba(255, 159, 186, 0.32)",
+    wash: "rgba(255, 159, 186, 0.13)",
+    genres: ["r&b", "neo-soul", "soul", "pop", "indie pop", "dream pop", "jazz"],
+  },
+  {
+    id: "focus",
+    label: "Фокус",
+    icon: FiTarget,
+    accent: "#8ef0bd",
+    glow: "rgba(142, 240, 189, 0.3)",
+    wash: "rgba(142, 240, 189, 0.13)",
+    genres: ["ambient", "minimal", "deep house", "classical", "soundtrack", "lo-fi", "piano"],
+  },
+  {
+    id: "party",
+    label: "Вечеринка",
+    icon: FiZap,
+    accent: "#ff985f",
+    glow: "rgba(255, 152, 95, 0.34)",
+    wash: "rgba(255, 152, 95, 0.14)",
+    genres: ["trap", "dancehall", "reggaeton", "bass", "dubstep", "uk garage", "tech house", "drum and bass"],
+  },
+];
 
 function trackWord(count) {
   const safeCount = Math.max(0, Number(count ?? 0));
@@ -102,6 +261,8 @@ export default function HomePage() {
     progressSec,
     durationLabel,
     queue,
+    queueSource,
+    waveQueue,
     playTrack,
     playQueue,
     togglePlay,
@@ -118,6 +279,10 @@ export default function HomePage() {
   } = useCardActionMenu();
   const lastWaveQueueRef = useRef([]);
   const releaseRailRef = useRef(null);
+  const moodPopoverRef = useRef(null);
+  const [showAllHomeGenres, setShowAllHomeGenres] = useState(false);
+  const [selectedHomeMoodId, setSelectedHomeMoodId] = useState("");
+  const [isMoodMenuOpen, setIsMoodMenuOpen] = useState(false);
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -134,12 +299,43 @@ export default function HomePage() {
     : 14;
   const catalogState = data?.catalogState ?? {};
   const updatedArtistCount = new Set(releaseNotifications.map((item) => item.artistId).filter(Boolean)).size;
+  const homeGenreTags = useMemo(() => {
+    const seenGenres = new Set();
+
+    return [...(data?.vibeTags ?? []), ...COMMON_MUSIC_GENRES]
+      .map((genre) => formatHomeGenreLabel(genre))
+      .filter((genre) => {
+        const normalizedGenre = genre.toLowerCase();
+        if (!normalizedGenre || seenGenres.has(normalizedGenre)) {
+          return false;
+        }
+        seenGenres.add(normalizedGenre);
+        return true;
+      });
+  }, [data?.vibeTags]);
+  const selectedHomeMood = HOME_MOOD_GROUPS.find((mood) => mood.id === selectedHomeMoodId) ?? null;
+  const activeHomeGenreTags = selectedHomeMood
+    ? selectedHomeMood.genres.map((genre) => formatHomeGenreLabel(genre)).filter(Boolean)
+    : homeGenreTags;
+  const visibleHomeGenreTags = showAllHomeGenres
+    ? activeHomeGenreTags
+    : activeHomeGenreTags.slice(0, HOME_GENRE_PREVIEW_LIMIT);
+  const hiddenHomeGenreCount = Math.max(0, activeHomeGenreTags.length - HOME_GENRE_PREVIEW_LIMIT);
+  const canToggleHomeGenres = activeHomeGenreTags.length > HOME_GENRE_PREVIEW_LIMIT;
 
   const freshTracks = useMemo(
     () => (data?.freshTrackIds ?? []).map((id) => trackMap[id]).filter(Boolean),
     [data?.freshTrackIds, trackMap]
   );
   const catalogTracks = useMemo(() => Object.values(trackMap).filter((track) => track?.id), [trackMap]);
+  const moodTrackCounts = useMemo(
+    () =>
+      HOME_MOOD_GROUPS.reduce((counts, mood) => {
+        counts[mood.id] = getHomeMoodTracks(mood, catalogTracks).length;
+        return counts;
+      }, {}),
+    [catalogTracks]
+  );
   const freshTrackColumns = useMemo(() => {
     const midpoint = Math.ceil(freshTracks.length / 2);
     return [freshTracks.slice(0, midpoint), freshTracks.slice(midpoint)].filter((column) => column.length);
@@ -148,12 +344,47 @@ export default function HomePage() {
   const visibleTrackCount = Number(catalogState.visibleTracks ?? freshTracks.length);
   const isCatalogEmpty = status === "success" && visibleTrackCount === 0 && !releaseNotifications.length;
   const waveButtonDisabled = !isCatalogEmpty && !catalogTracks.length;
+  const ActiveMoodIcon = selectedHomeMood?.icon ?? FiMusic;
+  const selectedHomeMoodTrackCount = selectedHomeMood ? moodTrackCounts[selectedHomeMood.id] ?? 0 : catalogTracks.length;
+  const moodButtonStyle = {
+    "--mood-accent": selectedHomeMood?.accent ?? "#f5cc46",
+    "--mood-glow": selectedHomeMood?.glow ?? "rgba(245, 204, 70, 0.32)",
+    "--mood-wash": selectedHomeMood?.wash ?? "rgba(245, 204, 70, 0.14)",
+  };
   const isCurrentTrackFinished =
     Boolean(currentTrack?.durationSec) && progressSec >= Math.max(currentTrack.durationSec - 0.25, 0);
+  const isWavePlaybackActive = queueSource === "wave" && waveQueue.length > 0 && !isCurrentTrackFinished;
 
   useEffect(() => {
     lastWaveQueueRef.current = [];
   }, [likedIds]);
+
+  useEffect(() => {
+    if (!isMoodMenuOpen || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (moodPopoverRef.current?.contains(event.target)) {
+        return;
+      }
+      setIsMoodMenuOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsMoodMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMoodMenuOpen]);
 
   const buildHomeWavePlan = useCallback(
     () =>
@@ -165,7 +396,7 @@ export default function HomePage() {
   );
 
   const handleWaveAction = useCallback(() => {
-    if (isPlaying) {
+    if (isWavePlaybackActive) {
       togglePlay();
       return;
     }
@@ -175,7 +406,11 @@ export default function HomePage() {
       return;
     }
 
-    if (queue.length && areTrackQueuesEqual(queue, lastWaveQueueRef.current) && !isCurrentTrackFinished) {
+    if (
+      queue.length &&
+      (queueSource === "wave" || areTrackQueuesEqual(queue, lastWaveQueueRef.current)) &&
+      !isCurrentTrackFinished
+    ) {
       togglePlay();
       return;
     }
@@ -187,8 +422,43 @@ export default function HomePage() {
     }
 
     lastWaveQueueRef.current = waveQueuePlan.trackIds;
-    playQueue(waveQueuePlan.trackIds, waveQueuePlan.startIndex);
-  }, [buildHomeWavePlan, catalogTracks.length, isCurrentTrackFinished, isPlaying, notify, playQueue, queue, togglePlay]);
+    playQueue(waveQueuePlan.trackIds, waveQueuePlan.startIndex, { source: "wave" });
+  }, [buildHomeWavePlan, catalogTracks.length, isCurrentTrackFinished, isWavePlaybackActive, notify, playQueue, queue, queueSource, togglePlay]);
+
+  const handleMoodSelect = useCallback(
+    (mood) => {
+      const moodTracks = getHomeMoodTracks(mood, catalogTracks);
+
+      setSelectedHomeMoodId(mood.id);
+      setShowAllHomeGenres(false);
+      setIsMoodMenuOpen(false);
+
+      if (!moodTracks.length) {
+        notify(`Пока нет треков под настроение «${mood.label}».`);
+        return;
+      }
+
+      const moodQueuePlan = buildWaveQueuePlan(moodTracks, {
+        likedTrackIds: likedIds,
+        limit: Math.min(moodTracks.length, 18),
+      });
+
+      if (!moodQueuePlan.trackIds.length) {
+        notify(`Пока нет треков под настроение «${mood.label}».`);
+        return;
+      }
+
+      playQueue(moodQueuePlan.trackIds, moodQueuePlan.startIndex);
+      notify(`Запускаю настроение: ${mood.label}.`);
+    },
+    [catalogTracks, likedIds, notify, playQueue]
+  );
+
+  const handleMoodReset = useCallback(() => {
+    setSelectedHomeMoodId("");
+    setShowAllHomeGenres(false);
+    setIsMoodMenuOpen(false);
+  }, []);
 
   const scrollReleaseRail = useCallback((direction) => {
     const rail = releaseRailRef.current;
@@ -286,28 +556,143 @@ export default function HomePage() {
                 disabled={waveButtonDisabled}
                 onClick={isCatalogEmpty ? () => navigate("/search") : handleWaveAction}
               >
-                {isCatalogEmpty ? <FiArrowRight /> : isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
-                {isCatalogEmpty ? "Перейти в поиск" : isPlaying ? "Пауза" : "Слушать волну"}
+                {isWavePlaybackActive && isPlaying ? <BsFillPauseFill /> : <BsFillPlayFill />}
+                {isCatalogEmpty ? "Перейти в поиск" : isWavePlaybackActive && isPlaying ? "Пауза" : "Слушать волну"}
               </button>
+              {!isCatalogEmpty ? (
+                <div className={styles.moodPopoverAnchor} ref={moodPopoverRef}>
+                  <button
+                    type="button"
+                    className={`${styles.moodHeroButton} ${
+                      selectedHomeMood ? styles.moodHeroButtonActive : ""
+                    }`.trim()}
+                    style={moodButtonStyle}
+                    aria-haspopup="listbox"
+                    aria-expanded={isMoodMenuOpen}
+                    aria-controls="home-mood-menu"
+                    aria-label={
+                      selectedHomeMood
+                        ? `Настроение: ${selectedHomeMood.label}, ${selectedHomeMoodTrackCount} ${trackWord(
+                            selectedHomeMoodTrackCount
+                          )}`
+                        : "Выбрать настроение"
+                    }
+                    onClick={() => setIsMoodMenuOpen((current) => !current)}
+                  >
+                    <span className={styles.moodHeroButtonIcon}>
+                      <ActiveMoodIcon aria-hidden="true" />
+                    </span>
+                    <span className={styles.moodHeroButtonText}>
+                      <span className={styles.moodHeroButtonLabel}>Настроение</span>
+                      <span className={styles.moodHeroButtonValue}>{selectedHomeMood?.label ?? "Выбрать"}</span>
+                    </span>
+                    {isMoodMenuOpen ? <FiChevronUp aria-hidden="true" /> : <FiChevronDown aria-hidden="true" />}
+                  </button>
+
+                  {isMoodMenuOpen ? (
+                    <div className={styles.moodMenuWrap} id="home-mood-menu">
+                      <div className={styles.moodMenuHeader}>
+                        <div>
+                          <span className={styles.moodRailLabel}>Mood Engine</span>
+                          <p className={styles.moodMenuTitle}>
+                            {selectedHomeMood ? `Активно: ${selectedHomeMood.label}` : "Выбери настроение"}
+                          </p>
+                        </div>
+                        <span className={styles.moodTrackBadge}>
+                          {selectedHomeMoodTrackCount} {trackWord(selectedHomeMoodTrackCount)}
+                        </span>
+                      </div>
+                      <div className={styles.moodOptionGrid} role="listbox" aria-label="Настроение">
+                        {HOME_MOOD_GROUPS.map((mood) => {
+                          const isActiveMood = mood.id === selectedHomeMoodId;
+                          const MoodIcon = mood.icon;
+                          const moodTrackCount = moodTrackCounts[mood.id] ?? 0;
+                          return (
+                            <button
+                              key={mood.id}
+                              type="button"
+                              role="option"
+                              aria-selected={isActiveMood}
+                              aria-label={`${mood.label}: ${moodTrackCount} ${trackWord(moodTrackCount)}`}
+                              className={`${styles.moodOptionButton} ${
+                                isActiveMood ? styles.moodOptionButtonActive : ""
+                              }`.trim()}
+                              style={{
+                                "--mood-accent": mood.accent,
+                                "--mood-glow": mood.glow,
+                                "--mood-wash": mood.wash,
+                              }}
+                              onClick={() => handleMoodSelect(mood)}
+                            >
+                              <span className={styles.moodOptionIcon}>
+                                <MoodIcon aria-hidden="true" />
+                              </span>
+                              <span className={styles.moodOptionBody}>
+                                <span className={styles.moodOptionTitle}>{mood.label}</span>
+                                <span className={styles.moodOptionMeta}>
+                                  {moodTrackCount} {trackWord(moodTrackCount)}
+                                </span>
+                              </span>
+                              <span className={styles.moodOptionSignal}>
+                                {isActiveMood ? <FiCheck aria-hidden="true" /> : null}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedHomeMood ? (
+                        <button type="button" className={styles.moodResetButton} onClick={handleMoodReset}>
+                          <FiX aria-hidden="true" />
+                          <span>All genres</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <button type="button" className={styles.secondaryButton} onClick={() => navigate("/library")}>
                 Открыть библиотеку
-                <FiArrowRight />
               </button>
             </div>
 
             {!isCatalogEmpty ? (
-              <div className={styles.vibeRow}>
-                {(data?.vibeTags ?? []).map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className={styles.vibeTag}
-                    data-testid="home-vibe-tag"
-                    onClick={() => navigate("/search", { state: { initialQuery: tag } })}
-                  >
-                    {tag}
-                  </button>
-                ))}
+              <div className={styles.genreArea}>
+                <div
+                  className={`${styles.vibeRow} ${showAllHomeGenres ? styles.vibeRowExpanded : ""}`.trim()}
+                  aria-label={selectedHomeMood ? "Selected mood genres" : "Genres"}
+                >
+                  {visibleHomeGenreTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={styles.vibeTag}
+                      data-testid="home-vibe-tag"
+                      onClick={() => navigate("/search", { state: { initialQuery: tag } })}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                  {canToggleHomeGenres ? (
+                    <button
+                      type="button"
+                      className={styles.vibeToggleButton}
+                      aria-expanded={showAllHomeGenres}
+                      onClick={() => setShowAllHomeGenres((current) => !current)}
+                    >
+                      {showAllHomeGenres ? (
+                        <>
+                          Collapse
+                          <FiChevronUp />
+                        </>
+                      ) : (
+                        <>
+                          More {hiddenHomeGenreCount}
+                          <FiChevronDown />
+                        </>
+                      )}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
@@ -391,8 +776,14 @@ export default function HomePage() {
           <>
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
-                <h2 className={styles.sectionHeading}>Новые релизы</h2>
-                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+                <button
+                  type="button"
+                  className={styles.sectionTitleButton}
+                  onClick={() => navigate("/releases")}
+                >
+                  <h2 className={styles.sectionHeading}>Новые релизы</h2>
+                  <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+                </button>
               </div>
               {releaseNotifications.length ? (
                 <div className={styles.releaseHub}>
@@ -485,7 +876,7 @@ export default function HomePage() {
                             className={styles.releaseFeedSecondaryButton}
                             onClick={() => navigate(`/artist/${item.artistId}`)}
                           >
-                            <FiArrowRight />
+                            <FiMusic />
                             К артисту
                           </button>
                         </div>
@@ -506,7 +897,6 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.sectionHeading}>Быстрый старт</h2>
-                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
               <div className={styles.actionGrid}>
                 {(data?.quickActions ?? []).map((item) => {
@@ -534,7 +924,6 @@ export default function HomePage() {
                         <span className={styles.actionTitle}>{item.title}</span>
                         <span className={styles.actionSubtitle}>{item.subtitle}</span>
                       </span>
-                      <FiArrowRight className={styles.actionArrow} />
                     </button>
                   );
                 })}
@@ -544,7 +933,6 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.sectionHeading}>{isCompactCatalog ? "Доступно прямо сейчас" : "Свежие подборки"}</h2>
-                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
               <div className={styles.showcaseGrid}>
                 {(data?.showcases ?? []).map((item) => {
@@ -607,7 +995,6 @@ export default function HomePage() {
             <section className={styles.section}>
               <div className={styles.sectionTitleRow}>
                 <h2 className={styles.sectionHeading}>{isCompactCatalog ? "Все доступные треки" : "На волне"}</h2>
-                <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
               </div>
               <div
                 className={`${styles.trackGrid} ${freshTrackColumns.length === 1 ? styles.trackGridSingle : ""}`.trim()}

@@ -8,8 +8,11 @@ import {
 import useAuth from "../hooks/useAuth.js";
 import { formatDuration } from "../utils/formatters.js";
 import PlayerContext from "./playerContext.js";
+import { buildWaveQueuePlan } from "../../shared/waveRecommendations.js";
 
 const repeatModes = ["off", "all", "one"];
+const WAVE_QUEUE_SOURCE = "wave";
+const WAVE_QUEUE_LIMIT = 18;
 const REMOTE_STATE_PROGRESS_STEP_SEC = 15;
 const REMOTE_STATE_SAVE_DELAY_IDLE_MS = 450;
 const REMOTE_STATE_SAVE_DELAY_PLAYING_MS = 1_200;
@@ -20,9 +23,55 @@ let trackMap = Object.create(null);
 let artistMap = Object.create(null);
 const STORAGE_KEY = "music.player.state.v1";
 let hlsLoaderPromise = null;
+const CUSTOM_EQUALIZER_PRESET_ID = "custom";
+const EQUALIZER_GAIN_MIN = -12;
+const EQUALIZER_GAIN_MAX = 12;
+const EQUALIZER_PREAMP_MIN = -12;
+const EQUALIZER_PREAMP_MAX = 12;
+const EQUALIZER_BANDS = [
+  { id: "60", label: "60", frequency: 60, filterType: "lowshelf", q: 0.8 },
+  { id: "170", label: "170", frequency: 170, filterType: "peaking", q: 1 },
+  { id: "310", label: "310", frequency: 310, filterType: "peaking", q: 1 },
+  { id: "600", label: "600", frequency: 600, filterType: "peaking", q: 1 },
+  { id: "1k", label: "1k", frequency: 1000, filterType: "peaking", q: 1 },
+  { id: "3k", label: "3k", frequency: 3000, filterType: "peaking", q: 1 },
+  { id: "6k", label: "6k", frequency: 6000, filterType: "peaking", q: 1 },
+  { id: "12k", label: "12k", frequency: 12000, filterType: "peaking", q: 1 },
+  { id: "14k", label: "14k", frequency: 14000, filterType: "peaking", q: 1 },
+  { id: "16k", label: "16k", frequency: 16000, filterType: "highshelf", q: 0.8 },
+];
+const EQUALIZER_PRESETS = [
+  { id: "flat", label: "По умолчанию", gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "classical", label: "Классическая музыка", gains: [0, 0, 0, 0, 0, 0, -2, -2, -2, -3] },
+  { id: "club", label: "Клубная музыка", gains: [5, 4, 3, 0, 0, -1, 2, 4, 5, 5] },
+  { id: "dance", label: "Танцевальная музыка", gains: [5, 4, 2, 0, -1, -1, 1, 4, 5, 4] },
+  { id: "bass", label: "Усиление НЧ", gains: [0, 5, 5, 3, 0, -2, -5, -7, -8, -8] },
+  { id: "bass_treble", label: "Усиление НЧ и ВЧ", gains: [5, 4, 3, 1, 0, 0, 2, 4, 5, 5] },
+  { id: "treble", label: "Усиление ВЧ", gains: [-4, -3, -2, -1, 0, 2, 4, 5, 6, 6] },
+  { id: "laptop", label: "Колонки ноутбука", gains: [3, 4, 4, 2, 1, 0, 0, 1, 2, 3] },
+  { id: "large_hall", label: "Большой зал", gains: [5, 4, 3, 2, 0, -1, 1, 3, 4, 5] },
+  { id: "concert", label: "Концерт", gains: [4, 3, 2, 1, 0, 0, 1, 2, 3, 4] },
+  { id: "party", label: "Вечеринка", gains: [5, 5, 4, 2, 0, 0, 2, 4, 5, 5] },
+  { id: "pop", label: "Поп", gains: [-1, 2, 4, 5, 3, 0, -1, -2, -2, -2] },
+  { id: "reggae", label: "Регги", gains: [0, 0, -1, -3, 0, 3, 4, 3, 2, 2] },
+  { id: "rock", label: "Рок", gains: [4, 3, 2, -1, -2, 1, 3, 5, 6, 6] },
+  { id: "ska", label: "Ска", gains: [-2, -1, 0, 2, 3, 3, 2, 1, 0, -1] },
+  { id: "soft", label: "Мягкое звучание", gains: [-3, -2, -1, 1, 2, 2, 1, 0, -1, -2] },
+  { id: "soft_rock", label: "Софт-рок", gains: [2, 2, 1, 0, -1, 1, 2, 3, 4, 4] },
+];
+const DEFAULT_EQUALIZER_PRESET = EQUALIZER_PRESETS[0];
+const DEFAULT_EQUALIZER_STATE = {
+  enabled: true,
+  presetId: DEFAULT_EQUALIZER_PRESET.id,
+  gains: DEFAULT_EQUALIZER_PRESET.gains,
+  preampDb: 0,
+};
 
 const defaultState = {
   queue: [],
+  queueSource: null,
+  waveQueue: [],
+  waveIndex: 0,
   currentIndex: 0,
   isPlaying: false,
   volume: 70,
@@ -43,10 +92,94 @@ const defaultState = {
   toastSeq: 0,
   toastItems: [],
   catalogVersion: 0,
+  equalizer: DEFAULT_EQUALIZER_STATE,
 };
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeEqualizerGain(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+  return clamp(Math.round(numericValue), EQUALIZER_GAIN_MIN, EQUALIZER_GAIN_MAX);
+}
+
+function normalizeEqualizerPreampDb(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+  return clamp(Math.round(numericValue), EQUALIZER_PREAMP_MIN, EQUALIZER_PREAMP_MAX);
+}
+
+function normalizeEqualizerGains(gains = []) {
+  return EQUALIZER_BANDS.map((_, index) => normalizeEqualizerGain(gains[index]));
+}
+
+function gainsMatch(firstGains = [], secondGains = []) {
+  return EQUALIZER_BANDS.every((_, index) => normalizeEqualizerGain(firstGains[index]) === normalizeEqualizerGain(secondGains[index]));
+}
+
+function findEqualizerPreset(presetId) {
+  return EQUALIZER_PRESETS.find((preset) => preset.id === presetId) ?? null;
+}
+
+function findMatchingEqualizerPresetId(gains = []) {
+  return EQUALIZER_PRESETS.find((preset) => gainsMatch(preset.gains, gains))?.id ?? CUSTOM_EQUALIZER_PRESET_ID;
+}
+
+function normalizeEqualizerState(raw) {
+  if (!raw || typeof raw !== "object") {
+    return DEFAULT_EQUALIZER_STATE;
+  }
+
+  const gains = normalizeEqualizerGains(raw.gains);
+  const matchedPresetId = findMatchingEqualizerPresetId(gains);
+  const rawPresetId = String(raw.presetId ?? "").trim();
+  const presetId =
+    rawPresetId === CUSTOM_EQUALIZER_PRESET_ID || findEqualizerPreset(rawPresetId)
+      ? rawPresetId
+      : matchedPresetId;
+
+  return {
+    enabled: true,
+    presetId,
+    gains,
+    preampDb: normalizeEqualizerPreampDb(raw.preampDb),
+  };
+}
+
+function buildEqualizerBands(equalizer) {
+  const normalizedState = normalizeEqualizerState(equalizer);
+  return EQUALIZER_BANDS.map((band, index) => ({
+    ...band,
+    gain: normalizeEqualizerGain(normalizedState.gains[index]),
+  }));
+}
+
+function hasActiveEqualizerGain(equalizer) {
+  const normalizedEqualizer = normalizeEqualizerState(equalizer);
+  return Boolean(
+    normalizedEqualizer.enabled &&
+      (normalizeEqualizerGains(normalizedEqualizer.gains).some((gain) => Math.abs(gain) > 0.05) ||
+        Math.abs(normalizedEqualizer.preampDb) > 0.05)
+  );
+}
+
+function createEqualizerFilter(audioContext, band) {
+  const filter = audioContext.createBiquadFilter();
+  filter.type = band.filterType;
+  filter.frequency.value = band.frequency;
+  filter.Q.value = band.q;
+  filter.gain.value = 0;
+  return filter;
+}
+
+function dbToLinearGain(dbValue) {
+  return Math.pow(10, normalizeEqualizerPreampDb(dbValue) / 20);
 }
 
 function uniqueTrackIds(trackIds = []) {
@@ -156,16 +289,29 @@ function pickRandomIndex(currentIndex, length) {
   return nextIndex;
 }
 
-function getNextIndex(state, { direction = 1, fromAuto = false } = {}) {
-  const queueLength = state.queue.length;
+function getPlaybackQueue(state) {
+  return state.queueSource === WAVE_QUEUE_SOURCE ? state.waveQueue : state.queue;
+}
+
+function getPlaybackIndex(state) {
+  return state.queueSource === WAVE_QUEUE_SOURCE ? state.waveIndex : state.currentIndex;
+}
+
+function getPlaybackTrackId(state) {
+  const queue = getPlaybackQueue(state);
+  return queue[getPlaybackIndex(state)] ?? "";
+}
+
+function getNextIndex(state, { direction = 1, fromAuto = false, queue = getPlaybackQueue(state), currentIndex = getPlaybackIndex(state) } = {}) {
+  const queueLength = queue.length;
   if (!queueLength) return null;
 
   if (direction < 0) {
     if (state.shuffleEnabled && queueLength > 1) {
-      return pickRandomIndex(state.currentIndex, queueLength);
+      return pickRandomIndex(currentIndex, queueLength);
     }
-    if (state.currentIndex > 0) {
-      return state.currentIndex - 1;
+    if (currentIndex > 0) {
+      return currentIndex - 1;
     }
     if (state.repeatMode === "all") {
       return queueLength - 1;
@@ -174,15 +320,99 @@ function getNextIndex(state, { direction = 1, fromAuto = false } = {}) {
   }
 
   if (state.shuffleEnabled && queueLength > 1) {
-    return pickRandomIndex(state.currentIndex, queueLength);
+    return pickRandomIndex(currentIndex, queueLength);
   }
-  if (state.currentIndex < queueLength - 1) {
-    return state.currentIndex + 1;
+  if (currentIndex < queueLength - 1) {
+    return currentIndex + 1;
   }
   if (state.repeatMode === "all") {
     return 0;
   }
-  return fromAuto ? null : state.currentIndex;
+  return fromAuto ? null : currentIndex;
+}
+
+function buildContinuousWaveQueue(state) {
+  const tracks = Object.values(trackMap).filter((track) => track?.id);
+  if (!tracks.length) {
+    return null;
+  }
+
+  const plan = buildWaveQueuePlan(tracks, {
+    likedTrackIds: state.likedIds,
+    excludeTrackIds: [...state.waveQueue, ...state.queue, ...state.historyIds],
+    limit: Math.min(WAVE_QUEUE_LIMIT, tracks.length),
+  });
+
+  return plan.trackIds.length ? plan : null;
+}
+
+function buildWavePosition(state, { direction = 1 } = {}) {
+  const waveQueue = uniqueTrackIds(state.waveQueue);
+  if (direction < 0) {
+    if (!waveQueue.length) {
+      return null;
+    }
+    const waveIndex = Math.max(0, Math.min(state.waveIndex - 1, waveQueue.length - 1));
+    return {
+      waveQueue,
+      waveIndex,
+      trackId: waveQueue[waveIndex],
+    };
+  }
+
+  if (waveQueue.length && state.waveIndex < waveQueue.length - 1) {
+    const waveIndex = state.waveIndex + 1;
+    return {
+      waveQueue,
+      waveIndex,
+      trackId: waveQueue[waveIndex],
+    };
+  }
+
+  const nextWavePlan = buildContinuousWaveQueue({
+    ...state,
+    waveQueue,
+  });
+  if (!nextWavePlan?.trackIds?.length) {
+    return null;
+  }
+
+  return {
+    waveQueue: nextWavePlan.trackIds,
+    waveIndex: nextWavePlan.startIndex,
+    trackId: nextWavePlan.trackIds[nextWavePlan.startIndex],
+  };
+}
+
+function buildWaveResumePosition(state) {
+  const waveQueue = uniqueTrackIds(state.waveQueue);
+  if (waveQueue.length) {
+    const waveIndex = clamp(state.waveIndex, 0, waveQueue.length - 1);
+    return {
+      waveQueue,
+      waveIndex,
+      trackId: waveQueue[waveIndex],
+    };
+  }
+
+  return buildWavePosition({
+    ...state,
+    waveQueue: [],
+    waveIndex: 0,
+  });
+}
+
+function buildUserQueueStartPosition(state) {
+  const queue = uniqueTrackIds(state.queue);
+  if (!queue.length) {
+    return null;
+  }
+
+  return {
+    queue,
+    currentIndex: 0,
+    trackId: queue[0],
+  };
 }
 
 function normalizePersistedState(raw) {
@@ -191,12 +421,16 @@ function normalizePersistedState(raw) {
   }
 
   const hasQueue = Array.isArray(raw.queue);
+  const hasWaveQueue = Array.isArray(raw.waveQueue);
   const hasLikedIds = Array.isArray(raw.likedIds);
   const hasFollowedArtistIds = Array.isArray(raw.followedArtistIds);
   const hasHistoryIds = Array.isArray(raw.historyIds);
   const hasSavedPlaylistIds = Array.isArray(raw.savedPlaylistIds);
 
-  const queue = hasQueue ? uniqueStringIds(raw.queue) : defaultState.queue;
+  const rawQueue = hasQueue ? uniqueStringIds(raw.queue) : defaultState.queue;
+  const migrateWaveQueue = raw.queueSource === WAVE_QUEUE_SOURCE && rawQueue.length && !hasWaveQueue;
+  const queue = migrateWaveQueue ? defaultState.queue : rawQueue;
+  const waveQueue = hasWaveQueue ? uniqueStringIds(raw.waveQueue) : migrateWaveQueue ? rawQueue : defaultState.waveQueue;
   const likedIds = hasLikedIds ? uniqueStringIds(raw.likedIds) : defaultState.likedIds;
   const followedArtistIds = hasFollowedArtistIds
     ? uniqueStringIds(raw.followedArtistIds)
@@ -210,8 +444,23 @@ function normalizePersistedState(raw) {
 
   return {
     queue,
+    queueSource: raw.queueSource === WAVE_QUEUE_SOURCE && waveQueue.length ? WAVE_QUEUE_SOURCE : defaultState.queueSource,
+    waveQueue,
+    waveIndex: clamp(
+      Number.isInteger(raw.waveIndex)
+        ? raw.waveIndex
+        : migrateWaveQueue && Number.isInteger(raw.currentIndex)
+          ? raw.currentIndex
+          : defaultState.waveIndex,
+      0,
+      Math.max(waveQueue.length - 1, 0)
+    ),
     currentIndex: clamp(
-      Number.isInteger(raw.currentIndex) ? raw.currentIndex : defaultState.currentIndex,
+      migrateWaveQueue
+        ? defaultState.currentIndex
+        : Number.isInteger(raw.currentIndex)
+          ? raw.currentIndex
+          : defaultState.currentIndex,
       0,
       Math.max(queue.length - 1, 0)
     ),
@@ -222,6 +471,7 @@ function normalizePersistedState(raw) {
     savedPlaylistIds,
     shuffleEnabled: Boolean(raw.shuffleEnabled),
     repeatMode: repeatModes.includes(raw.repeatMode) ? raw.repeatMode : defaultState.repeatMode,
+    equalizer: normalizeEqualizerState(raw.equalizer),
   };
 }
 
@@ -251,7 +501,7 @@ function buildInitialState() {
 function playerReducer(state, action) {
   switch (action.type) {
     case "toggle_play": {
-      if (!state.queue.length) {
+      if (!trackMap[getPlaybackTrackId(state)]) {
         return state;
       }
       return {
@@ -263,18 +513,29 @@ function playerReducer(state, action) {
 
     case "catalog_hydrated": {
       const currentQueue = uniqueTrackIds(state.queue);
+      const currentWaveQueue = uniqueTrackIds(state.waveQueue);
       const fallbackQueueIds = uniqueTrackIds(action.fallbackQueueIds ?? []);
-      const nextQueue = currentQueue.length ? currentQueue : fallbackQueueIds;
+      const nextQueue = currentQueue.length
+        ? currentQueue
+        : state.queueSource === WAVE_QUEUE_SOURCE
+          ? []
+          : fallbackQueueIds;
       const nextCurrentIndex = clamp(state.currentIndex, 0, Math.max(nextQueue.length - 1, 0));
+      const nextWaveIndex = clamp(state.waveIndex, 0, Math.max(currentWaveQueue.length - 1, 0));
+      const hasPlaybackQueue =
+        state.queueSource === WAVE_QUEUE_SOURCE ? currentWaveQueue.length > 0 : nextQueue.length > 0;
 
       return {
         ...state,
         queue: nextQueue,
+        queueSource: state.queueSource === WAVE_QUEUE_SOURCE && currentWaveQueue.length ? WAVE_QUEUE_SOURCE : null,
+        waveQueue: currentWaveQueue,
+        waveIndex: nextWaveIndex,
         currentIndex: nextCurrentIndex,
         likedIds: uniqueTrackIds(state.likedIds),
         followedArtistIds: uniqueArtistIds(state.followedArtistIds),
         historyIds: uniqueTrackIds(state.historyIds).slice(0, 24),
-        progressSec: nextQueue.length ? state.progressSec : 0,
+        progressSec: hasPlaybackQueue ? state.progressSec : 0,
         catalogVersion: state.catalogVersion + 1,
       };
     }
@@ -300,6 +561,9 @@ function playerReducer(state, action) {
       return {
         ...state,
         queue: nextQueue,
+        queueSource: null,
+        waveQueue: [],
+        waveIndex: 0,
         currentIndex: nextCurrentIndex,
         progressSec: nextProgress,
         isPlaying: false,
@@ -326,6 +590,9 @@ function playerReducer(state, action) {
       return {
         ...state,
         queue: nextQueue,
+        queueSource: null,
+        waveQueue: [],
+        waveIndex: 0,
         currentIndex: nextIndex,
         isPlaying: true,
         progressSec: trailerSession.startSec,
@@ -347,6 +614,9 @@ function playerReducer(state, action) {
       return {
         ...state,
         queue: nextQueue,
+        queueSource: null,
+        waveQueue: [],
+        waveIndex: 0,
         currentIndex: nextIndex,
         isPlaying: true,
         progressSec: 0,
@@ -365,9 +635,28 @@ function playerReducer(state, action) {
       const startIndex = clamp(Number(action.startIndex ?? 0), 0, nextQueue.length - 1);
       const nextTrackId = nextQueue[startIndex];
 
+      if (action.source === WAVE_QUEUE_SOURCE) {
+        return {
+          ...state,
+          queue: [],
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: nextQueue,
+          waveIndex: startIndex,
+          currentIndex: 0,
+          isPlaying: true,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          historyIds: addHistory(state.historyIds, nextTrackId),
+        };
+      }
+
       return {
         ...state,
         queue: nextQueue,
+        queueSource: null,
+        waveQueue: [],
+        waveIndex: 0,
         currentIndex: startIndex,
         isPlaying: true,
         progressSec: 0,
@@ -384,9 +673,13 @@ function playerReducer(state, action) {
 
       const index = clamp(Number(action.index ?? 0), 0, state.queue.length - 1);
       const trackId = state.queue[index];
+      const wavePosition = state.queueSource === WAVE_QUEUE_SOURCE ? buildWavePosition(state) : null;
 
       return {
         ...state,
+        queueSource: null,
+        waveQueue: wavePosition?.waveQueue ?? state.waveQueue,
+        waveIndex: wavePosition?.waveIndex ?? state.waveIndex,
         currentIndex: index,
         progressSec: 0,
         trailerSession: null,
@@ -397,15 +690,100 @@ function playerReducer(state, action) {
     }
 
     case "next_track": {
-      if (!state.queue.length) {
+      const currentTrackId = getPlaybackTrackId(state);
+      if (!trackMap[currentTrackId]) {
         return state;
       }
 
-      const nextIndex = getNextIndex(state, { direction: 1, fromAuto: false });
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const queuedPosition = buildUserQueueStartPosition(state);
+        if (queuedPosition) {
+          const wavePosition = buildWavePosition(state);
+          return {
+            ...state,
+            queue: queuedPosition.queue,
+            queueSource: null,
+            waveQueue: wavePosition?.waveQueue ?? state.waveQueue,
+            waveIndex: wavePosition?.waveIndex ?? state.waveIndex,
+            currentIndex: queuedPosition.currentIndex,
+            progressSec: 0,
+            trailerSession: null,
+            seekVersion: state.seekVersion + 1,
+            isPlaying: true,
+            historyIds: addHistory(state.historyIds, queuedPosition.trackId),
+          };
+        }
+
+        const wavePosition = buildWavePosition(state);
+        if (!wavePosition?.trackId) {
+          return state;
+        }
+
+        return {
+          ...state,
+          queue: state.queue.slice(state.currentIndex + 1),
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: wavePosition.waveQueue,
+          waveIndex: wavePosition.waveIndex,
+          currentIndex: 0,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          isPlaying: true,
+          historyIds: addHistory(state.historyIds, wavePosition.trackId),
+        };
+      }
+
+      if (!state.queue.length) {
+        const wavePosition = buildWaveResumePosition(state);
+        if (!wavePosition?.trackId) {
+          return state;
+        }
+
+        return {
+          ...state,
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: wavePosition.waveQueue,
+          waveIndex: wavePosition.waveIndex,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          isPlaying: true,
+          historyIds: addHistory(state.historyIds, wavePosition.trackId),
+        };
+      }
+
+      const nextIndex = state.waveQueue.length
+        ? state.currentIndex < state.queue.length - 1
+          ? state.currentIndex + 1
+          : null
+        : getNextIndex(state, { direction: 1, fromAuto: true, queue: state.queue, currentIndex: state.currentIndex });
+      if (nextIndex === null) {
+        const wavePosition = buildWaveResumePosition(state);
+        if (!wavePosition?.trackId) {
+          return state;
+        }
+
+        return {
+          ...state,
+          queue: state.queue.slice(state.currentIndex + 1),
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: wavePosition.waveQueue,
+          waveIndex: wavePosition.waveIndex,
+          currentIndex: 0,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          isPlaying: true,
+          historyIds: addHistory(state.historyIds, wavePosition.trackId),
+        };
+      }
+
       const nextTrackId = state.queue[nextIndex];
 
       return {
         ...state,
+        queueSource: null,
         currentIndex: nextIndex,
         progressSec: 0,
         trailerSession: null,
@@ -416,7 +794,8 @@ function playerReducer(state, action) {
     }
 
     case "prev_track": {
-      if (!state.queue.length) {
+      const currentTrackId = getPlaybackTrackId(state);
+      if (!trackMap[currentTrackId]) {
         return state;
       }
 
@@ -429,11 +808,31 @@ function playerReducer(state, action) {
         };
       }
 
-      const prevIndex = getNextIndex(state, { direction: -1, fromAuto: false });
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const wavePosition = buildWavePosition(state, { direction: -1 });
+        if (!wavePosition?.trackId) {
+          return state;
+        }
+
+        return {
+          ...state,
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: wavePosition.waveQueue,
+          waveIndex: wavePosition.waveIndex,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          isPlaying: true,
+          historyIds: addHistory(state.historyIds, wavePosition.trackId),
+        };
+      }
+
+      const prevIndex = getNextIndex(state, { direction: -1, fromAuto: false, queue: state.queue, currentIndex: state.currentIndex });
       const prevTrackId = state.queue[prevIndex];
 
       return {
         ...state,
+        queueSource: null,
         currentIndex: prevIndex,
         progressSec: 0,
         trailerSession: null,
@@ -444,18 +843,19 @@ function playerReducer(state, action) {
     }
 
     case "track_finished": {
-      const currentTrackId = state.queue[state.currentIndex];
+      const currentTrackId = getPlaybackTrackId(state);
       const currentTrack = trackMap[currentTrackId];
       if (!currentTrack) {
         return {
           ...state,
+          queueSource: null,
           isPlaying: false,
           progressSec: 0,
           trailerSession: null,
         };
       }
 
-      if (state.repeatMode === "one") {
+      if (state.repeatMode === "one" && state.queueSource !== WAVE_QUEUE_SOURCE && !state.waveQueue.length) {
         return {
           ...state,
           progressSec: 0,
@@ -466,10 +866,79 @@ function playerReducer(state, action) {
         };
       }
 
-      const nextIndex = getNextIndex(state, { direction: 1, fromAuto: true });
-      if (nextIndex === null) {
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const queuedPosition = buildUserQueueStartPosition(state);
+        if (queuedPosition) {
+          const wavePosition = buildWavePosition(state);
+          return {
+            ...state,
+            queue: queuedPosition.queue,
+            queueSource: null,
+            waveQueue: wavePosition?.waveQueue ?? state.waveQueue,
+            waveIndex: wavePosition?.waveIndex ?? state.waveIndex,
+            currentIndex: queuedPosition.currentIndex,
+            progressSec: 0,
+            trailerSession: null,
+            seekVersion: state.seekVersion + 1,
+            isPlaying: true,
+            historyIds: addHistory(state.historyIds, queuedPosition.trackId),
+          };
+        }
+
+        const wavePosition = buildWavePosition(state);
+        if (wavePosition?.trackId) {
+          return {
+            ...state,
+            queue: state.queue.slice(state.currentIndex + 1),
+            queueSource: WAVE_QUEUE_SOURCE,
+            waveQueue: wavePosition.waveQueue,
+            waveIndex: wavePosition.waveIndex,
+            currentIndex: 0,
+            progressSec: 0,
+            trailerSession: null,
+            seekVersion: state.seekVersion + 1,
+            isPlaying: true,
+            historyIds: addHistory(state.historyIds, wavePosition.trackId),
+          };
+        }
+
         return {
           ...state,
+          queueSource: null,
+          waveQueue: [],
+          waveIndex: 0,
+          isPlaying: false,
+          progressSec: currentTrack.durationSec,
+          trailerSession: null,
+        };
+      }
+
+      const nextIndex = state.waveQueue.length
+        ? state.currentIndex < state.queue.length - 1
+          ? state.currentIndex + 1
+          : null
+        : getNextIndex(state, { direction: 1, fromAuto: true, queue: state.queue, currentIndex: state.currentIndex });
+      if (nextIndex === null) {
+        const wavePosition = buildWaveResumePosition(state);
+        if (wavePosition?.trackId) {
+          return {
+            ...state,
+            queue: state.queue.slice(state.currentIndex + 1),
+            queueSource: WAVE_QUEUE_SOURCE,
+            waveQueue: wavePosition.waveQueue,
+            waveIndex: wavePosition.waveIndex,
+            currentIndex: 0,
+            progressSec: 0,
+            trailerSession: null,
+            seekVersion: state.seekVersion + 1,
+            isPlaying: true,
+            historyIds: addHistory(state.historyIds, wavePosition.trackId),
+          };
+        }
+
+        return {
+          ...state,
+          queueSource: null,
           isPlaying: false,
           progressSec: currentTrack.durationSec,
           trailerSession: null,
@@ -479,6 +948,7 @@ function playerReducer(state, action) {
       const nextTrackId = state.queue[nextIndex];
       return {
         ...state,
+        queueSource: null,
         currentIndex: nextIndex,
         progressSec: 0,
         trailerSession: null,
@@ -489,7 +959,7 @@ function playerReducer(state, action) {
     }
 
     case "seek_percent": {
-      const trackId = state.queue[state.currentIndex];
+      const trackId = getPlaybackTrackId(state);
       const track = trackMap[trackId];
       if (!track) {
         return state;
@@ -504,9 +974,12 @@ function playerReducer(state, action) {
     }
 
     case "sync_progress_sec": {
-      const trackId = state.queue[state.currentIndex];
+      const trackId = getPlaybackTrackId(state);
       const track = trackMap[trackId];
       if (!track) return state;
+      if (action.trackId && action.trackId !== trackId) {
+        return state;
+      }
 
       const nextValue = clamp(action.progressSec, 0, track.durationSec);
       if (shouldStopTrailerPlayback(state.trailerSession, trackId, nextValue)) {
@@ -529,7 +1002,7 @@ function playerReducer(state, action) {
     }
 
     case "finish_trailer": {
-      const trackId = state.queue[state.currentIndex];
+      const trackId = getPlaybackTrackId(state);
       if (!shouldStopTrailerPlayback(state.trailerSession, trackId, action.endSec)) {
         return state;
       }
@@ -544,6 +1017,85 @@ function playerReducer(state, action) {
 
     case "set_volume": {
       return { ...state, volume: clamp(action.volume, 0, 100) };
+    }
+
+    case "set_equalizer_preset": {
+      if (action.presetId === CUSTOM_EQUALIZER_PRESET_ID) {
+        const currentEqualizer = normalizeEqualizerState(state.equalizer);
+        return {
+          ...state,
+          equalizer: {
+            enabled: true,
+            presetId: CUSTOM_EQUALIZER_PRESET_ID,
+            gains: currentEqualizer.gains,
+            preampDb: currentEqualizer.preampDb,
+          },
+        };
+      }
+
+      const preset = findEqualizerPreset(action.presetId);
+      if (!preset) {
+        return state;
+      }
+      return {
+        ...state,
+        equalizer: {
+          enabled: true,
+          presetId: preset.id,
+          gains: normalizeEqualizerGains(preset.gains),
+          preampDb: normalizeEqualizerPreampDb(preset.preampDb),
+        },
+      };
+    }
+
+    case "set_equalizer_band": {
+      const bandIndex = Number(action.bandIndex);
+      if (!Number.isInteger(bandIndex) || bandIndex < 0 || bandIndex >= EQUALIZER_BANDS.length) {
+        return state;
+      }
+
+      const currentEqualizer = normalizeEqualizerState(state.equalizer);
+      const nextGains = currentEqualizer.gains.map((gain, index) =>
+        index === bandIndex ? normalizeEqualizerGain(action.gain) : gain
+      );
+
+      return {
+        ...state,
+        equalizer: {
+          enabled: true,
+          presetId:
+            currentEqualizer.preampDb === 0
+              ? findMatchingEqualizerPresetId(nextGains)
+              : CUSTOM_EQUALIZER_PRESET_ID,
+          gains: nextGains,
+          preampDb: currentEqualizer.preampDb,
+        },
+      };
+    }
+
+    case "set_equalizer_preamp": {
+      const currentEqualizer = normalizeEqualizerState(state.equalizer);
+      const nextPreampDb = normalizeEqualizerPreampDb(action.preampDb);
+
+      return {
+        ...state,
+        equalizer: {
+          enabled: true,
+          presetId: nextPreampDb === 0 ? findMatchingEqualizerPresetId(currentEqualizer.gains) : CUSTOM_EQUALIZER_PRESET_ID,
+          gains: currentEqualizer.gains,
+          preampDb: nextPreampDb,
+        },
+      };
+    }
+
+    case "reset_equalizer": {
+      return {
+        ...state,
+        equalizer: {
+          ...DEFAULT_EQUALIZER_STATE,
+          gains: [...DEFAULT_EQUALIZER_STATE.gains],
+        },
+      };
     }
 
     case "toggle_shuffle": {
@@ -594,10 +1146,36 @@ function playerReducer(state, action) {
       }
 
       const nextQueue = state.queue.filter((_, itemIndex) => itemIndex !== index);
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        return {
+          ...state,
+          queue: nextQueue,
+          currentIndex: clamp(state.currentIndex, 0, Math.max(nextQueue.length - 1, 0)),
+        };
+      }
+
       if (!nextQueue.length) {
+        const wavePosition = buildWaveResumePosition(state);
+        if (wavePosition?.trackId) {
+          return {
+            ...state,
+            queue: [],
+            queueSource: WAVE_QUEUE_SOURCE,
+            waveQueue: wavePosition.waveQueue,
+            waveIndex: wavePosition.waveIndex,
+            currentIndex: 0,
+            progressSec: 0,
+            trailerSession: null,
+            seekVersion: state.seekVersion + 1,
+            isPlaying: true,
+            historyIds: addHistory(state.historyIds, wavePosition.trackId),
+          };
+        }
+
         return {
           ...state,
           queue: [],
+          queueSource: null,
           currentIndex: 0,
           isPlaying: false,
           progressSec: 0,
@@ -621,6 +1199,7 @@ function playerReducer(state, action) {
       return {
         ...state,
         queue: nextQueue,
+        queueSource: null,
         currentIndex: nextIndex,
         progressSec: nextProgress,
         trailerSession: index === state.currentIndex ? null : state.trailerSession,
@@ -630,9 +1209,37 @@ function playerReducer(state, action) {
     }
 
     case "clear_queue": {
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const nextState = {
+          ...state,
+          queue: [],
+          currentIndex: 0,
+        };
+        return state.queue.length ? enqueueToast(nextState, "Очередь очищена") : nextState;
+      }
+
+      const wavePosition = buildWaveResumePosition(state);
+      if (wavePosition?.trackId) {
+        const nextState = {
+          ...state,
+          queue: [],
+          queueSource: WAVE_QUEUE_SOURCE,
+          waveQueue: wavePosition.waveQueue,
+          waveIndex: wavePosition.waveIndex,
+          currentIndex: 0,
+          progressSec: 0,
+          trailerSession: null,
+          seekVersion: state.seekVersion + 1,
+          isPlaying: true,
+          historyIds: addHistory(state.historyIds, wavePosition.trackId),
+        };
+        return state.queue.length ? enqueueToast(nextState, "Очередь очищена") : nextState;
+      }
+
       const nextState = {
         ...state,
         queue: [],
+        queueSource: null,
         currentIndex: 0,
         isPlaying: false,
         progressSec: 0,
@@ -647,11 +1254,29 @@ function playerReducer(state, action) {
         return state;
       }
 
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const currentTrackId = getPlaybackTrackId(state);
+        if (currentTrackId === action.trackId) {
+          return enqueueToast(state, "Этот трек уже играет");
+        }
+
+        const nextQueueBase = state.queue.filter((trackId) => trackId !== action.trackId);
+        return enqueueToast(
+          {
+            ...state,
+            queue: [action.trackId, ...nextQueueBase],
+            currentIndex: 0,
+          },
+          "Добавлено далее в очередь"
+        );
+      }
+
       if (!state.queue.length) {
         return enqueueToast(
           {
             ...state,
             queue: [action.trackId],
+            queueSource: null,
             currentIndex: 0,
           },
           "Трек добавлен в очередь"
@@ -692,11 +1317,29 @@ function playerReducer(state, action) {
         return state;
       }
 
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const currentTrackId = getPlaybackTrackId(state);
+        if (currentTrackId === action.trackId) {
+          return enqueueToast(state, "Этот трек уже играет");
+        }
+
+        const nextQueueBase = state.queue.filter((trackId) => trackId !== action.trackId);
+        return enqueueToast(
+          {
+            ...state,
+            queue: [...nextQueueBase, action.trackId],
+            currentIndex: 0,
+          },
+          "Добавлено в конец очереди"
+        );
+      }
+
       if (!state.queue.length) {
         return enqueueToast(
           {
             ...state,
             queue: [action.trackId],
+            queueSource: null,
             currentIndex: 0,
           },
           "РўСЂРµРє РґРѕР±Р°РІР»РµРЅ РІ РѕС‡РµСЂРµРґСЊ"
@@ -733,11 +1376,30 @@ function playerReducer(state, action) {
       }
 
       const sourceLabel = action.sourceLabel ?? "Плейлист";
+      if (state.queueSource === WAVE_QUEUE_SOURCE) {
+        const currentTrackId = getPlaybackTrackId(state);
+        const insertTrackIds = nextTrackIds.filter((trackId) => trackId !== currentTrackId);
+        if (!insertTrackIds.length) {
+          return enqueueToast(state, `${sourceLabel} уже в очереди`);
+        }
+
+        const queueWithoutNewTracks = state.queue.filter((trackId) => !insertTrackIds.includes(trackId));
+        return enqueueToast(
+          {
+            ...state,
+            queue: [...insertTrackIds, ...queueWithoutNewTracks],
+            currentIndex: 0,
+          },
+          `${sourceLabel} добавлен далее в очередь`
+        );
+      }
+
       if (!state.queue.length) {
         return enqueueToast(
           {
             ...state,
             queue: nextTrackIds,
+            queueSource: null,
             currentIndex: 0,
           },
           `${sourceLabel} добавлен в очередь`
@@ -1096,6 +1758,11 @@ export function PlayerProvider({ children }) {
   const seekVersionRef = useRef(0);
   const playbackIntentRef = useRef(defaultState.isPlaying);
   const trailerSessionRef = useRef(defaultState.trailerSession);
+  const audioContextRef = useRef(null);
+  const audioSourceNodeRef = useRef(null);
+  const equalizerFiltersRef = useRef([]);
+  const equalizerPreampGainRef = useRef(null);
+  const equalizerGraphReadyRef = useRef(false);
 
   const updateStreamQuality = useCallback((nextState) => {
     dispatch({
@@ -1110,6 +1777,49 @@ export function PlayerProvider({ children }) {
       hlsRef.current = null;
     }
     syncHlsQualityRef.current = null;
+  }, []);
+
+  const disposeAudioGraph = useCallback(() => {
+    for (const filter of equalizerFiltersRef.current) {
+      try {
+        filter.disconnect();
+      } catch {
+        // noop
+      }
+    }
+    equalizerFiltersRef.current = [];
+    equalizerGraphReadyRef.current = false;
+
+    if (equalizerPreampGainRef.current) {
+      try {
+        equalizerPreampGainRef.current.disconnect();
+      } catch {
+        // noop
+      }
+      equalizerPreampGainRef.current = null;
+    }
+
+    if (audioSourceNodeRef.current) {
+      try {
+        audioSourceNodeRef.current.disconnect();
+      } catch {
+        // noop
+      }
+      audioSourceNodeRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      const audioContext = audioContextRef.current;
+      audioContextRef.current = null;
+      if (audioContext.state !== "closed" && typeof audioContext.close === "function") {
+        const closePromise = audioContext.close();
+        if (closePromise && typeof closePromise.catch === "function") {
+          closePromise.catch(() => {
+            // noop
+          });
+        }
+      }
+    }
   }, []);
 
   const setStreamQualitySelection = useCallback(
@@ -1321,18 +2031,106 @@ export function PlayerProvider({ children }) {
     return audioRef.current;
   }, []);
 
+  const ensureAudioGraph = useCallback((audio) => {
+    if (!audio || typeof window === "undefined") {
+      return null;
+    }
+    if (equalizerGraphReadyRef.current && audioContextRef.current) {
+      return audioContextRef.current;
+    }
+
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) {
+      return null;
+    }
+
+    try {
+      const audioContext = audioContextRef.current ?? new AudioContextConstructor();
+      audioContextRef.current = audioContext;
+      if (!audioSourceNodeRef.current) {
+        audioSourceNodeRef.current = audioContext.createMediaElementSource(audio);
+      }
+
+      const filters = EQUALIZER_BANDS.map((band) => createEqualizerFilter(audioContext, band));
+      const preampGain = audioContext.createGain();
+      preampGain.gain.value = 1;
+      audioSourceNodeRef.current.connect(filters[0]);
+      filters.forEach((filter, index) => {
+        const nextFilter = filters[index + 1];
+        if (nextFilter) {
+          filter.connect(nextFilter);
+          return;
+        }
+        filter.connect(preampGain);
+      });
+      preampGain.connect(audioContext.destination);
+
+      equalizerFiltersRef.current = filters;
+      equalizerPreampGainRef.current = preampGain;
+      equalizerGraphReadyRef.current = true;
+      return audioContext;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const applyEqualizerToGraph = useCallback(
+    (equalizer) => {
+      if (!hasActiveEqualizerGain(equalizer) && !equalizerGraphReadyRef.current) {
+        return;
+      }
+
+      const audio = ensureAudioElement();
+      const audioContext = ensureAudioGraph(audio);
+      if (!audioContext || !equalizerFiltersRef.current.length) {
+        return;
+      }
+
+      const normalizedEqualizer = normalizeEqualizerState(equalizer);
+      const now = audioContext.currentTime;
+      equalizerFiltersRef.current.forEach((filter, index) => {
+        const nextGain = normalizedEqualizer.enabled
+          ? normalizeEqualizerGain(normalizedEqualizer.gains[index])
+          : 0;
+        filter.gain.cancelScheduledValues(now);
+        filter.gain.setTargetAtTime(nextGain, now, 0.015);
+      });
+      if (equalizerPreampGainRef.current) {
+        const nextLinearGain = normalizedEqualizer.enabled ? dbToLinearGain(normalizedEqualizer.preampDb) : 1;
+        equalizerPreampGainRef.current.gain.cancelScheduledValues(now);
+        equalizerPreampGainRef.current.gain.setTargetAtTime(nextLinearGain, now, 0.015);
+      }
+    },
+    [ensureAudioElement, ensureAudioGraph]
+  );
+
+  const resumeAudioGraph = useCallback(() => {
+    const audioContext = audioContextRef.current;
+    if (!audioContext || audioContext.state !== "suspended") {
+      return;
+    }
+
+    const resumePromise = audioContext.resume();
+    if (resumePromise && typeof resumePromise.catch === "function") {
+      resumePromise.catch(() => {
+        // noop
+      });
+    }
+  }, []);
+
   const attemptAudioPlayback = useCallback((audio) => {
     if (!audio || !playbackIntentRef.current) {
       return;
     }
 
+    resumeAudioGraph();
     const playPromise = audio.play();
     if (playPromise && typeof playPromise.catch === "function") {
       playPromise.catch(() => {
         // noop
       });
     }
-  }, []);
+  }, [resumeAudioGraph]);
 
   const replaceAudioSource = useCallback((track) => {
     const audio = ensureAudioElement();
@@ -1543,7 +2341,9 @@ export function PlayerProvider({ children }) {
     return audio;
   }, [attemptAudioPlayback, disposeHls, ensureAudioElement, updateStreamQuality]);
 
-  const currentTrackId = state.queue[state.currentIndex];
+  const playbackQueue = getPlaybackQueue(state);
+  const playbackIndex = getPlaybackIndex(state);
+  const currentTrackId = playbackQueue[playbackIndex];
   const currentTrack = trackMap[currentTrackId] ?? null;
   const currentDuration = currentTrack?.durationSec ?? 0;
   const clampedProgress = clamp(state.progressSec, 0, currentDuration || state.progressSec);
@@ -1623,13 +2423,13 @@ export function PlayerProvider({ children }) {
       if (stopTrailerPlayback(audio)) {
         return;
       }
-      dispatch({ type: "sync_progress_sec", progressSec: audio.currentTime });
+      dispatch({ type: "sync_progress_sec", trackId: loadedTrackIdRef.current, progressSec: audio.currentTime });
     };
     const handleSeeked = () => {
       if (stopTrailerPlayback(audio)) {
         return;
       }
-      dispatch({ type: "sync_progress_sec", progressSec: audio.currentTime });
+      dispatch({ type: "sync_progress_sec", trackId: loadedTrackIdRef.current, progressSec: audio.currentTime });
     };
     const handleEnded = () => {
       dispatch({ type: "track_finished" });
@@ -1663,6 +2463,10 @@ export function PlayerProvider({ children }) {
     }
     audio.volume = volumeToElement(state.volume);
   }, [state.volume]);
+
+  useEffect(() => {
+    applyEqualizerToGraph(state.equalizer);
+  }, [applyEqualizerToGraph, state.equalizer]);
 
   useEffect(() => {
     const audio = ensureAudioElement();
@@ -1732,10 +2536,11 @@ export function PlayerProvider({ children }) {
         audioRef.current = null;
       }
       disposeHls();
+      disposeAudioGraph();
       loadedTrackIdRef.current = null;
       loadedSourceKeyRef.current = "";
     },
-    [disposeHls]
+    [disposeAudioGraph, disposeHls]
   );
 
   useEffect(() => {
@@ -1745,6 +2550,9 @@ export function PlayerProvider({ children }) {
 
     const payload = {
       queue: state.queue,
+      queueSource: state.queueSource,
+      waveQueue: state.waveQueue,
+      waveIndex: state.waveIndex,
       currentIndex: state.currentIndex,
       volume: state.volume,
       likedIds: state.likedIds,
@@ -1753,6 +2561,7 @@ export function PlayerProvider({ children }) {
       savedPlaylistIds: state.savedPlaylistIds,
       shuffleEnabled: state.shuffleEnabled,
       repeatMode: state.repeatMode,
+      equalizer: normalizeEqualizerState(state.equalizer),
     };
 
     try {
@@ -1762,6 +2571,9 @@ export function PlayerProvider({ children }) {
     }
   }, [
     state.queue,
+    state.queueSource,
+    state.waveQueue,
+    state.waveIndex,
     state.currentIndex,
     state.volume,
     state.likedIds,
@@ -1770,6 +2582,7 @@ export function PlayerProvider({ children }) {
     state.savedPlaylistIds,
     state.shuffleEnabled,
     state.repeatMode,
+    state.equalizer,
   ]);
 
   const persistRemoteStateNow = useCallback(
@@ -1812,14 +2625,28 @@ export function PlayerProvider({ children }) {
     ]
   );
 
+  const normalizedEqualizer = useMemo(
+    () => normalizeEqualizerState(state.equalizer),
+    [state.equalizer]
+  );
+  const activeEqualizerPreset = useMemo(
+    () => findEqualizerPreset(normalizedEqualizer.presetId),
+    [normalizedEqualizer.presetId]
+  );
+
   const value = useMemo(
     () => ({
       tracks: runtimeTracks,
       artists: runtimeArtists,
       trackMap,
       queue: state.queue,
+      queueSource: state.queueSource,
+      waveQueue: state.waveQueue,
+      waveIndex: state.waveIndex,
+      isWaveActive: state.queueSource === WAVE_QUEUE_SOURCE || state.waveQueue.length > 0,
       queueTracks: state.queue.map((id) => trackMap[id]).filter(Boolean),
-      currentIndex: state.currentIndex,
+      currentIndex: state.queueSource === WAVE_QUEUE_SOURCE ? -1 : state.currentIndex,
+      playbackIndex,
       currentTrackId,
       currentTrack,
       isPlaying: state.isPlaying,
@@ -1837,6 +2664,18 @@ export function PlayerProvider({ children }) {
         mode: state.streamQualityMode,
         level: state.streamQualityLevel,
       },
+      equalizer: {
+        enabled: normalizedEqualizer.enabled,
+        presetId: normalizedEqualizer.presetId,
+        presetLabel: activeEqualizerPreset?.label ?? "Своя настройка",
+        customPresetId: CUSTOM_EQUALIZER_PRESET_ID,
+        gains: normalizedEqualizer.gains,
+        preampDb: normalizedEqualizer.preampDb,
+        preampMinDb: EQUALIZER_PREAMP_MIN,
+        preampMaxDb: EQUALIZER_PREAMP_MAX,
+        bands: buildEqualizerBands(normalizedEqualizer),
+      },
+      equalizerPresets: EQUALIZER_PRESETS,
       likedIds: state.likedIds,
       followedArtistIds: state.followedArtistIds,
       historyIds: state.historyIds,
@@ -1854,13 +2693,19 @@ export function PlayerProvider({ children }) {
       },
       playTrackTrailer: (trackId, durationSec = 18) =>
         dispatch({ type: "play_trailer", trackId, durationSec }),
-      playQueue: (trackIds, startIndex = 0) => dispatch({ type: "play_queue", trackIds, startIndex }),
+      playQueue: (trackIds, startIndex = 0, options = {}) =>
+        dispatch({ type: "play_queue", trackIds, startIndex, source: options.source }),
       jumpToQueueIndex: (index) => dispatch({ type: "jump_to_index", index }),
       nextTrack: () => dispatch({ type: "next_track" }),
       prevTrack: () => dispatch({ type: "prev_track" }),
       togglePlay: () => dispatch({ type: "toggle_play" }),
       setProgressPercent: (percent) => dispatch({ type: "seek_percent", percent }),
       setVolume: (volume) => dispatch({ type: "set_volume", volume }),
+      setEqualizerPreset: (presetId) => dispatch({ type: "set_equalizer_preset", presetId }),
+      setEqualizerBand: (bandIndex, gain) =>
+        dispatch({ type: "set_equalizer_band", bandIndex, gain }),
+      setEqualizerPreamp: (preampDb) => dispatch({ type: "set_equalizer_preamp", preampDb }),
+      resetEqualizer: () => dispatch({ type: "reset_equalizer" }),
       toggleShuffle: () => dispatch({ type: "toggle_shuffle" }),
       cycleRepeatMode: () => dispatch({ type: "cycle_repeat" }),
       removeQueueItem: (index) => dispatch({ type: "remove_from_queue", index }),
@@ -1912,6 +2757,8 @@ export function PlayerProvider({ children }) {
       clampedProgress,
       progressPercent,
       currentDuration,
+      normalizedEqualizer,
+      activeEqualizerPreset,
       setStreamQualitySelection,
       persistRemoteStateNow,
       refreshCatalog,

@@ -42,7 +42,7 @@ function formatReason(reason = "") {
   return String(reason ?? "").trim() || "Без причины";
 }
 
-export default function AdminTracksSection({ refreshToken = 0, onChanged }) {
+export default function AdminTracksSection({ refreshToken = 0 }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -130,22 +130,34 @@ export default function AdminTracksSection({ refreshToken = 0, onChanged }) {
     });
   };
 
+  const updateTrackVisibility = (trackId, updates) => {
+    setTracksData((current) => ({
+      ...current,
+      tracks: current.tracks.map((track) => (track.id === trackId ? { ...track, ...updates } : track)),
+    }));
+  };
+
   const handleHideTrack = async () => {
     if (!hideDialog.track?.id) {
       return;
     }
 
     const targetTrack = hideDialog.track;
+    const reason = hideDialog.reason.trim() || "Контент требует проверки";
     setHideDialog((current) => ({ ...current, submitting: true }));
     setError("");
     setFeedback("");
 
     try {
-      await hideAdminTrack(targetTrack.id, hideDialog.reason.trim() || "Контент требует проверки");
+      await hideAdminTrack(targetTrack.id, reason);
       closeHideDialog();
-      await loadTracks({ nextOffset: offset });
+      updateTrackVisibility(targetTrack.id, {
+        isHidden: true,
+        hiddenReason: reason,
+        hiddenByName: targetTrack.hiddenByName,
+        hiddenAt: Date.now(),
+      });
       setFeedback(`Трек "${targetTrack.title}" скрыт из публичного каталога.`);
-      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось скрыть трек.");
       setHideDialog((current) => ({ ...current, submitting: false }));
@@ -159,9 +171,13 @@ export default function AdminTracksSection({ refreshToken = 0, onChanged }) {
 
     try {
       await unhideAdminTrack(track.id);
-      await loadTracks({ nextOffset: offset });
+      updateTrackVisibility(track.id, {
+        isHidden: false,
+        hiddenReason: "",
+        hiddenByName: "",
+        hiddenAt: 0,
+      });
       setFeedback(`Трек "${track.title}" снова доступен в публичном каталоге.`);
-      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось вернуть трек в каталог.");
     } finally {

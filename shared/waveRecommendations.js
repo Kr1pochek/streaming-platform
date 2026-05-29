@@ -25,6 +25,22 @@ function uniqueTrackIds(trackIds = []) {
   return ids;
 }
 
+function fillTrackIds(preferredTrackIds = [], fallbackTrackIds = [], limit = Number.POSITIVE_INFINITY) {
+  const seen = new Set();
+  const trackIds = [];
+  for (const trackId of [...preferredTrackIds, ...fallbackTrackIds]) {
+    if (!trackId || seen.has(trackId)) {
+      continue;
+    }
+    seen.add(trackId);
+    trackIds.push(trackId);
+    if (trackIds.length >= limit) {
+      break;
+    }
+  }
+  return trackIds;
+}
+
 function buildLikedTagScoreMap(likedTracks = []) {
   const tagScoreMap = new Map();
   for (const track of likedTracks) {
@@ -41,10 +57,11 @@ function buildLikedTagScoreMap(likedTracks = []) {
 
 export function buildWaveQueuePlan(
   tracks = [],
-  { likedTrackIds = [], limit = Number.POSITIVE_INFINITY, random = Math.random } = {}
+  { likedTrackIds = [], excludeTrackIds = [], limit = Number.POSITIVE_INFINITY, random = Math.random } = {}
 ) {
   const safeTracks = Array.isArray(tracks) ? tracks.filter((track) => track?.id) : [];
   const safeLimit = Math.max(0, Math.min(Number.isFinite(limit) ? Number(limit) : safeTracks.length, safeTracks.length));
+  const excludedTrackIdSet = new Set(uniqueTrackIds(excludeTrackIds).filter((trackId) => safeTracks.some((track) => track.id === trackId)));
 
   if (!safeTracks.length || safeLimit <= 0) {
     return {
@@ -59,19 +76,29 @@ export function buildWaveQueuePlan(
   const likedTracks = uniqueLikedTrackIds.map((trackId) => trackById.get(trackId)).filter(Boolean);
 
   if (!likedTracks.length) {
+    const preferredTrackIds = shuffleItems(
+      safeTracks
+        .map((track) => track.id)
+        .filter((trackId) => !excludedTrackIdSet.has(trackId)),
+      random
+    );
+    const fallbackTrackIds = shuffleItems(
+      safeTracks
+        .map((track) => track.id)
+        .filter((trackId) => excludedTrackIdSet.has(trackId)),
+      random
+    );
+
     return {
       strategy: "random",
       startIndex: 0,
-      trackIds: shuffleItems(
-        safeTracks.map((track) => track.id),
-        random
-      ).slice(0, safeLimit),
+      trackIds: fillTrackIds(preferredTrackIds, fallbackTrackIds, safeLimit),
     };
   }
 
   const likedTrackIdSet = new Set(uniqueLikedTrackIds);
   const likedTagScoreMap = buildLikedTagScoreMap(likedTracks);
-  const candidateTracks = safeTracks.filter((track) => !likedTrackIdSet.has(track.id));
+  const candidateTracks = safeTracks.filter((track) => !likedTrackIdSet.has(track.id) && !excludedTrackIdSet.has(track.id));
 
   const rankedCandidateIds = candidateTracks
     .map((track) => {
@@ -109,10 +136,20 @@ export function buildWaveQueuePlan(
     random
   );
   const fallbackLikedTrackIds = shuffleItems(uniqueLikedTrackIds, random);
+  const fallbackExcludedTrackIds = shuffleItems(
+    safeTracks
+      .map((track) => track.id)
+      .filter((trackId) => excludedTrackIdSet.has(trackId)),
+    random
+  );
 
   return {
     strategy: "liked-genres",
     startIndex: 0,
-    trackIds: [...rankedCandidateIds, ...fallbackCandidateIds, ...fallbackLikedTrackIds].slice(0, safeLimit),
+    trackIds: fillTrackIds(
+      [...rankedCandidateIds, ...fallbackCandidateIds, ...fallbackLikedTrackIds],
+      fallbackExcludedTrackIds,
+      safeLimit
+    ),
   };
 }
