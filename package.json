@@ -19,6 +19,7 @@
     "snapshot:export": "node --env-file-if-exists=.env scripts/portable/export-snapshot.mjs",
     "snapshot:restore": "node --env-file-if-exists=.env scripts/portable/restore-snapshot.mjs",
     "snapshot:prune-demo": "node scripts/maintenance/prune-railway-demo-content.mjs",
+    "catalog:clear": "node --env-file-if-exists=.env scripts/maintenance/clear-music-content.mjs",
     "start:app": "node --env-file-if-exists=.env scripts/start-app.mjs",
     "smoke": "node --env-file-if-exists=.env scripts/smoke-check.mjs",
     "docker:up": "node scripts/docker/up.mjs",
