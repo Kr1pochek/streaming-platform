@@ -12,6 +12,11 @@ function parsePositiveInteger(value, fallback) {
 }
 
 function getDatabaseConfig() {
+  const connectionString = String(process.env.DATABASE_URL ?? "").trim();
+  if (connectionString) {
+    return { connectionString };
+  }
+
   return {
     host: process.env.PGHOST ?? "127.0.0.1",
     port: Number(process.env.PGPORT ?? 5432),
@@ -19,6 +24,19 @@ function getDatabaseConfig() {
     user: process.env.PGUSER ?? "postgres",
     password: process.env.PGPASSWORD ?? "",
   };
+}
+
+function describeDatabaseConfig(config) {
+  if (config.connectionString) {
+    try {
+      const url = new URL(config.connectionString);
+      return `${url.hostname}:${url.port || 5432}${url.pathname}`;
+    } catch {
+      return "DATABASE_URL";
+    }
+  }
+
+  return `${config.host}:${config.port}/${config.database}`;
 }
 
 function sleep(timeoutMs) {
@@ -39,7 +57,7 @@ async function waitForDatabase() {
   const intervalMs = parsePositiveInteger(process.env.DB_WAIT_INTERVAL_MS, 2000);
   const config = getDatabaseConfig();
 
-  console.log(`Waiting for PostgreSQL at ${config.host}:${config.port}/${config.database}...`);
+  console.log(`Waiting for PostgreSQL at ${describeDatabaseConfig(config)}...`);
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     const client = new Client(config);

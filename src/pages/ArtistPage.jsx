@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   FiArrowLeft,
@@ -86,11 +86,14 @@ export default function ArtistPage() {
   const navigate = useNavigate();
   const loadArtistPage = useCallback(() => fetchArtistPage(artistId), [artistId]);
   const { status, data, error, reload } = useAsyncResource(loadArtistPage);
-  const [releaseFilter, setReleaseFilter] = useState("all");
-
-  useEffect(() => {
-    setReleaseFilter("all");
-  }, [artistId]);
+  const [releaseFilterState, setReleaseFilterState] = useState({ artistId, value: "all" });
+  const releaseFilter = releaseFilterState.artistId === artistId ? releaseFilterState.value : "all";
+  const setReleaseFilter = useCallback(
+    (value) => {
+      setReleaseFilterState({ artistId, value });
+    },
+    [artistId]
+  );
 
   const { likedIds, currentTrackId, historyIds, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
 

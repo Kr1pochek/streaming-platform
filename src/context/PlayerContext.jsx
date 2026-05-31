@@ -2752,6 +2752,7 @@ export function PlayerProvider({ children }) {
     }),
     [
       state,
+      playbackIndex,
       currentTrackId,
       currentTrack,
       clampedProgress,

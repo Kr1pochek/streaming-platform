@@ -324,7 +324,56 @@ Quick check after container startup:
 npm run smoke -- --client
 ```
 
-## 14. CI
+## 14. Railway deployment
+
+This repository includes `railway.json`, so Railway builds the existing Dockerfile, starts
+`node scripts/start-app.mjs`, and checks `/api/health` after startup.
+
+Recommended setup:
+
+1. Push this repository to GitHub.
+2. In Railway, create a new project from the GitHub repository.
+3. Add a PostgreSQL service to the same Railway project.
+4. Add a volume to the app service with this mount path:
+
+```text
+/app/public/audio
+```
+
+The volume keeps uploaded/restored media across redeploys. On the first boot,
+`npm run start:app` restores `portable-snapshot/database.json` and copies
+`portable-snapshot/media` into `/app/public/audio` when the database is empty.
+
+App service variables:
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+NODE_ENV=production
+SERVE_CLIENT=true
+TRUST_PROXY=true
+STRICT_AUDIO_VALIDATION=false
+PORTABLE_SNAPSHOT_RESTORE_MEDIA=true
+PLAYBACK_SIGNING_SECRET=replace_with_a_long_random_secret
+```
+
+If your PostgreSQL service is not named `Postgres`, adjust the reference variable namespace.
+Railway provides `PORT` automatically; do not hard-code it. The server will listen on
+`0.0.0.0:$PORT` on Railway and keeps `127.0.0.1:4000` for local runs.
+
+After the first successful deploy:
+- open the app service settings
+- go to Networking / Public Networking
+- click `Generate Domain`
+
+Railway will give a public HTTPS domain such as `https://your-app.up.railway.app`.
+You can add a custom domain in the same section if you want a cleaner defense URL.
+
+Important for this music app:
+- the committed media/snapshot is close to 1 GB, so tiny free/trial volumes may be too small
+- if the first deploy is slow, keep the healthcheck timeout at 600 seconds
+- for a lighter deploy, remove extra tracks locally, run `npm run snapshot:export`, and commit the refreshed snapshot
+
+## 15. CI
 
 Workflow: `.github/workflows/ci.yml`
 

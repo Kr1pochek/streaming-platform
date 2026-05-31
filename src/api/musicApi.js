@@ -731,7 +731,11 @@ export async function loginAuth(payload) {
 
 export async function logoutAuth() {
   try {
-    await request("/auth/logout", { method: "POST" });
+    if (authToken) {
+      await request("/auth/logout", { method: "POST" });
+    }
+  } catch {
+    // Server logout is best-effort; the local session still needs to be cleared.
   } finally {
     setAuthToken("");
   }

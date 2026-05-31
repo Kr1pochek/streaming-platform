@@ -63,13 +63,22 @@ let catalogCache = {
   expiresAt: 0,
 };
 
-export const pool = new Pool({
-  host: process.env.PGHOST ?? "127.0.0.1",
-  port: Number(process.env.PGPORT ?? 5432),
-  database: process.env.PGDATABASE ?? "music_app",
-  user: process.env.PGUSER ?? "postgres",
-  password: process.env.PGPASSWORD ?? "",
-});
+function createPostgresConfig(env = process.env) {
+  const connectionString = String(env.DATABASE_URL ?? "").trim();
+  if (connectionString) {
+    return { connectionString };
+  }
+
+  return {
+    host: env.PGHOST ?? "127.0.0.1",
+    port: Number(env.PGPORT ?? 5432),
+    database: env.PGDATABASE ?? "music_app",
+    user: env.PGUSER ?? "postgres",
+    password: env.PGPASSWORD ?? "",
+  };
+}
+
+export const pool = new Pool(createPostgresConfig());
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -196,10 +205,11 @@ function tokenSimilarity(queryToken, fieldToken) {
   if (queryToken === fieldToken) {
     return 1;
   }
-  if (fieldToken.startsWith(queryToken) || queryToken.startsWith(fieldToken)) {
+  const shortestTokenLength = Math.min(queryToken.length, fieldToken.length);
+  if (shortestTokenLength >= 3 && (fieldToken.startsWith(queryToken) || queryToken.startsWith(fieldToken))) {
     return 0.9;
   }
-  if (fieldToken.includes(queryToken) || queryToken.includes(fieldToken)) {
+  if (shortestTokenLength >= 3 && (fieldToken.includes(queryToken) || queryToken.includes(fieldToken))) {
     return 0.78;
   }
   return editSimilarity(queryToken, fieldToken);
@@ -214,24 +224,25 @@ function fuzzySearchScore(query = "", field = "") {
   if (normalizedField.includes(normalizedQuery)) {
     return 100;
   }
-  if (normalizedQuery.includes(normalizedField)) {
-    return Math.max(55, Math.round((normalizedField.length / normalizedQuery.length) * 90));
-  }
 
   const queryTokens = normalizedQuery.split(/\s+/g).filter(Boolean);
   const fieldTokens = normalizedField.split(/\s+/g).filter(Boolean);
   if (!queryTokens.length || !fieldTokens.length) {
     return 0;
   }
+  if (queryTokens.length === 1 && normalizedQuery.includes(normalizedField)) {
+    return Math.max(55, Math.round((normalizedField.length / normalizedQuery.length) * 90));
+  }
 
-  const tokenScore =
-    queryTokens.reduce((total, queryToken) => {
-      const bestTokenScore = fieldTokens.reduce(
-        (best, fieldToken) => Math.max(best, tokenSimilarity(queryToken, fieldToken)),
-        0
-      );
-      return total + bestTokenScore;
-    }, 0) / queryTokens.length;
+  const tokenScores = queryTokens.map((queryToken) =>
+    fieldTokens.reduce((best, fieldToken) => Math.max(best, tokenSimilarity(queryToken, fieldToken)), 0)
+  );
+  const weakestTokenScore = Math.min(...tokenScores);
+  if (queryTokens.length > 1 && weakestTokenScore < 0.72) {
+    return 0;
+  }
+
+  const tokenScore = tokenScores.reduce((total, score) => total + score, 0) / queryTokens.length;
 
   return Math.round(Math.max(editSimilarity(normalizedQuery, normalizedField), tokenScore) * 100);
 }

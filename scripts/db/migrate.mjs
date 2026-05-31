@@ -7,13 +7,22 @@ import { Pool } from "pg";
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = path.resolve(currentDirectory, "../../server/db/migrations");
 
-const pool = new Pool({
-  host: process.env.PGHOST ?? "127.0.0.1",
-  port: Number(process.env.PGPORT ?? 5432),
-  database: process.env.PGDATABASE ?? "music_app",
-  user: process.env.PGUSER ?? "postgres",
-  password: process.env.PGPASSWORD ?? "",
-});
+function createPostgresConfig(env = process.env) {
+  const connectionString = String(env.DATABASE_URL ?? "").trim();
+  if (connectionString) {
+    return { connectionString };
+  }
+
+  return {
+    host: env.PGHOST ?? "127.0.0.1",
+    port: Number(env.PGPORT ?? 5432),
+    database: env.PGDATABASE ?? "music_app",
+    user: env.PGUSER ?? "postgres",
+    password: env.PGPASSWORD ?? "",
+  };
+}
+
+const pool = new Pool(createPostgresConfig());
 
 function resolveMigrationFiles() {
   if (!fs.existsSync(migrationsDirectory)) {

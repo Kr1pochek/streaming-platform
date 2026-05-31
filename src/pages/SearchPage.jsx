@@ -94,11 +94,14 @@ function suggestionSimilarity(left = "", right = "") {
   return maxLength ? 1 - editDistance(left, right) / maxLength : 1;
 }
 
-function scoreSearchSuggestion(query = "", value = "") {
+function scoreSearchValue(query = "", value = "", { includeExact = false } = {}) {
   const normalizedQuery = normalizeSuggestionText(query);
   const normalizedValue = normalizeSuggestionText(value);
-  if (!normalizedQuery || !normalizedValue || normalizedQuery === normalizedValue) {
+  if (!normalizedQuery || !normalizedValue) {
     return 0;
+  }
+  if (normalizedQuery === normalizedValue) {
+    return includeExact ? 100 : 0;
   }
   if (normalizedValue.startsWith(normalizedQuery)) {
     return 98;
@@ -106,24 +109,54 @@ function scoreSearchSuggestion(query = "", value = "") {
   if (normalizedValue.includes(normalizedQuery)) {
     return 88;
   }
-  if (normalizedQuery.includes(normalizedValue)) {
-    return Math.max(62, Math.round((normalizedValue.length / normalizedQuery.length) * 90));
-  }
 
   const queryTokens = normalizedQuery.split(/\s+/g).filter(Boolean);
   const valueTokens = normalizedValue.split(/\s+/g).filter(Boolean);
-  const tokenScore =
-    queryTokens.reduce((total, queryToken) => {
-      const best = valueTokens.reduce((currentBest, valueToken) => {
-        if (valueToken.startsWith(queryToken) || queryToken.startsWith(valueToken)) {
-          return Math.max(currentBest, 0.9);
-        }
-        return Math.max(currentBest, suggestionSimilarity(queryToken, valueToken));
-      }, 0);
-      return total + best;
-    }, 0) / Math.max(queryTokens.length, 1);
+  if (!queryTokens.length || !valueTokens.length) {
+    return 0;
+  }
+  if (queryTokens.length === 1 && normalizedQuery.includes(normalizedValue)) {
+    return Math.max(62, Math.round((normalizedValue.length / normalizedQuery.length) * 90));
+  }
+
+  const tokenScores = queryTokens.map((queryToken) =>
+    valueTokens.reduce((currentBest, valueToken) => {
+      const shortestTokenLength = Math.min(queryToken.length, valueToken.length);
+      if (shortestTokenLength >= 3 && (valueToken.startsWith(queryToken) || queryToken.startsWith(valueToken))) {
+        return Math.max(currentBest, 0.9);
+      }
+      return Math.max(currentBest, suggestionSimilarity(queryToken, valueToken));
+    }, 0)
+  );
+  const weakestTokenScore = Math.min(...tokenScores);
+  if (queryTokens.length > 1 && weakestTokenScore < 0.72) {
+    return 0;
+  }
+
+  const tokenScore = tokenScores.reduce((total, score) => total + score, 0) / queryTokens.length;
 
   return Math.round(Math.max(suggestionSimilarity(normalizedQuery, normalizedValue), tokenScore) * 100);
+}
+
+function scoreSearchSuggestion(query = "", value = "") {
+  return scoreSearchValue(query, value);
+}
+
+function scoreTrackForSearchQuery(query = "", track = {}) {
+  const fields = [
+    track?.title,
+    track?.artist,
+    track?.album,
+    track?.albumTitle,
+    track?.releaseTitle,
+    track?.genre,
+    ...(Array.isArray(track?.tags) ? track.tags : []),
+  ];
+
+  return fields.reduce(
+    (bestScore, field) => Math.max(bestScore, scoreSearchValue(query, field, { includeExact: true })),
+    0
+  );
 }
 
 function buildSearchSuggestions(query = "", searchHistory = [], collections = []) {
@@ -281,14 +314,14 @@ export default function SearchPage() {
     });
   }, [initialQueryFromNavigation]);
 
-  const resetSearch = () => {
+  const resetSearch = useCallback(() => {
     setQuery("");
     setResultFilter("all");
     setSearchOffset(0);
     setSearchState(emptySearchState);
-  };
+  }, []);
 
-  const handleQueryChange = (value) => {
+  const handleQueryChange = useCallback((value) => {
     const nextNormalizedQuery = value.trim();
     setQuery(value);
     setSearchOffset(0);
@@ -307,7 +340,7 @@ export default function SearchPage() {
       loadingMore: false,
       pagination: defaultPagination,
     }));
-  };
+  }, [normalizedQuery, searchOffset]);
 
   const handleFilterChange = (nextFilterId) => {
     setResultFilter(nextFilterId);
@@ -406,9 +439,36 @@ export default function SearchPage() {
     return source.slice(0, 4);
   }, [popularTracks, trackMap]);
 
+  const emptySearchRecommendations = useMemo(() => {
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    return Object.values(trackMap)
+      .map((track) => ({
+        track,
+        score: scoreTrackForSearchQuery(normalizedQuery, track),
+      }))
+      .filter(({ score }) => score >= 72)
+      .sort((first, second) => {
+        if (second.score !== first.score) {
+          return second.score - first.score;
+        }
+        return String(first.track?.title ?? "").localeCompare(String(second.track?.title ?? ""), "ru");
+      })
+      .slice(0, 4)
+      .map(({ track }) => track);
+  }, [normalizedQuery, trackMap]);
+
   const popularColumns = useMemo(() => nonEmptyColumns(popularTracks), [popularTracks]);
-  const collections = Array.isArray(data?.collections) ? data.collections : [];
-  const morePlaylists = Array.isArray(data?.morePlaylists) ? data.morePlaylists : [];
+  const collections = useMemo(
+    () => (Array.isArray(data?.collections) ? data.collections : []),
+    [data?.collections]
+  );
+  const morePlaylists = useMemo(
+    () => (Array.isArray(data?.morePlaylists) ? data.morePlaylists : []),
+    [data?.morePlaylists]
+  );
   const isSparseCatalog = Boolean(data?.catalogState?.sparseCatalog);
   const searchSuggestions = useMemo(
     () => (normalizedQuery ? buildSearchSuggestions(normalizedQuery, searchHistory, collections) : []),
@@ -491,17 +551,23 @@ export default function SearchPage() {
     [copyPlaylistLink, navigate, openCardMenu]
   );
 
-  const handleSearchHistorySelect = useCallback((value) => {
-    setActiveTab("popular");
-    setResultFilter("all");
-    handleQueryChange(value);
-  }, []);
+  const handleSearchHistorySelect = useCallback(
+    (value) => {
+      setActiveTab("popular");
+      setResultFilter("all");
+      handleQueryChange(value);
+    },
+    [handleQueryChange]
+  );
 
-  const handleSearchSuggestionSelect = useCallback((value) => {
-    setActiveTab("popular");
-    setResultFilter("all");
-    handleQueryChange(value);
-  }, []);
+  const handleSearchSuggestionSelect = useCallback(
+    (value) => {
+      setActiveTab("popular");
+      setResultFilter("all");
+      handleQueryChange(value);
+    },
+    [handleQueryChange]
+  );
 
   return (
     <PageShell>
@@ -588,7 +654,7 @@ export default function SearchPage() {
           isArtistFollowed={isArtistFollowed}
           likedIds={likedIds}
           currentTrackId={currentTrackId}
-          recommendationTracks={recommendations}
+          emptyRecommendationTracks={emptySearchRecommendations}
           pagination={searchState.pagination}
           loadingMore={searchState.loadingMore}
           canPlayTrack={canPlayTrack}
@@ -767,7 +833,7 @@ function SearchResults({
   isArtistFollowed,
   likedIds,
   currentTrackId,
-  recommendationTracks,
+  emptyRecommendationTracks = [],
   pagination,
   loadingMore,
   canPlayTrack,
@@ -787,13 +853,15 @@ function SearchResults({
     return (
       <section className={styles.section}>
         <ResourceState loading title="Ищем совпадения" description={`По запросу "${query}"`} />
-        <SmartRecommendations
-          title="Пока ищем, можно включить"
-          tracks={recommendationTracks}
-          onPlayTrack={onPlay}
-          onLikeTrack={onToggleLike}
-          onOpenTrackMenu={onOpenTrackMenu}
-        />
+        {emptyRecommendationTracks.length ? (
+          <SmartRecommendations
+            title="Пока ищем, можно включить"
+            tracks={emptyRecommendationTracks}
+            onPlayTrack={onPlay}
+            onLikeTrack={onToggleLike}
+            onOpenTrackMenu={onOpenTrackMenu}
+          />
+        ) : null}
       </section>
     );
   }
@@ -821,13 +889,15 @@ function SearchResults({
           onAction={onClearQuery}
         />
         <SearchSuggestionChips suggestions={suggestions} onSelect={onSelectSuggestion} />
-        <SmartRecommendations
-          title="Пока нет совпадений, можно включить"
-          tracks={recommendationTracks}
-          onPlayTrack={onPlay}
-          onLikeTrack={onToggleLike}
-          onOpenTrackMenu={onOpenTrackMenu}
-        />
+        {emptyRecommendationTracks.length ? (
+          <SmartRecommendations
+            title="Может, попробуете это"
+            tracks={emptyRecommendationTracks}
+            onPlayTrack={onPlay}
+            onLikeTrack={onToggleLike}
+            onOpenTrackMenu={onOpenTrackMenu}
+          />
+        ) : null}
       </section>
     );
   }

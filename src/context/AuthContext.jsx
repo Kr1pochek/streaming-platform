@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
       const response = await fetchCurrentUser();
       return response?.user ?? null;
     } catch {
-      await logoutAuth();
+      await logoutAuth().catch(() => {});
       return null;
     }
   }, []);

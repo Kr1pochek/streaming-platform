@@ -16,8 +16,8 @@ async function startServer() {
     : "";
   console.log(`Audio catalog checked for ${validation.totalTracks} tracks${warningSuffix}.`);
 
-  const port = Number(process.env.API_PORT ?? 4000);
-  const host = process.env.API_HOST ?? "127.0.0.1";
+  const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
+  const host = process.env.API_HOST ?? (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
   const server = app.listen(port, host, () => {
     console.log(`API server is running on http://${host}:${port}`);
   });

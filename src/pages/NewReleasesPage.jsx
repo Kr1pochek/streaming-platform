@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { BsFillPlayFill } from "react-icons/bs";
 import { FiDisc, FiExternalLink, FiMusic, FiRefreshCw } from "react-icons/fi";
@@ -62,14 +62,8 @@ export default function NewReleasesPage() {
   const { playQueue } = usePlayer();
   const loadHomeFeed = useCallback(() => fetchHomeFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadHomeFeed);
-  const releases = useMemo(
-    () => (Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : []),
-    [data?.releaseNotifications]
-  );
-  const artistCount = useMemo(
-    () => new Set(releases.map((release) => release.artistId).filter(Boolean)).size,
-    [releases]
-  );
+  const releases = Array.isArray(data?.releaseNotifications) ? data.releaseNotifications : [];
+  const artistCount = new Set(releases.map((release) => release.artistId).filter(Boolean)).size;
   const releaseWindowDays = Number.isFinite(Number(data?.releaseNotificationWindowDays))
     ? Number(data.releaseNotificationWindowDays)
     : 14;

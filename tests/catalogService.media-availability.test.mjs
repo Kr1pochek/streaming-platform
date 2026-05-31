@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import test, { after, before } from "node:test";
 import {
   buildSearchQueryVariants,
   isTrackAudioAvailable,
@@ -7,6 +10,28 @@ import {
   rankFuzzySearchItems,
   sanitizeTrackTags,
 } from "../server/services/catalogService.js";
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const hlsFixtureDirectory = path.resolve(currentDirectory, "../public/audio/hls/test-local-track");
+const hlsFixtureManifest = path.join(hlsFixtureDirectory, "master.m3u8");
+
+function removeHlsFixture() {
+  if (fs.existsSync(hlsFixtureManifest)) {
+    fs.unlinkSync(hlsFixtureManifest);
+  }
+  if (fs.existsSync(hlsFixtureDirectory) && !fs.readdirSync(hlsFixtureDirectory).length) {
+    fs.rmdirSync(hlsFixtureDirectory);
+  }
+}
+
+before(() => {
+  fs.mkdirSync(hlsFixtureDirectory, { recursive: true });
+  fs.writeFileSync(hlsFixtureManifest, "#EXTM3U\n", "utf8");
+});
+
+after(() => {
+  removeHlsFixture();
+});
 
 test("isTrackAudioAvailable returns true for existing local media", () => {
   assert.equal(isTrackAudioAvailable("demo-loop", "/api/media/demo-loop.wav"), true);
@@ -54,4 +79,35 @@ test("rankFuzzySearchItems keeps close genre matches for typo queries", () => {
   );
 
   assert.equal(match.id, "trap-metal-track");
+});
+
+test("rankFuzzySearchItems does not match compound genres by one shared token", () => {
+  const matches = rankFuzzySearchItems(
+    [
+      { id: "trap-metal-track", title: "Trap Metal Anthem", tags: ["trap metal"] },
+      { id: "metallic-track", title: "Metallic Smell", tags: ["metal"] },
+      { id: "death-track", title: "Death March", tags: ["industrial"] },
+      { id: "alternative-track", title: "A Secret Place", tags: ["alternative"] },
+    ],
+    "death metal",
+    (item) => [item.title, ...(item.tags ?? [])],
+    4
+  );
+
+  assert.deepEqual(matches.map((item) => item.id), []);
+});
+
+test("rankFuzzySearchItems keeps exact compound genre matches ahead of shared-token genres", () => {
+  const matches = rankFuzzySearchItems(
+    [
+      { id: "trap-metal-track", title: "Trap Metal Anthem", tags: ["trap metal"] },
+      { id: "death-metal-track", title: "Funeral Blast", tags: ["death metal"] },
+      { id: "metallic-track", title: "Metallic Smell", tags: ["metal"] },
+    ],
+    "death metal",
+    (item) => [item.title, ...(item.tags ?? [])],
+    4
+  );
+
+  assert.deepEqual(matches.map((item) => item.id), ["death-metal-track"]);
 });

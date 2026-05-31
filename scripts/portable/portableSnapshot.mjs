@@ -48,6 +48,11 @@ function quoteIdentifier(identifier) {
 }
 
 function createPool(env = process.env) {
+  const connectionString = String(env.DATABASE_URL ?? "").trim();
+  if (connectionString) {
+    return new Pool({ connectionString });
+  }
+
   return new Pool({
     host: env.PGHOST ?? "127.0.0.1",
     port: Number(env.PGPORT ?? 5432),
