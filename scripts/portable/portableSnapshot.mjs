@@ -175,11 +175,56 @@ function copyDirectoryRecursive(sourceRoot, destinationRoot) {
   return fileCount;
 }
 
+function makeWritableRecursive(targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return;
+  }
+
+  const stats = fs.lstatSync(targetPath);
+  if (stats.isDirectory() && !stats.isSymbolicLink()) {
+    const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+    for (const entry of entries) {
+      makeWritableRecursive(path.resolve(targetPath, entry.name));
+    }
+  }
+
+  try {
+    fs.chmodSync(targetPath, stats.isDirectory() ? 0o777 : 0o666);
+  } catch (error) {
+    if (!["ENOENT", "EPERM", "EACCES"].includes(error?.code)) {
+      throw error;
+    }
+  }
+}
+
+function removeSnapshotEntry(targetPath) {
+  const options = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
+  try {
+    fs.rmSync(targetPath, options);
+    return true;
+  } catch (error) {
+    if (!["EPERM", "EACCES"].includes(error?.code)) {
+      throw error;
+    }
+  }
+
+  makeWritableRecursive(targetPath);
+  try {
+    fs.rmSync(targetPath, options);
+    return true;
+  } catch (error) {
+    if (["EPERM", "EACCES"].includes(error?.code)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 function replaceDirectoryContents(sourceRoot, destinationRoot) {
   fs.mkdirSync(destinationRoot, { recursive: true });
   const existingEntries = fs.readdirSync(destinationRoot, { withFileTypes: true });
   for (const entry of existingEntries) {
-    fs.rmSync(path.resolve(destinationRoot, entry.name), { recursive: true, force: true });
+    removeSnapshotEntry(path.resolve(destinationRoot, entry.name));
   }
   if (!fs.existsSync(sourceRoot)) {
     return 0;
