@@ -1492,7 +1492,12 @@ export function createApiRouter({
         .map(({ candidate }) => ({ ...candidate }));
 
       res.json({
-        artist,
+        artist: {
+          ...artist,
+          trackCount: artistTracks.length,
+        },
+        tracks: artistTracks,
+        trackCount: artistTracks.length,
         topTracks,
         latestRelease,
         popularAlbums,

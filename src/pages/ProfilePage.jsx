@@ -177,6 +177,7 @@ function resolveDefaultReleaseType(trackCount) {
 
 function createUploadTrackDraft(file, index, metadata = null) {
   const fallbackFields = inferTrackFieldsFromUploadFileName(file?.name);
+  const metadataCover = metadata?.cover || "";
   return {
     localId: `${file?.name ?? "track"}-${file?.size ?? 0}-${file?.lastModified ?? index}-${index}`,
     fileName: file?.name ?? `track-${index + 1}`,
@@ -185,9 +186,37 @@ function createUploadTrackDraft(file, index, metadata = null) {
     trackId: "",
     durationSec: metadata?.durationSec ? String(metadata.durationSec) : "",
     genre: metadata?.genre || "",
-    cover: metadata?.cover || "",
+    cover: metadataCover,
+    coverSource: metadataCover ? "metadata" : "",
     tags: Array.isArray(metadata?.tags) ? metadata.tags.join(", ") : "",
   };
+}
+
+function shouldShareReleaseCoverWithTracks(releaseType, trackCount) {
+  return (releaseType === "ep" || releaseType === "album") && trackCount > 1;
+}
+
+function applySharedReleaseCoverToTrackDrafts(tracks, cover, releaseType, trackCount) {
+  const normalizedCover = String(cover ?? "").trim();
+  const shouldShareCover = shouldShareReleaseCoverWithTracks(releaseType, trackCount);
+
+  return tracks.map((track) => {
+    const coverSource = track.coverSource || (track.cover ? "metadata" : "");
+
+    if (!shouldShareCover || !normalizedCover) {
+      return coverSource === "release" ? { ...track, cover: "", coverSource: "" } : track;
+    }
+
+    if (coverSource === "metadata" || (track.cover && coverSource !== "release")) {
+      return track;
+    }
+
+    if (track.cover === normalizedCover && coverSource === "release") {
+      return track;
+    }
+
+    return { ...track, cover: normalizedCover, coverSource: "release" };
+  });
 }
 
 function resolveReleaseTypeValidationMessage(type, trackCount) {
@@ -709,7 +738,16 @@ export default function ProfilePage() {
   };
 
   const handleUploadFieldChange = (field, value) => {
-    setUploadForm((prev) => ({ ...prev, [field]: value }));
+    setUploadForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "cover" || field === "releaseType") {
+        const nextReleaseType = field === "releaseType" ? value : prev.releaseType;
+        const nextCover = field === "cover" ? value : prev.cover;
+        const trackCount = prev.audioFiles.length || prev.tracks.length;
+        next.tracks = applySharedReleaseCoverToTrackDrafts(prev.tracks, nextCover, nextReleaseType, trackCount);
+      }
+      return next;
+    });
   };
 
   const handleUploadTrackFieldChange = (index, field, value) => {
@@ -805,12 +843,19 @@ export default function ProfilePage() {
     const firstGenre = metadataResults.find((metadata) => metadata?.genre)?.genre || "";
     const firstTags = metadataResults.find((metadata) => metadata?.tags?.length)?.tags ?? [];
     const albumTitle = metadataResults.find((metadata) => metadata?.album)?.album || "";
+    const releaseType = resolveDefaultReleaseType(nextFiles.length);
+    const releaseTrackDrafts = applySharedReleaseCoverToTrackDrafts(
+      trackDrafts,
+      firstCover,
+      releaseType,
+      nextFiles.length
+    );
 
     setUploadForm((prev) => ({
       ...prev,
       audio: nextFiles[0],
       audioFiles: nextFiles,
-      releaseType: resolveDefaultReleaseType(nextFiles.length),
+      releaseType,
       title: albumTitle || (nextFiles.length === 1 ? firstTrack.title : firstTrack.title || ""),
       artist: firstTrack.artist || prev.artist,
       trackId: "",
@@ -818,7 +863,7 @@ export default function ProfilePage() {
       genre: firstGenre || firstTrack.genre || "",
       cover: firstCover,
       tags: firstTags.join(", "),
-      tracks: trackDrafts,
+      tracks: releaseTrackDrafts,
     }));
 
     if (firstCover) {
@@ -927,6 +972,7 @@ export default function ProfilePage() {
       const tracks = uploadFiles.map((file, index) => {
         const draft = uploadForm.tracks[index] ?? createUploadTrackDraft(file, index);
         const trackDuration = Number.parseInt(String(draft.durationSec ?? "").trim(), 10);
+        const trackCover = String(draft.cover ?? "").trim();
         return {
           title: String(draft.title || (uploadFiles.length === 1 ? releaseTitle : "")).trim(),
           artist,
@@ -945,6 +991,7 @@ export default function ProfilePage() {
                 ? trackDuration
                 : undefined,
           explicit: uploadForm.explicit,
+          cover: trackCover || undefined,
           tags: tags.join(","),
         };
       });
@@ -1945,6 +1992,10 @@ export default function ProfilePage() {
                 <p className={styles.coverUploadTitle}>Треки релиза</p>
                 {uploadForm.tracks.map((track, index) => (
                   <div key={track.localId} className={styles.uploadTrackItem}>
+                    <span
+                      className={styles.uploadTrackCover}
+                      style={{ background: track.cover || DEFAULT_UPLOAD_TRACK_COVER }}
+                    />
                     <span className={styles.uploadTrackIndex}>{index + 1}</span>
                     <div className={styles.uploadTrackFields}>
                       <label className={styles.authLabel}>

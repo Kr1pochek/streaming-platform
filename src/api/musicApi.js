@@ -286,6 +286,7 @@ function normalizeArtistSummary(artist = {}) {
   const followers = normalizeAudienceCount(artist?.followers);
   const listeners = normalizeAudienceCount(artist?.listeners ?? artist?.listenerCount);
   const avatar = normalizeCover(artist?.avatar ?? artist?.avatarUrl ?? artist?.cover);
+  const trackCount = asNumber(artist?.trackCount, 0);
 
   return {
     ...artist,
@@ -293,6 +294,7 @@ function normalizeArtistSummary(artist = {}) {
     name: asString(artist.name),
     followers,
     listeners,
+    trackCount,
     avatar,
     avatarUrl: avatar,
     cover: avatar,
@@ -570,10 +572,16 @@ function normalizeTrackPagePayload(payload = {}) {
 }
 
 function normalizeArtistPagePayload(payload = {}) {
+  const tracks = asArray(payload.tracks).map(normalizeTrack);
+  const topTracks = asArray(payload.topTracks).map(normalizeTrack);
+  const artistTracks = tracks.length ? tracks : topTracks;
+
   return {
     ...payload,
     artist: normalizeArtistSummary(payload.artist),
-    topTracks: asArray(payload.topTracks).map(normalizeTrack),
+    tracks: artistTracks,
+    trackCount: asNumber(payload.trackCount, artistTracks.length),
+    topTracks: topTracks.length ? topTracks : artistTracks.slice(0, 8),
     latestRelease: payload.latestRelease ? normalizeReleaseSummary(payload.latestRelease) : null,
     popularAlbums: asArray(payload.popularAlbums).map(normalizeReleaseSummary),
     eps: asArray(payload.eps).map(normalizeReleaseSummary),
@@ -691,8 +699,14 @@ export async function fetchTrackPlayback(trackId) {
   return request(`/playback/${encodeURIComponent(trackId)}`);
 }
 
-export async function fetchArtistPage(artistId) {
-  return normalizeArtistPagePayload(await request(`/artists/${encodeURIComponent(artistId)}`));
+export async function fetchArtistPage(artistId, options = {}) {
+  return normalizeArtistPagePayload(
+    await request(`/artists/${encodeURIComponent(artistId)}`, {
+      query: {
+        catalogVersion: options.catalogVersion,
+      },
+    })
+  );
 }
 
 export async function fetchReleasePage(releaseId) {

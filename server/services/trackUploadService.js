@@ -18,7 +18,7 @@ import {
 } from "./catalogService.js";
 import { persistMediaFile } from "./mediaStorageService.js";
 
-const uploadProcessingRoot = path.resolve(hlsDirectory, "../../tmp/upload-processing");
+const uploadProcessingRoot = path.resolve("tmp/upload-processing");
 const DEFAULT_DURATION_SEC = 180;
 const MIN_DURATION_SEC = 1;
 const MAX_DURATION_SEC = 60 * 60 * 4;

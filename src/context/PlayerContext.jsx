@@ -2639,6 +2639,7 @@ export function PlayerProvider({ children }) {
       tracks: runtimeTracks,
       artists: runtimeArtists,
       trackMap,
+      catalogVersion: state.catalogVersion,
       queue: state.queue,
       queueSource: state.queueSource,
       waveQueue: state.waveQueue,

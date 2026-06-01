@@ -24,6 +24,7 @@ import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import ArtistSpotlightCard from "../components/ArtistSpotlightCard.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
+import { splitArtistNames } from "../../shared/artistNameParsing.js";
 
 const audienceForms = {
   listeners: ["слушатель", "слушателя", "слушателей"],
@@ -73,6 +74,7 @@ function resolveArtistAvatar(data) {
   return (
     String(data?.artist?.avatar ?? data?.artist?.avatarUrl ?? data?.artist?.cover ?? "").trim() ||
     String(data?.latestRelease?.cover ?? "").trim() ||
+    String(data?.tracks?.find((track) => track?.cover)?.cover ?? "").trim() ||
     String(data?.topTracks?.find((track) => track?.cover)?.cover ?? "").trim()
   );
 }
@@ -81,10 +83,77 @@ function getReleaseDurationSec(release) {
   return (release?.tracks ?? []).reduce((sum, track) => sum + (track.durationSec ?? 0), 0);
 }
 
+function normalizeArtistMatchName(value = "") {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function trackBelongsToArtist(track, artist) {
+  const artistId = String(artist?.id ?? "").trim();
+  const artistName = normalizeArtistMatchName(artist?.name);
+  if (!track?.id || (!artistId && !artistName)) {
+    return false;
+  }
+
+  if (artistId && Array.isArray(track.artistIds) && track.artistIds.includes(artistId)) {
+    return true;
+  }
+
+  return splitArtistNames(track.artist).some((name) => normalizeArtistMatchName(name) === artistName);
+}
+
+function uniqueTracksById(trackGroups = []) {
+  const seen = new Set();
+  const tracks = [];
+
+  for (const group of trackGroups) {
+    for (const track of Array.isArray(group) ? group : []) {
+      const id = String(track?.id ?? "").trim();
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      tracks.push(track);
+    }
+  }
+
+  return tracks;
+}
+
+function collectReleaseTrackIds(releases = []) {
+  const ids = [];
+  const seen = new Set();
+
+  for (const release of Array.isArray(releases) ? releases : []) {
+    for (const value of [...(release?.trackIds ?? []), ...(release?.tracks ?? []).map((track) => track?.id)]) {
+      const id = String(value ?? "").trim();
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+
+  return ids;
+}
+
 export default function ArtistPage() {
   const { artistId = "" } = useParams();
   const navigate = useNavigate();
-  const loadArtistPage = useCallback(() => fetchArtistPage(artistId), [artistId]);
+
+  const {
+    likedIds,
+    currentTrackId,
+    historyIds,
+    trackMap,
+    catalogVersion,
+    isArtistFollowed,
+    toggleArtistFollow,
+    playTrack,
+    playQueue,
+  } = usePlayer();
+
+  const loadArtistPage = useCallback(() => fetchArtistPage(artistId, { catalogVersion }), [artistId, catalogVersion]);
   const { status, data, error, reload } = useAsyncResource(loadArtistPage);
   const [releaseFilterState, setReleaseFilterState] = useState({ artistId, value: "all" });
   const releaseFilter = releaseFilterState.artistId === artistId ? releaseFilterState.value : "all";
@@ -95,11 +164,31 @@ export default function ArtistPage() {
     [artistId]
   );
 
-  const { likedIds, currentTrackId, historyIds, isArtistFollowed, toggleArtistFollow, playTrack, playQueue } = usePlayer();
-
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
 
-  const artistTrackIds = useMemo(() => (data?.topTracks ?? []).map((track) => track.id), [data?.topTracks]);
+  const releaseTrackIds = useMemo(() => collectReleaseTrackIds(data?.allReleases), [data]);
+  const artistTracks = useMemo(() => {
+    const catalogTracks = Object.values(trackMap ?? {}).filter((track) => trackBelongsToArtist(track, data?.artist));
+    const releaseTracks = (data?.allReleases ?? []).flatMap((release) => release?.tracks ?? []);
+    return uniqueTracksById([catalogTracks, data?.tracks, releaseTracks, data?.topTracks]);
+  }, [data, trackMap]);
+  const artistTrackIds = useMemo(() => {
+    const ids = [];
+    const seen = new Set();
+    for (const id of [...artistTracks.map((track) => track.id), ...releaseTrackIds]) {
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      ids.push(id);
+    }
+    return ids;
+  }, [artistTracks, releaseTrackIds]);
+  const artistTrackCount = Math.max(
+    Math.trunc(Number(data?.trackCount) || 0),
+    Math.trunc(Number(data?.artist?.trackCount) || 0),
+    artistTrackIds.length
+  );
   const artistFollowed = data?.artist ? isArtistFollowed(data.artist.id) : false;
   const artistAvatar = resolveArtistAvatar(data);
   const hasLocalArtistListen = useMemo(() => {
@@ -183,7 +272,7 @@ export default function ArtistPage() {
                   <FiUsers />
                   {formatAudience(artistFollowers, "followers")}
                 </span>
-                <span>{data.topTracks.length} треков</span>
+                <span>{artistTrackCount} {pluralizeRu(artistTrackCount, "трек", "трека", "треков")}</span>
               </div>
               <div className={styles.heroActions}>
                 <button

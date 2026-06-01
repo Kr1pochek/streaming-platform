@@ -29,20 +29,20 @@ async function startServer(apiRouterOptions = {}) {
   };
 }
 
-function buildArtistCatalog(releases) {
-  const track = {
-    id: "track-1",
-    title: "First Track",
+function buildArtistCatalog(releases, { trackCount = 1 } = {}) {
+  const tracks = Array.from({ length: trackCount }, (_, index) => ({
+    id: `track-${index + 1}`,
+    title: index === 0 ? "First Track" : `Track ${index + 1}`,
     artist: "Artist One",
     durationSec: 180,
     cover: "linear-gradient(135deg, #111, #333)",
     tags: ["rock"],
-  };
+  }));
 
   return {
     playlists: [],
-    tracks: [track],
-    trackMap: { [track.id]: track },
+    tracks,
+    trackMap: Object.fromEntries(tracks.map((track) => [track.id, track])),
     artists: [{ id: "artist-1", name: "Artist One", followers: 0, listeners: 0 }],
     releases,
   };
@@ -127,4 +127,21 @@ test("GET /api/artists/:artistId hides all release cards after the freshness win
     payload.allReleases.map((release) => release.id),
     ["release-old"]
   );
+});
+
+test("GET /api/artists/:artistId returns the full artist track count", async (t) => {
+  const server = await startServer({
+    catalogFetcher: async () => buildArtistCatalog([], { trackCount: 9 }),
+  });
+  t.after(server.stop);
+
+  const response = await fetch(`${server.baseUrl}/api/artists/artist-1`);
+  assert.equal(response.status, 200);
+
+  const payload = await response.json();
+  assert.equal(payload.trackCount, 9);
+  assert.equal(payload.artist.trackCount, 9);
+  assert.equal(payload.tracks.length, 9);
+  assert.equal(payload.topTracks.length, 8);
+  assert.equal(payload.tracks.at(-1).id, "track-9");
 });
