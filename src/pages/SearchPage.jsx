@@ -35,6 +35,7 @@ const searchFilters = [
 ];
 
 const PAGE_LIMIT = 12;
+const MORE_PLAYLISTS_PREVIEW_LIMIT = 5;
 const SEARCH_HISTORY_STORAGE_KEY = "music.search.history.v1";
 const SEARCH_HISTORY_LIMIT = 12;
 const defaultPagination = {
@@ -266,6 +267,7 @@ export default function SearchPage() {
   const [searchOffset, setSearchOffset] = useState(0);
   const [searchState, setSearchState] = useState(emptySearchState);
   const [searchHistory, setSearchHistory] = useState(() => readSearchHistory());
+  const [showAllMorePlaylists, setShowAllMorePlaylists] = useState(false);
 
   const normalizedQuery = query.trim();
   const canPlayTrack = useCallback((trackId) => Boolean(trackMap?.[trackId]), [trackMap]);
@@ -469,7 +471,12 @@ export default function SearchPage() {
     () => (Array.isArray(data?.morePlaylists) ? data.morePlaylists : []),
     [data?.morePlaylists]
   );
+  const canExpandMorePlaylists = morePlaylists.length > MORE_PLAYLISTS_PREVIEW_LIMIT;
+  const visibleMorePlaylists = showAllMorePlaylists
+    ? morePlaylists
+    : morePlaylists.slice(0, MORE_PLAYLISTS_PREVIEW_LIMIT);
   const isSparseCatalog = Boolean(data?.catalogState?.sparseCatalog);
+  const morePlaylistsTitle = isSparseCatalog ? "Плейлисты каталога" : "Больше новой музыки";
   const searchSuggestions = useMemo(
     () => (normalizedQuery ? buildSearchSuggestions(normalizedQuery, searchHistory, collections) : []),
     [collections, normalizedQuery, searchHistory]
@@ -483,6 +490,10 @@ export default function SearchPage() {
     !searchResults.playlists.length &&
     !searchResults.artists.length &&
     !searchResults.albums.length;
+
+  useEffect(() => {
+    setShowAllMorePlaylists(false);
+  }, [activeTab, data?.morePlaylists, normalizedQuery]);
 
   const handleOpenCollection = (item) => {
     if (!item) {
@@ -730,11 +741,30 @@ export default function SearchPage() {
 
           <section className={styles.section}>
             <div className={styles.sectionTitleRow}>
-              <h2 className={styles.sectionHeading}>{isSparseCatalog ? "Плейлисты каталога" : "Больше новой музыки"}</h2>
-              <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+              <h2 className={styles.sectionHeading}>
+                {canExpandMorePlaylists ? (
+                  <button
+                    type="button"
+                    className={styles.sectionHeadingButton}
+                    aria-expanded={showAllMorePlaylists}
+                    onClick={() => setShowAllMorePlaylists((value) => !value)}
+                  >
+                    <span>{morePlaylistsTitle}</span>
+                    <FiChevronRight
+                      className={`${styles.sectionArrow} ${showAllMorePlaylists ? styles.sectionArrowOpen : ""}`.trim()}
+                      aria-hidden="true"
+                    />
+                  </button>
+                ) : (
+                  <>
+                    <span>{morePlaylistsTitle}</span>
+                    <FiChevronRight className={styles.sectionArrow} aria-hidden="true" />
+                  </>
+                )}
+              </h2>
             </div>
             <div className={styles.moreGrid}>
-              {morePlaylists.map((playlist) => (
+              {visibleMorePlaylists.map((playlist) => (
                 <PlaylistCard
                   key={playlist.id}
                   playlist={playlist}

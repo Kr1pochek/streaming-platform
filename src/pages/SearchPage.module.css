@@ -167,13 +167,49 @@
   font-size: 40px;
   line-height: 1.1;
   font-weight: 900;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionHeadingButton {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.sectionHeadingButton:hover .sectionArrow {
+  color: rgba(255, 255, 255, 0.92);
+  transform: translateX(2px);
+}
+
+.sectionHeadingButton:focus-visible {
+  outline: 2px solid rgba(255, 212, 94, 0.95);
+  outline-offset: 5px;
+  border-radius: 8px;
 }
 
 .sectionArrow {
   width: 22px;
   height: 22px;
   color: rgba(255, 255, 255, 0.66);
+  transition: color 0.16s ease, transform 0.16s ease;
+}
+
+.sectionArrowOpen {
+  transform: rotate(90deg);
+}
+
+.sectionHeadingButton:hover .sectionArrowOpen {
+  transform: rotate(90deg) translateX(2px);
 }
 
 .collectionsGrid {
@@ -1225,4 +1261,3 @@
     grid-template-columns: 1fr;
   }
 }
-
