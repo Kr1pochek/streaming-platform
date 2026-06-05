@@ -58,6 +58,11 @@ const canonicalTrackTagMap = new Map([
   ["трэп-метал", "trap metal"],
 ]);
 const MIN_FUZZY_SEARCH_SCORE = 48;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_SUPPLEMENTAL_PLAYLISTS = 10;
+const MAX_GENRE_SUPPLEMENTAL_PLAYLISTS = 5;
+const DAILY_PLAYLIST_TRACK_LIMIT = 12;
+const GENRE_PLAYLIST_TRACK_LIMIT = 14;
 let catalogCache = {
   value: null,
   expiresAt: 0,
@@ -508,6 +513,101 @@ function playlistTrackSignature(trackIds = []) {
   return trackIds.join("|");
 }
 
+function trackCountWord(count) {
+  const safeCount = Math.max(0, Number(count ?? 0));
+  const remainder100 = safeCount % 100;
+  const remainder10 = safeCount % 10;
+  if (remainder100 >= 11 && remainder100 <= 14) {
+    return "треков";
+  }
+  if (remainder10 === 1) {
+    return "трек";
+  }
+  if (remainder10 >= 2 && remainder10 <= 4) {
+    return "трека";
+  }
+  return "треков";
+}
+
+function formatTrackCount(count) {
+  const safeCount = Math.max(0, Number(count ?? 0));
+  return `${safeCount} ${trackCountWord(safeCount)}`;
+}
+
+function rotateTracksByDay(tracks = [], trackLimit = DAILY_PLAYLIST_TRACK_LIMIT) {
+  const safeTracks = Array.isArray(tracks) ? tracks.filter((track) => track?.id) : [];
+  if (!safeTracks.length) {
+    return [];
+  }
+
+  const daySeed = Math.floor(Date.now() / DAY_MS);
+  const startIndex = daySeed % safeTracks.length;
+  const rotatedTracks = [...safeTracks.slice(startIndex), ...safeTracks.slice(0, startIndex)];
+  return rotatedTracks.slice(0, Math.min(trackLimit, rotatedTracks.length));
+}
+
+function formatGenreLabel(tag = "") {
+  return String(tag ?? "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (/^[a-z]{1,4}$/i.test(word)) {
+        return word.toUpperCase();
+      }
+      return `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+    })
+    .join(" ");
+}
+
+function slugifyPlaylistPart(value = "") {
+  const normalizedValue = normalizeTrackTagKey(value)
+    .replace(/[^a-zа-я0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalizedValue || "mix";
+}
+
+function summarizeGenresFromTracks(tracks = []) {
+  const genreSummary = new Map();
+
+  for (const track of tracks) {
+    for (const tag of sanitizeTrackTags(track?.tags)) {
+      const normalizedTagKey = normalizeTrackTagKey(tag);
+      if (!normalizedTagKey) {
+        continue;
+      }
+
+      const current = genreSummary.get(normalizedTagKey) ?? {
+        label: canonicalizeTrackTag(tag),
+        tracks: [],
+        newestCreatedAt: 0,
+      };
+      if (!current.tracks.some((item) => item.id === track.id)) {
+        current.tracks.push(track);
+      }
+      current.newestCreatedAt = Math.max(current.newestCreatedAt, Number(track.createdAt ?? 0));
+      genreSummary.set(normalizedTagKey, current);
+    }
+  }
+
+  return [...genreSummary.entries()]
+    .map(([key, summary]) => ({
+      key,
+      label: formatGenreLabel(summary.label),
+      tracks: summary.tracks.sort(compareTracksByFreshness),
+      newestCreatedAt: summary.newestCreatedAt,
+    }))
+    .filter((summary) => summary.tracks.length >= 2)
+    .sort(
+      (left, right) =>
+        right.tracks.length - left.tracks.length ||
+        right.newestCreatedAt - left.newestCreatedAt ||
+        left.label.localeCompare(right.label, "ru")
+    )
+    .slice(0, MAX_GENRE_SUPPLEMENTAL_PLAYLISTS);
+}
+
 function firstTrackCover(tracks = []) {
   for (const track of tracks) {
     const cover = String(track?.cover ?? "").trim();
@@ -609,17 +709,27 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
     (playlist) => !isCustomPlaylist(playlist) && !isSystemPlaylist(playlist) && (playlist.trackIds?.length ?? 0) > 0
   );
 
-  if (!availableTracks.length || existingPublicPlaylists.length >= 3) {
+  if (!availableTracks.length) {
     return [];
   }
 
   const tracksByFreshness = [...availableTracks].sort(compareTracksByFreshness);
   const trackIdsByFreshness = tracksByFreshness.map((track) => track.id);
   const trackIdsReversed = [...trackIdsByFreshness].reverse();
+  const dailyTracks = rotateTracksByDay(tracksByFreshness);
   const topArtist = topArtistFromTracks(tracksByFreshness);
+  const genreSummaries = summarizeGenresFromTracks(tracksByFreshness);
   const usedCoverKeys = new Set(existingPublicPlaylists.map((playlist) => coverKey(playlist.cover)).filter(Boolean));
 
   const candidates = [
+    {
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}daily`,
+      title: "Плейлист дня",
+      subtitle: "Ежедневный микс по живым жанрам каталога",
+      preferredTracks: dailyTracks,
+      fallbackTracks: tracksByFreshness,
+      trackIds: dailyTracks.map((track) => track.id),
+    },
     {
       id: `${SYSTEM_PLAYLIST_ID_PREFIX}catalog-now`,
       title: "Сейчас в каталоге",
@@ -645,6 +755,20 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
       trackIds: trackIdsByFreshness.slice(0, Math.min(trackIdsByFreshness.length, 8)),
     },
   ];
+
+  for (const genreSummary of genreSummaries) {
+    const trackIds = genreSummary.tracks
+      .slice(0, Math.min(genreSummary.tracks.length, GENRE_PLAYLIST_TRACK_LIMIT))
+      .map((track) => track.id);
+    candidates.push({
+      id: `${SYSTEM_PLAYLIST_ID_PREFIX}genre-${slugifyPlaylistPart(genreSummary.key)}`,
+      title: `${genreSummary.label}: микс`,
+      subtitle: `${formatTrackCount(trackIds.length)} по жанру`,
+      preferredTracks: genreSummary.tracks,
+      fallbackTracks: tracksByFreshness,
+      trackIds,
+    });
+  }
 
   if (topArtist && topArtist.trackIds.length >= 2) {
     candidates.push({
@@ -691,7 +815,7 @@ export function buildCatalogSupplementalPlaylists({ tracks = [], existingPlaylis
     supplementalPlaylists.push(playlist);
   }
 
-  return supplementalPlaylists.slice(0, Math.max(1, 4 - existingPublicPlaylists.length));
+  return supplementalPlaylists.slice(0, MAX_SUPPLEMENTAL_PLAYLISTS);
 }
 
 export function sortTracks(tracks) {

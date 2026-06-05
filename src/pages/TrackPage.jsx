@@ -1,6 +1,18 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { FiArrowLeft, FiExternalLink, FiHeart, FiLink2, FiMoreHorizontal, FiMusic } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiClock,
+  FiDisc,
+  FiExternalLink,
+  FiHeart,
+  FiLink2,
+  FiList,
+  FiMoreHorizontal,
+  FiMusic,
+  FiPlusCircle,
+  FiTag,
+} from "react-icons/fi";
 import { BsFillPlayFill } from "react-icons/bs";
 import { LuHeart } from "react-icons/lu";
 import styles from "./TrackPage.module.css";
@@ -18,6 +30,46 @@ import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
 import TrackQueueMenu from "../components/TrackQueueMenu.jsx";
 import useTrackQueueMenu from "../hooks/useTrackQueueMenu.js";
+
+function formatTrackCount(count) {
+  const safeCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+  const absoluteCount = Math.abs(safeCount);
+  const lastTwo = absoluteCount % 100;
+  const lastDigit = absoluteCount % 10;
+  let word = "треков";
+
+  if (lastTwo < 11 || lastTwo > 14) {
+    if (lastDigit === 1) {
+      word = "трек";
+    } else if (lastDigit >= 2 && lastDigit <= 4) {
+      word = "трека";
+    }
+  }
+
+  return `${safeCount} ${word}`;
+}
+
+function formatPlaylistCount(count) {
+  const safeCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+  const absoluteCount = Math.abs(safeCount);
+  const lastTwo = absoluteCount % 100;
+  const lastDigit = absoluteCount % 10;
+  let word = "плейлистов";
+
+  if (lastTwo < 11 || lastTwo > 14) {
+    if (lastDigit === 1) {
+      word = "плейлист";
+    } else if (lastDigit >= 2 && lastDigit <= 4) {
+      word = "плейлиста";
+    }
+  }
+
+  return `${safeCount} ${word}`;
+}
+
+function formatTagLine(tags = []) {
+  return tags.length ? tags.slice(0, 3).join(" / ") : "Без тегов";
+}
 
 export default function TrackPage() {
   const { trackId = "" } = useParams();
@@ -85,9 +137,11 @@ export default function TrackPage() {
       ) : null}
 
       {status === "success" && data ? (
-        <>
+        <div className={styles.trackView} style={{ "--track-cover": data.track.cover }}>
           <header className={styles.hero}>
-            <div className={styles.cover} style={{ background: data.track.cover }} />
+            <div className={styles.coverWrap}>
+              <div className={styles.cover} style={{ background: data.track.cover }} />
+            </div>
             <div className={styles.heroMeta}>
               <p className={styles.heroLabel}>Трек</p>
               <h1 className={styles.heroTitle}>{data.track.title}</h1>
@@ -99,9 +153,12 @@ export default function TrackPage() {
                 onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
               />
               <div className={styles.trackBadges}>
-                <span>{formatDurationClock(data.track.durationSec)}</span>
+                <span>
+                  <FiClock />
+                  {formatDurationClock(data.track.durationSec)}
+                </span>
                 {data.track.explicit ? <span>E</span> : null}
-                {data.track.tags.map((tag) => (
+                {data.track.tags.slice(0, 3).map((tag) => (
                   <span key={tag}>{tag}</span>
                 ))}
               </div>
@@ -136,179 +193,253 @@ export default function TrackPage() {
             </div>
           </header>
 
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Входит в плейлисты</h2>
-            {data.inPlaylists.length ? (
-              <div className={styles.playlistGrid}>
-                {data.inPlaylists.map((playlist) => {
-                  const firstTrackId = playlist.trackIds?.[0] ?? null;
-                  return (
-                    <article key={playlist.id} className={styles.playlistCard}>
+          <div className={styles.summaryStrip} aria-label="Сводка по треку">
+            <div className={styles.summaryItem}>
+              <FiDisc />
+              <span>
+                <strong>{formatDurationClock(data.track.durationSec)}</strong>
+                <small>длительность</small>
+              </span>
+            </div>
+            <div className={styles.summaryItem}>
+              <FiTag />
+              <span>
+                <strong>{formatTagLine(data.track.tags)}</strong>
+                <small>жанры</small>
+              </span>
+            </div>
+            <div className={styles.summaryItem}>
+              <FiList />
+              <span>
+                <strong>{formatPlaylistCount(data.inPlaylists.length)}</strong>
+                <small>в подборках</small>
+              </span>
+            </div>
+            <div className={styles.summaryItem}>
+              <FiMusic />
+              <span>
+                <strong>{formatTrackCount(data.relatedTracks.length)}</strong>
+                <small>рядом по звучанию</small>
+              </span>
+            </div>
+          </div>
+
+          <div className={styles.bodyGrid}>
+            <main className={styles.mainColumn}>
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.sectionEyebrow}>Коллекции</p>
+                    <h2 className={styles.sectionTitle}>Входит в плейлисты</h2>
+                  </div>
+                  {data.inPlaylists.length ? (
+                    <span className={styles.sectionCount}>{formatPlaylistCount(data.inPlaylists.length)}</span>
+                  ) : null}
+                </div>
+                {data.inPlaylists.length ? (
+                  <div className={styles.playlistGrid}>
+                    {data.inPlaylists.map((playlist) => {
+                      const firstTrackId = playlist.trackIds?.[0] ?? null;
+                      return (
+                        <article key={playlist.id} className={styles.playlistCard}>
+                          <button
+                            type="button"
+                            className={styles.playlistMainButton}
+                            onClick={() => navigate(`/playlist/${playlist.id}`)}
+                          >
+                            <span className={styles.playlistCover} style={{ background: playlist.cover }} />
+                            <span className={styles.playlistMeta}>
+                              <span className={styles.playlistTitle}>{playlist.title}</span>
+                              <span className={styles.playlistSubtitle}>
+                                {playlist.subtitle || formatTrackCount(playlist.trackIds.length)}
+                              </span>
+                            </span>
+                          </button>
+                          {firstTrackId ? (
+                            <span className={styles.cardActions}>
+                              <button
+                                type="button"
+                                className={styles.cardActionButton}
+                                aria-label="Слушать"
+                                onClick={() => playTrack(firstTrackId)}
+                              >
+                                <BsFillPlayFill />
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.cardActionButton}
+                                aria-label="Лайк"
+                                onClick={() => toggleLikeTrack(firstTrackId)}
+                              >
+                                <FiHeart />
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.cardActionButton}
+                                aria-label="Открыть меню трека"
+                                onClick={(event) => openTrackMenu(event, firstTrackId)}
+                              >
+                                <FiMoreHorizontal />
+                              </button>
+                            </span>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className={styles.emptyText}>Этот трек пока не входит в готовые плейлисты.</p>
+                )}
+              </section>
+
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.sectionEyebrow}>Следом</p>
+                    <h2 className={styles.sectionTitle}>Похожие треки</h2>
+                  </div>
+                  {data.relatedTracks.length ? (
+                    <span className={styles.sectionCount}>{formatTrackCount(data.relatedTracks.length)}</span>
+                  ) : null}
+                </div>
+                <ul className={styles.trackList}>
+                  {data.relatedTracks.map((track) => {
+                    const liked = likedIds.includes(track.id);
+                    const isActive = currentTrackId === track.id;
+                    return (
+                      <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
+                        <button
+                          type="button"
+                          className={styles.trackMain}
+                          onClick={() => playTrack(track.id)}
+                          onContextMenu={(event) => openTrackMenu(event, track.id)}
+                        >
+                          <span className={styles.trackCoverMini} style={{ background: track.cover }} />
+                          <span className={styles.trackMeta}>
+                            <span className={styles.trackTitle}>
+                              {track.title}
+                              {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
+                            </span>
+                            <ArtistInlineLinks
+                              artistLine={track.artist}
+                              className={styles.trackArtist}
+                              linkClassName={styles.trackArtistButton}
+                              textClassName={styles.trackArtist}
+                              onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
+                              stopPropagation
+                            />
+                          </span>
+                          <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.iconButton} ${liked ? styles.iconButtonActive : ""}`.trim()}
+                          aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
+                          onClick={() => toggleLikeTrack(track.id)}
+                        >
+                          {liked ? <FiHeart /> : <LuHeart />}
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          aria-label="Открыть страницу трека"
+                          onClick={() => navigate(`/track/${track.id}`)}
+                        >
+                          <FiExternalLink />
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.iconButton}
+                          aria-label="Открыть меню трека"
+                          onClick={(event) => openTrackMenu(event, track.id)}
+                        >
+                          <FiMoreHorizontal />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            </main>
+
+            <aside className={styles.sideColumn}>
+              <section className={styles.sideSection}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.sectionEyebrow}>Личная полка</p>
+                    <h2 className={styles.sideTitle}>Мои плейлисты</h2>
+                  </div>
+                  <FiPlusCircle aria-hidden="true" />
+                </div>
+                {!isAuthenticated ? (
+                  <div className={styles.compactState}>
+                    <p>Войди, чтобы добавлять этот трек в свои плейлисты.</p>
+                    <button type="button" className={styles.compactStateButton} onClick={() => navigate("/profile")}>
+                      Открыть профиль
+                    </button>
+                  </div>
+                ) : data.playlistToggles.length ? (
+                  <div className={styles.userPlaylistList}>
+                    {data.playlistToggles.map((playlist) => (
+                      <article key={playlist.id} className={styles.userPlaylistRow}>
+                        <span className={styles.userPlaylistMeta}>
+                          <span className={styles.userPlaylistTitle}>{playlist.title}</span>
+                          <span className={styles.userPlaylistSubtitle}>{formatTrackCount(playlist.trackIds.length)}</span>
+                        </span>
+                        <button
+                          type="button"
+                          className={`${styles.userPlaylistButton} ${
+                            playlist.hasTrack ? styles.userPlaylistButtonActive : ""
+                          }`.trim()}
+                          onClick={() => handleToggleTrackInPlaylist(playlist)}
+                        >
+                          {playlist.hasTrack ? "Убрать" : "Добавить"}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.compactState}>
+                    <p>Создай плейлист в библиотеке, чтобы добавлять треки отсюда.</p>
+                    <button type="button" className={styles.compactStateButton} onClick={() => navigate("/library")}>
+                      Открыть библиотеку
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              <section className={styles.sideSection}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.sectionEyebrow}>Каталог</p>
+                    <h2 className={styles.sideTitle}>Еще от исполнителя</h2>
+                  </div>
+                </div>
+                {data.moreByArtist.length ? (
+                  <div className={styles.moreArtistList}>
+                    {data.moreByArtist.map((track) => (
                       <button
+                        key={track.id}
                         type="button"
-                        className={styles.playlistMainButton}
-                        onClick={() => navigate(`/playlist/${playlist.id}`)}
+                        className={styles.artistTrackCard}
+                        onClick={() => playQueue([data.track.id, track.id], 1)}
                       >
-                        <span className={styles.playlistCover} style={{ background: playlist.cover }} />
-                        <span className={styles.playlistTitle}>{playlist.title}</span>
-                        <span className={styles.playlistSubtitle}>{playlist.subtitle}</span>
+                        <span className={styles.artistTrackCover} style={{ background: track.cover }} />
+                        <span className={styles.artistTrackMeta}>
+                          <span className={styles.artistTrackTitle}>{track.title}</span>
+                          <span className={styles.artistTrackDuration}>{formatDurationClock(track.durationSec)}</span>
+                        </span>
+                        <BsFillPlayFill aria-hidden="true" />
                       </button>
-                      {firstTrackId ? (
-                        <span className={styles.cardActions}>
-                          <button
-                            type="button"
-                            className={styles.cardActionButton}
-                            aria-label="Слушать"
-                            onClick={() => playTrack(firstTrackId)}
-                          >
-                            <BsFillPlayFill />
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.cardActionButton}
-                            aria-label="Лайк"
-                            onClick={() => toggleLikeTrack(firstTrackId)}
-                          >
-                            <FiHeart />
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.cardActionButton}
-                            aria-label="Открыть меню трека"
-                            onClick={(event) => openTrackMenu(event, firstTrackId)}
-                          >
-                            <FiMoreHorizontal />
-                          </button>
-                        </span>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className={styles.emptyText}>Этот трек пока не входит в готовые плейлисты.</p>
-            )}
-          </section>
-
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Мои плейлисты</h2>
-            {!isAuthenticated ? (
-              <ResourceState
-                title="Нужен аккаунт"
-                description="Войди, чтобы добавлять треки в свои плейлисты."
-                actionLabel="Открыть профиль"
-                onAction={() => navigate("/profile")}
-              />
-            ) : data.playlistToggles.length ? (
-              <div className={styles.userPlaylistList}>
-                {data.playlistToggles.map((playlist) => (
-                  <article key={playlist.id} className={styles.userPlaylistRow}>
-                    <span className={styles.userPlaylistMeta}>
-                      <span className={styles.userPlaylistTitle}>{playlist.title}</span>
-                      <span className={styles.userPlaylistSubtitle}>{playlist.trackIds.length} треков</span>
-                    </span>
-                    <button
-                      type="button"
-                      className={`${styles.userPlaylistButton} ${playlist.hasTrack ? styles.userPlaylistButtonActive : ""}`.trim()}
-                      onClick={() => handleToggleTrackInPlaylist(playlist)}
-                    >
-                      {playlist.hasTrack ? "Удалить" : "Добавить"}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <ResourceState
-                title="Нет пользовательских плейлистов"
-                description="Создай плейлист в разделе “Моя музыка”, чтобы добавлять в него треки отсюда."
-                actionLabel="Открыть библиотеку"
-                onAction={() => navigate("/library")}
-              />
-            )}
-          </section>
-
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Похожие треки</h2>
-            <ul className={styles.trackList}>
-              {data.relatedTracks.map((track) => {
-                const liked = likedIds.includes(track.id);
-                const isActive = currentTrackId === track.id;
-                return (
-                  <li key={track.id} className={`${styles.trackRow} ${isActive ? styles.trackRowActive : ""}`.trim()}>
-                    <button
-                      type="button"
-                      className={styles.trackMain}
-                      onClick={() => playTrack(track.id)}
-                      onContextMenu={(event) => openTrackMenu(event, track.id)}
-                    >
-                      <span className={styles.trackCoverMini} style={{ background: track.cover }} />
-                      <span className={styles.trackMeta}>
-                        <span className={styles.trackTitle}>
-                          {track.title}
-                          {liked ? <FiHeart className={styles.trackLikedHeart} aria-hidden="true" /> : null}
-                        </span>
-                        <ArtistInlineLinks
-                          artistLine={track.artist}
-                          className={styles.trackArtist}
-                          linkClassName={styles.trackArtistButton}
-                          textClassName={styles.trackArtist}
-                          onOpenArtist={(artistId) => navigate(`/artist/${artistId}`)}
-                          stopPropagation
-                        />
-                      </span>
-                      <span className={styles.trackDuration}>{formatDurationClock(track.durationSec)}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.iconButton} ${liked ? styles.iconButtonActive : ""}`.trim()}
-                      aria-label={liked ? "Убрать из избранного" : "Добавить в избранное"}
-                      onClick={() => toggleLikeTrack(track.id)}
-                    >
-                      {liked ? <FiHeart /> : <LuHeart />}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Открыть страницу трека"
-                      onClick={() => navigate(`/track/${track.id}`)}
-                    >
-                      <FiExternalLink />
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.iconButton}
-                      aria-label="Открыть меню трека"
-                      onClick={(event) => openTrackMenu(event, track.id)}
-                    >
-                      <FiMoreHorizontal />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Еще от исполнителя</h2>
-            {data.moreByArtist.length ? (
-              <div className={styles.moreArtistRow}>
-                {data.moreByArtist.map((track) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    className={styles.artistTrackCard}
-                    onClick={() => playQueue([data.track.id, track.id], 1)}
-                  >
-                    <FiMusic />
-                    <span>{track.title}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className={styles.emptyText}>Это единственный трек этого артиста в текущем каталоге.</p>
-            )}
-          </section>
-        </>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.emptyText}>Это единственный трек этого артиста в текущем каталоге.</p>
+                )}
+              </section>
+            </aside>
+          </div>
+        </div>
       ) : null}
 
       <TrackQueueMenu menuState={menuState} onAddTrackNext={addTrackToQueueNext} onClose={closeTrackMenu} />

@@ -1,4 +1,4 @@
-﻿.backButton {
+.backButton {
   min-height: 34px;
   border: none;
   border-radius: 999px;
@@ -11,61 +11,137 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.backButton:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.trackView {
+  --track-cover: linear-gradient(135deg, rgba(245, 204, 70, 0.72), rgba(47, 49, 56, 0.92));
+  position: relative;
+  isolation: isolate;
+  margin-top: 14px;
+  display: grid;
+  gap: 22px;
+}
+
+.trackView::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -20px -22px auto;
+  height: 360px;
+  background:
+    linear-gradient(180deg, rgba(14, 15, 18, 0.2), rgba(8, 9, 13, 0.98)),
+    var(--track-cover);
+  opacity: 0.38;
+  filter: blur(26px) saturate(0.95);
+  transform: scale(1.02);
+  pointer-events: none;
 }
 
 .hero {
-  margin-top: 14px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(126deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025) 42%, rgba(255, 255, 255, 0.06)),
+    rgba(13, 14, 18, 0.74);
+  box-shadow:
+    0 24px 58px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 26px 28px;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 18px;
-  align-items: center;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 28px;
+  align-items: end;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -42px -24px -40px 28%;
+  z-index: -1;
+  background: var(--track-cover);
+  opacity: 0.18;
+  filter: blur(46px) saturate(1.16);
+  transform: scale(1.08);
+  pointer-events: none;
+}
+
+.coverWrap {
+  position: relative;
+  z-index: 1;
 }
 
 .cover {
-  width: 220px;
-  height: 220px;
-  border-radius: 18px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+  width: 240px;
+  height: 240px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 28px 54px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.heroMeta {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding-bottom: 4px;
 }
 
 .heroLabel {
   margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.62);
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.74);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .heroTitle {
-  margin: 8px 0 0;
-  font-size: 42px;
+  margin: 12px 0 0;
+  max-width: 22ch;
+  font-size: 46px;
   line-height: 1;
   font-weight: 900;
 }
 
 .heroSubtitle {
   display: block;
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   font-size: 15px;
-  color: rgba(255, 255, 255, 0.66);
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .heroArtistButton {
   font-size: 15px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
   text-decoration: underline;
-  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-decoration-color: rgba(255, 255, 255, 0.38);
   cursor: pointer;
 }
 
 .heroArtistButton:hover {
-  color: rgba(255, 255, 255, 0.96);
+  color: rgba(255, 255, 255, 0.98);
 }
 
 .trackBadges {
-  margin-top: 14px;
+  margin-top: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -73,20 +149,27 @@
 }
 
 .trackBadges span {
-  min-height: 24px;
+  min-height: 27px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.075);
+  padding: 0 11px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.74);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.trackBadges svg {
+  width: 13px;
+  height: 13px;
 }
 
 .heroActions {
-  margin-top: 16px;
+  margin-top: 18px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -95,21 +178,24 @@
 
 .primaryButton,
 .secondaryButton {
-  min-height: 40px;
+  min-height: 42px;
   border: none;
   border-radius: 999px;
-  padding: 0 16px;
+  padding: 0 17px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   cursor: pointer;
+  transition: transform 0.16s ease, filter 0.16s ease, background 0.16s ease;
 }
 
 .primaryButton {
   color: #1d1508;
   background: #f5cc46;
+  box-shadow: 0 12px 24px rgba(245, 204, 70, 0.2);
 }
 
 .secondaryButton {
@@ -117,173 +203,293 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-.secondaryButtonActive {
-  color: #ffd35d;
-  border: 1px solid rgba(255, 211, 93, 0.4);
+.primaryButton:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
 }
 
-.section {
-  margin-top: 26px;
+.secondaryButtonActive {
+  color: #ffd35d;
+  border: 1px solid rgba(255, 211, 93, 0.42);
+  background: rgba(255, 211, 93, 0.13);
+}
+
+.summaryStrip {
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.035);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summaryItem {
+  min-width: 0;
+  min-height: 76px;
+  padding: 13px 14px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.summaryItem:not(:last-child) {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.summaryItem > svg {
+  box-sizing: border-box;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  padding: 11px;
+  color: #f5cc46;
+  background: rgba(245, 204, 70, 0.12);
+  justify-self: start;
+}
+
+.summaryItem span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.summaryItem strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.1;
+  font-weight: 850;
+}
+
+.summaryItem small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bodyGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 360px);
+  align-items: start;
+  gap: 24px;
+}
+
+.mainColumn,
+.sideColumn {
+  min-width: 0;
+  display: grid;
+  gap: 26px;
+}
+
+.sideColumn {
+  gap: 16px;
+}
+
+.section,
+.sideSection {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.sideSection {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.026)),
+    rgba(255, 255, 255, 0.03);
+  padding: 16px;
+}
+
+.sectionHeader {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sectionHeader > div {
+  min-width: 0;
+}
+
+.sectionHeader > svg {
+  width: 20px;
+  height: 20px;
+  color: rgba(245, 204, 70, 0.88);
+  flex: 0 0 auto;
+}
+
+.sectionEyebrow {
+  margin: 0 0 5px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .sectionTitle {
   margin: 0;
-  font-size: 28px;
+  font-size: 27px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.sideTitle {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.1;
   font-weight: 850;
 }
 
-.emptyText {
-  margin: 12px 0 0;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.userPlaylistList {
-  margin-top: 14px;
-  display: grid;
-  gap: 8px;
-}
-
-.userPlaylistRow {
-  min-height: 52px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0 10px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.userPlaylistMeta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.userPlaylistTitle {
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.userPlaylistSubtitle {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.userPlaylistButton {
-  min-height: 32px;
+.sectionCount {
+  flex: 0 0 auto;
+  min-height: 28px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.17);
-  background: rgba(255, 255, 255, 0.09);
-  color: rgba(255, 255, 255, 0.9);
-  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.66);
   font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+  font-weight: 800;
 }
 
-.userPlaylistButtonActive {
-  border-color: rgba(255, 106, 106, 0.35);
-  background: rgba(169, 45, 45, 0.14);
-  color: rgba(255, 170, 170, 0.95);
+.emptyText {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .playlistGrid {
-  margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .playlistCard {
-  position: relative;
-  overflow: hidden;
+  min-width: 0;
+  min-height: 94px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 8px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 8px;
-  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.playlistCard:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.075);
+  transform: translateY(-1px);
 }
 
 .playlistMainButton {
+  min-width: 0;
+  width: 100%;
+  min-height: 76px;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
   padding: 0;
-  width: 100%;
   display: grid;
-  gap: 8px;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
   cursor: pointer;
 }
 
+.playlistCover {
+  width: 76px;
+  height: 76px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.24);
+}
+
+.playlistMeta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.playlistTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.15;
+  font-weight: 850;
+}
+
+.playlistSubtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.58);
+}
+
 .cardActions {
-  display: none;
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  opacity: 0.78;
 }
 
 .playlistCard:hover .cardActions,
 .playlistCard:focus-within .cardActions {
   opacity: 1;
-  transform: translateY(0);
 }
 
-.cardActionButton {
+.cardActionButton,
+.iconButton {
   width: 36px;
   height: 36px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(12, 12, 14, 0.88);
-  color: rgba(255, 255, 255, 0.88);
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.68);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
-.cardActionButton:hover {
-  background: rgba(255, 255, 255, 0.18);
+.cardActionButton {
+  background: rgba(13, 14, 18, 0.68);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.86);
 }
 
-.cardActionButton:focus-visible {
-  outline: 2px solid rgba(255, 212, 94, 0.95);
-  outline-offset: 2px;
-}
-
-.playlistCover {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 10px;
-}
-
-.playlistTitle {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.playlistSubtitle {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.58);
+.cardActionButton:hover,
+.iconButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.96);
+  transform: translateY(-1px);
 }
 
 .trackList {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
@@ -291,20 +497,26 @@
 }
 
 .trackRow {
-  min-height: 54px;
-  border-radius: 12px;
+  min-height: 58px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(255, 255, 255, 0.04);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.025);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 4px;
+  padding: 6px 8px;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
 }
 
-.trackRow > button:nth-of-type(2),
-.trackRow > button:nth-of-type(3) {
-  display: none;
+.trackRow:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.03);
+  transform: translateY(-1px);
 }
 
 .trackRowActive {
@@ -313,7 +525,8 @@
 }
 
 .trackMain {
-  min-height: 48px;
+  min-width: 0;
+  min-height: 46px;
   border: none;
   background: transparent;
   color: inherit;
@@ -328,7 +541,8 @@
 .trackCoverMini {
   width: 42px;
   height: 42px;
-  border-radius: 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .trackMeta {
@@ -342,8 +556,9 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,15 +569,6 @@
   height: 11px;
   color: #f5cc46;
   flex: 0 0 auto;
-}
-
-.currentDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f5cc46;
-  box-shadow: 0 0 10px rgba(245, 204, 70, 0.72);
-  animation: pulse 1s ease-in-out infinite;
 }
 
 .trackArtist {
@@ -389,56 +595,161 @@
   color: rgba(255, 255, 255, 0.95);
 }
 
-.trackArtistButton:focus-visible {
-  outline: 2px solid rgba(255, 212, 94, 0.95);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
 .trackDuration {
   color: rgba(255, 255, 255, 0.54);
   font-size: 12px;
-  font-weight: 700;
-}
-
-.iconButton {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.66);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+  font-weight: 800;
 }
 
 .iconButtonActive {
   color: #ffd35d;
 }
 
-.moreArtistRow {
-  margin-top: 14px;
-  display: flex;
+.compactState {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.compactState p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.compactStateButton {
+  min-height: 36px;
+  border: none;
+  border-radius: 999px;
+  background: #f5cc46;
+  color: #1d1508;
+  padding: 0 14px;
+  justify-self: start;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.userPlaylistList {
+  display: grid;
+  gap: 8px;
+}
+
+.userPlaylistRow {
+  min-height: 54px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 8px 8px 8px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.userPlaylistMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.userPlaylistTitle {
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userPlaylistSubtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.userPlaylistButton {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.userPlaylistButtonActive {
+  border-color: rgba(255, 106, 106, 0.35);
+  background: rgba(169, 45, 45, 0.14);
+  color: rgba(255, 170, 170, 0.95);
+}
+
+.moreArtistList {
+  display: grid;
   gap: 8px;
 }
 
 .artistTrackCard {
-  min-height: 34px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.9);
-  padding: 0 12px;
-  display: inline-flex;
+  min-width: 0;
+  min-height: 56px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 7px 9px 7px 7px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 26px;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 10px;
+  text-align: left;
   cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.artistTrackCard:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.075);
+  transform: translateY(-1px);
+}
+
+.artistTrackCover {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.artistTrackMeta {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.artistTrackTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.artistTrackDuration {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.artistTrackCard > svg {
+  width: 18px;
+  height: 18px;
+  color: #f5cc46;
+  justify-self: center;
 }
 
 .backButton:focus-visible,
@@ -446,72 +757,103 @@
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .playlistMainButton:focus-visible,
-.playlistCard:focus-visible,
+.cardActionButton:focus-visible,
 .trackMain:focus-visible,
+.trackArtistButton:focus-visible,
 .iconButton:focus-visible,
+.compactStateButton:focus-visible,
+.userPlaylistButton:focus-visible,
 .artistTrackCard:focus-visible {
   outline: 2px solid rgba(255, 212, 94, 0.95);
   outline-offset: 2px;
 }
 
-.userPlaylistButton:focus-visible {
-  outline: 2px solid rgba(255, 212, 94, 0.95);
-  outline-offset: 2px;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 0.65;
-    transform: scale(1);
+@media (max-width: 1180px) {
+  .hero {
+    grid-template-columns: 220px minmax(0, 1fr);
+    padding: 24px;
   }
 
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
+  .cover {
+    width: 220px;
+    height: 220px;
+  }
+
+  .heroTitle {
+    font-size: 42px;
+  }
+
+  .bodyGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+    gap: 18px;
+  }
+
+  .playlistGrid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 980px) {
-  .heroTitle {
-    font-size: 38px;
+  .summaryStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .playlistGrid {
+  .summaryItem:nth-child(2) {
+    border-right: none;
+  }
+
+  .summaryItem:nth-child(1),
+  .summaryItem:nth-child(2) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .bodyGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sideColumn {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
   }
 }
 
 @media (max-width: 760px) {
+  .trackView {
+    gap: 18px;
+  }
+
   .hero {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 18px;
+    align-items: start;
+    padding: 20px;
   }
 
   .cover {
-    width: min(200px, 100%);
+    width: min(210px, 100%);
     height: auto;
     aspect-ratio: 1 / 1;
-    justify-self: start;
   }
 
   .heroTitle {
-    font-size: 34px;
+    font-size: 36px;
   }
 
   .sectionTitle {
     font-size: 24px;
   }
 
-  .userPlaylistRow {
-    min-height: auto;
-    padding: 10px 12px;
+  .sideColumn {
     grid-template-columns: 1fr;
   }
 
-  .userPlaylistButton {
-    width: 100%;
-    justify-content: center;
+  .trackRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .trackRow > button:nth-of-type(2),
+  .trackRow > button:nth-of-type(3) {
+    display: none;
   }
 
   .trackMain {
@@ -524,8 +866,17 @@
 }
 
 @media (max-width: 560px) {
+  .trackView::before {
+    inset-inline: -14px;
+  }
+
+  .hero {
+    border-radius: 18px;
+    padding: 18px;
+  }
+
   .heroTitle {
-    font-size: 30px;
+    font-size: 31px;
   }
 
   .heroActions {
@@ -536,22 +887,58 @@
   .primaryButton,
   .secondaryButton {
     width: 100%;
-    justify-content: center;
   }
 
-  .playlistGrid {
+  .summaryStrip {
     grid-template-columns: 1fr;
   }
 
+  .summaryItem,
+  .summaryItem:nth-child(2) {
+    border-right: none;
+  }
+
+  .summaryItem:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .sectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionCount {
+    align-self: flex-start;
+  }
+
+  .playlistCard {
+    grid-template-columns: 1fr;
+  }
+
+  .playlistMainButton {
+    grid-template-columns: 68px minmax(0, 1fr);
+    min-height: 68px;
+  }
+
+  .playlistCover {
+    width: 68px;
+    height: 68px;
+  }
+
+  .cardActions {
+    justify-content: flex-start;
+  }
+
   .trackRow {
-    padding: 8px;
+    padding: 7px;
   }
 
   .trackMain {
     gap: 8px;
   }
 
-  .trackCoverMini {
+  .trackCoverMini,
+  .artistTrackCover {
     width: 38px;
     height: 38px;
   }
@@ -560,14 +947,13 @@
     font-size: 13px;
   }
 
-  .moreArtistRow {
-    display: grid;
+  .userPlaylistRow {
     grid-template-columns: 1fr;
   }
 
-  .artistTrackCard {
+  .userPlaylistButton,
+  .compactStateButton {
     width: 100%;
     justify-content: center;
   }
 }
-

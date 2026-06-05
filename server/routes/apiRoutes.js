@@ -26,6 +26,7 @@ import {
 import {
   CUSTOM_PLAYLIST_SUBTITLE,
   HttpError,
+  SYSTEM_PLAYLIST_ID_PREFIX,
   USER_PLAYLIST_ID_PREFIX,
   coverForPlaylist,
   createUserPlaylistId,
@@ -98,6 +99,8 @@ const MAX_STREAM_CHUNK_SIZE = 8 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_HOME_RELEASE_VISIBILITY_DAYS = 14;
 const MAX_HOME_RELEASE_VISIBILITY_DAYS = 365;
+const DAILY_PLAYLIST_ID = `${SYSTEM_PLAYLIST_ID_PREFIX}daily`;
+const DAILY_PLAYLIST_TRACK_LIMIT = 12;
 const mimeTypeByExtension = new Map([
   [".mp3", "audio/mpeg"],
   [".wav", "audio/wav"],
@@ -450,6 +453,161 @@ function buildHomeShowcases(playlists = []) {
   }
 
   return prioritizedShowcases.slice(0, 4);
+}
+
+function normalizeDailyTagKey(value = "") {
+  return String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function hashDailyValue(value = "") {
+  return Math.abs(
+    String(value ?? "")
+      .split("")
+      .reduce((acc, char) => acc * 31 + char.charCodeAt(0), 7)
+  );
+}
+
+function rotateDailyTracks(tracks = [], nowMs = Date.now(), limit = DAILY_PLAYLIST_TRACK_LIMIT) {
+  const safeTracks = Array.isArray(tracks) ? tracks.filter((track) => track?.id) : [];
+  if (!safeTracks.length) {
+    return [];
+  }
+
+  const daySeed = Math.floor(Number(nowMs || Date.now()) / DAY_MS);
+  const startIndex = daySeed % safeTracks.length;
+  const rotatedTracks = [...safeTracks.slice(startIndex), ...safeTracks.slice(0, startIndex)];
+  return rotatedTracks.slice(0, Math.min(limit, rotatedTracks.length));
+}
+
+function uniqueTracksById(tracks = []) {
+  const seenTrackIds = new Set();
+  const result = [];
+  for (const track of tracks) {
+    if (!track?.id || seenTrackIds.has(track.id)) {
+      continue;
+    }
+    seenTrackIds.add(track.id);
+    result.push(track);
+  }
+  return result;
+}
+
+function buildDailyPlaylist({ tracks = [], artists = [], followedArtistIds = [], fallbackPlaylist = null, nowMs = Date.now() } = {}) {
+  const safeTracks = Array.isArray(tracks) ? tracks.filter((track) => track?.id) : [];
+  if (!safeTracks.length) {
+    return null;
+  }
+
+  const sortedTracks = [...safeTracks].sort(
+    (first, second) =>
+      Number(second.createdAt ?? 0) - Number(first.createdAt ?? 0) ||
+      String(first.title ?? first.id).localeCompare(String(second.title ?? second.id), "ru")
+  );
+  const followedArtistIdSet = new Set(Array.isArray(followedArtistIds) ? followedArtistIds : []);
+  const followedArtists = (Array.isArray(artists) ? artists : []).filter((artist) => followedArtistIdSet.has(artist.id));
+  const followedGenreKeys = new Set();
+
+  for (const track of sortedTracks) {
+    if (!followedArtists.some((artist) => trackHasArtist(track, artist.name))) {
+      continue;
+    }
+    for (const tag of track.tags ?? []) {
+      const tagKey = normalizeDailyTagKey(tag);
+      if (tagKey) {
+        followedGenreKeys.add(tagKey);
+      }
+    }
+  }
+
+  const daySeed = Math.floor(Number(nowMs || Date.now()) / DAY_MS);
+  const rankedTracks = sortedTracks
+    .map((track) => {
+      const followsArtist = followedArtists.some((artist) => trackHasArtist(track, artist.name));
+      const sharedGenreCount = (track.tags ?? []).reduce((count, tag) => {
+        const tagKey = normalizeDailyTagKey(tag);
+        return tagKey && followedGenreKeys.has(tagKey) ? count + 1 : count;
+      }, 0);
+      const score = (followsArtist ? 120 : 0) + sharedGenreCount * 28;
+
+      return {
+        track,
+        score,
+        jitter: hashDailyValue(`${daySeed}:${track.id}`),
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort(
+      (first, second) =>
+        second.score - first.score ||
+        first.jitter - second.jitter ||
+        Number(second.track.createdAt ?? 0) - Number(first.track.createdAt ?? 0)
+    )
+    .map((item) => item.track);
+
+  const fallbackTracks = rotateDailyTracks(sortedTracks, nowMs, DAILY_PLAYLIST_TRACK_LIMIT);
+  const playlistTracks = uniqueTracksById([...rankedTracks, ...fallbackTracks]).slice(
+    0,
+    Math.min(DAILY_PLAYLIST_TRACK_LIMIT, sortedTracks.length)
+  );
+  if (!playlistTracks.length) {
+    return null;
+  }
+
+  const cover = playlistTracks.find((track) => String(track.cover ?? "").trim())?.cover || fallbackPlaylist?.cover || coverForPlaylist(DAILY_PLAYLIST_ID);
+  const followedArtistNames = followedArtists.map((artist) => artist.name).filter(Boolean).slice(0, 2);
+  const subtitle = followedArtistNames.length
+    ? `По подпискам: ${followedArtistNames.join(", ")}`
+    : "Ежедневный микс по жанрам каталога";
+
+  return {
+    id: DAILY_PLAYLIST_ID,
+    title: "Плейлист дня",
+    subtitle,
+    cover,
+    userId: null,
+    isCustom: false,
+    isSystem: true,
+    isPublic: true,
+    createdAt: 0,
+    trackIds: playlistTracks.map((track) => track.id),
+  };
+}
+
+function replacePlaylistById(playlists = [], replacement = null) {
+  if (!replacement?.id) {
+    return playlists;
+  }
+
+  let replaced = false;
+  const nextPlaylists = playlists.map((playlist) => {
+    if (playlist.id !== replacement.id) {
+      return playlist;
+    }
+    replaced = true;
+    return replacement;
+  });
+
+  return replaced ? nextPlaylists : [replacement, ...nextPlaylists];
+}
+
+function prependDailyShowcase(showcasesList = [], dailyPlaylist = null) {
+  if (!dailyPlaylist?.trackIds?.length) {
+    return showcasesList;
+  }
+
+  const dailyShowcase = {
+    id: `showcase-${DAILY_PLAYLIST_ID}`,
+    playlistId: DAILY_PLAYLIST_ID,
+    title: dailyPlaylist.title,
+    subtitle: dailyPlaylist.subtitle || `${dailyPlaylist.trackIds.length} tracks`,
+    cover: dailyPlaylist.cover,
+    trackIds: dailyPlaylist.trackIds,
+  };
+
+  return [
+    dailyShowcase,
+    ...showcasesList.filter((item) => item.playlistId !== DAILY_PLAYLIST_ID),
+  ].slice(0, 4);
 }
 
 async function ensureOwnedCustomPlaylist(client, playlistId, userId) {
@@ -1111,12 +1269,21 @@ export function createApiRouter({
       const userId = requestUserId(req);
       const { playlists, tracks, trackMap, artists, releases } = await catalogFetcher();
       const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
-      const catalogState = buildCatalogState({ tracks, playlists: visiblePlaylists });
       const freshTrackIds = initialQueue.slice(1, 7).filter((trackId) => Boolean(trackMap[trackId]));
       const fallbackFreshTrackIds = tracks.slice(0, 6).map((track) => track.id);
-      const enrichedShowcases = buildHomeShowcases(visiblePlaylists);
       const releaseVisibilityDays = parseHomeReleaseVisibilityDays(homeReleaseVisibilityDays);
       const nowMs = nowProvider();
+      const userState = userId ? await fetchUserState(userId) : null;
+      const dailyPlaylist = buildDailyPlaylist({
+        tracks,
+        artists,
+        followedArtistIds: userState?.followedArtistIds ?? [],
+        fallbackPlaylist: visiblePlaylists.find((playlist) => playlist.id === DAILY_PLAYLIST_ID),
+        nowMs,
+      });
+      const visiblePlaylistsWithDaily = replacePlaylistById(visiblePlaylists, dailyPlaylist);
+      const catalogState = buildCatalogState({ tracks, playlists: visiblePlaylistsWithDaily });
+      const enrichedShowcases = prependDailyShowcase(buildHomeShowcases(visiblePlaylistsWithDaily), dailyPlaylist);
 
       const artistNameById = new Map((artists ?? []).map((artist) => [artist.id, artist.name]));
       const sortedReleases = [...(releases ?? [])].sort(
@@ -1130,8 +1297,7 @@ export function createApiRouter({
       );
 
       let releaseNotifications = visibleHomeReleases;
-      if (userId) {
-        const userState = await fetchUserState(userId);
+      if (userState) {
         const followedArtistIdSet = new Set(userState.followedArtistIds ?? []);
         const followedReleases = visibleHomeReleases.filter((release) => followedArtistIdSet.has(release.artistId));
         const remainingReleases = visibleHomeReleases.filter((release) => !followedArtistIdSet.has(release.artistId));
@@ -1275,15 +1441,27 @@ export function createApiRouter({
     "/playlists/:playlistId",
     asyncHandler(async (req, res) => {
       const { playlistId } = req.params;
-      const { playlists, trackMap } = await fetchCatalog();
+      const { playlists, tracks, trackMap, artists } = await fetchCatalog();
       const userId = requestUserId(req);
 
-      const playlist = playlists.find((item) => item.id === playlistId);
+      const fallbackPlaylist = playlists.find((item) => item.id === playlistId);
+      const userState = playlistId === DAILY_PLAYLIST_ID && userId ? await fetchUserState(userId) : null;
+      const dailyPlaylist =
+        playlistId === DAILY_PLAYLIST_ID
+          ? buildDailyPlaylist({
+              tracks,
+              artists,
+              followedArtistIds: userState?.followedArtistIds ?? [],
+              fallbackPlaylist,
+              nowMs: nowProvider(),
+            })
+          : null;
+      const playlist = dailyPlaylist ?? fallbackPlaylist;
       if (!canReadPlaylist(playlist, userId)) {
         throw new HttpError(404, "Playlist not found.");
       }
 
-      const visiblePlaylists = filterPlaylistsForUser(playlists, userId);
+      const visiblePlaylists = replacePlaylistById(filterPlaylistsForUser(playlists, userId), dailyPlaylist);
       const playlistTracks = playlist.trackIds.map((id) => trackMap[id]).filter(Boolean);
       const overlapScore = (candidate) =>
         candidate.trackIds.filter((id) => playlist.trackIds.includes(id)).length;
