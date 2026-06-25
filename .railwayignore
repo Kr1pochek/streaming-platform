@@ -6,6 +6,11 @@ test-results
 tmp
 public/tmp
 public/audio
+public/audio/**
+public/audio/*
+*.flac
+*.mp3
+*.wav
 .run-logs
 .git
 .vscode
