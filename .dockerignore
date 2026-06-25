@@ -2,6 +2,8 @@ node_modules
 dist
 coverage
 public/audio
+portable-snapshot/media
+portable-snapshot/media/**
 public/tmp
 .git
 .github
