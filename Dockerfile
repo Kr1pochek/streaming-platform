@@ -21,7 +21,6 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/server ./server
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/.env.example ./.env.example
 COPY --from=build /app/portable-snapshot ./portable-snapshot
 
 EXPOSE 4000
