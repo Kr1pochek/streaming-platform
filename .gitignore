@@ -15,6 +15,7 @@ test-results/
 tmp/
 public/tmp/
 public/audio/
+portable-snapshot/media/
 *.local
 .env
 .env.*
