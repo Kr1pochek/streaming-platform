@@ -24,7 +24,5 @@ COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/.env.example ./.env.example
 COPY --from=build /app/portable-snapshot ./portable-snapshot
 
-VOLUME ["/app/public/audio"]
-
 EXPOSE 4000
 CMD ["node", "scripts/start-app.mjs"]

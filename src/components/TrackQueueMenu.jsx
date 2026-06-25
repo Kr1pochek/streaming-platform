@@ -53,11 +53,25 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
 
   const cacheRef = useRef(new Map());
   const menuRef = useRef(null);
+  const playlistSubmenuCloseTimerRef = useRef(null);
   const trackId = String(menuState?.trackId ?? "");
 
   useEffect(() => {
+    if (playlistSubmenuCloseTimerRef.current) {
+      clearTimeout(playlistSubmenuCloseTimerRef.current);
+      playlistSubmenuCloseTimerRef.current = null;
+    }
     setPlaylistSubmenuOpen(false);
   }, [trackId]);
+
+  useEffect(
+    () => () => {
+      if (playlistSubmenuCloseTimerRef.current) {
+        clearTimeout(playlistSubmenuCloseTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!trackId) {
@@ -160,7 +174,29 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
     : [];
   const artist = trackState.data?.artist ?? null;
 
+  const clearPlaylistSubmenuCloseTimer = () => {
+    if (!playlistSubmenuCloseTimerRef.current) {
+      return;
+    }
+    clearTimeout(playlistSubmenuCloseTimerRef.current);
+    playlistSubmenuCloseTimerRef.current = null;
+  };
+
+  const openPlaylistSubmenu = () => {
+    clearPlaylistSubmenuCloseTimer();
+    setPlaylistSubmenuOpen(true);
+  };
+
+  const schedulePlaylistSubmenuClose = () => {
+    clearPlaylistSubmenuCloseTimer();
+    playlistSubmenuCloseTimerRef.current = setTimeout(() => {
+      setPlaylistSubmenuOpen(false);
+      playlistSubmenuCloseTimerRef.current = null;
+    }, 300);
+  };
+
   const handleClose = () => {
+    clearPlaylistSubmenuCloseTimer();
     setPlaylistSubmenuOpen(false);
     onClose?.();
   };
@@ -421,13 +457,23 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
 
         <div
           className={styles.submenuHost}
-          onMouseEnter={() => setPlaylistSubmenuOpen(true)}
-          onMouseLeave={() => setPlaylistSubmenuOpen(false)}
+          onMouseEnter={openPlaylistSubmenu}
+          onMouseLeave={schedulePlaylistSubmenuClose}
+          onFocus={openPlaylistSubmenu}
+          onBlur={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) {
+              return;
+            }
+            schedulePlaylistSubmenuClose();
+          }}
         >
           <button
             type="button"
             className={`${styles.menuButton} ${styles.menuButtonWithArrow}`.trim()}
-            onClick={() => setPlaylistSubmenuOpen((current) => !current)}
+            onClick={() => {
+              clearPlaylistSubmenuCloseTimer();
+              setPlaylistSubmenuOpen((current) => !current);
+            }}
           >
             <span className={styles.menuIcon}>
               <FiPlusSquare />
@@ -436,7 +482,11 @@ export default function TrackQueueMenu({ menuState, onAddTrackNext, onOpenTrack,
             <FiChevronRight className={styles.menuArrow} />
           </button>
 
-          <div className={`${styles.submenu} ${playlistSubmenuOpen ? styles.submenuOpen : ""}`.trim()}>
+          <div
+            className={`${styles.submenu} ${playlistSubmenuOpen ? styles.submenuOpen : ""}`.trim()}
+            onMouseEnter={openPlaylistSubmenu}
+            onMouseLeave={schedulePlaylistSubmenuClose}
+          >
             {playlistPanel}
           </div>
         </div>

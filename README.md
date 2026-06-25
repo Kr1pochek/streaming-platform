@@ -48,13 +48,11 @@ Demo account from `.env.demo`:
 - username: `demo_user`
 - password: `demo_password_123`
 
-The profile page also has a `Демо-вход` button. Override it with `VITE_DEMO_USERNAME` and `VITE_DEMO_PASSWORD` if you seed another demo user.
-
 Demo checklist:
 - `/` shows the playable home feed, wave button, and new releases entry point.
 - `/releases` opens the full new releases grid.
 - `/search` handles typo genre queries and still shows contextual tracks while searching.
-- `/profile` covers login, demo sign-in, uploads, likes, history, and account settings.
+- `/profile` covers login, uploads, likes, history, and account settings.
 - `/admin` shows catalog health, validation queue, releases, tracks, and users for an admin account.
 
 ## 3. Portable clone with current data
@@ -112,7 +110,7 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # PLAYBACK_EMBED_SIGNED_URL=true
 # PLAYBACK_URL_TTL_MS=900000
 # PLAYBACK_EMBED_URL_TTL_MS=21600000
-# TRACK_UPLOAD_MAX_BYTES=83886080
+# TRACK_UPLOAD_MAX_BYTES=125829120
 # TRACK_UPLOAD_TEMP_DIR=tmp/uploads
 # GENERATE_HLS_ON_UPLOAD=true
 # FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe
@@ -133,8 +131,6 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # MEDIA_S3_PUBLIC_BASE_URL=
 # MEDIA_S3_ACL=
 # SMOKE_BASE_URL=http://127.0.0.1:4000
-# VITE_DEMO_USERNAME=demo_user
-# VITE_DEMO_PASSWORD=demo_password_123
 ```
 
 For a quick local demo config, use tracked `.env.demo`.

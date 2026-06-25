@@ -110,7 +110,7 @@ const mimeTypeByExtension = new Map([
   [".aac", "audio/aac"],
   [".opus", "audio/ogg"],
 ]);
-const TRACK_UPLOAD_MAX_BYTES = Number(process.env.TRACK_UPLOAD_MAX_BYTES ?? 80 * 1024 * 1024);
+const TRACK_UPLOAD_MAX_BYTES = Number(process.env.TRACK_UPLOAD_MAX_BYTES ?? 120 * 1024 * 1024);
 const AVATAR_UPLOAD_MAX_BYTES = Number(process.env.AVATAR_UPLOAD_MAX_BYTES ?? 5 * 1024 * 1024);
 const trackUploadTempDirectory = path.resolve(
   process.cwd(),
@@ -1303,7 +1303,7 @@ export function createApiRouter({
         const remainingReleases = visibleHomeReleases.filter((release) => !followedArtistIdSet.has(release.artistId));
         releaseNotifications = [...followedReleases, ...remainingReleases];
       }
-      releaseNotifications = releaseNotifications.slice(0, 8).map((release) => mapHomeReleaseItem(release, artistNameById));
+      releaseNotifications = releaseNotifications.map((release) => mapHomeReleaseItem(release, artistNameById));
 
       res.json({
         quickActions,

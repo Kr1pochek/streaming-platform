@@ -10,6 +10,7 @@ import PageShell from "../components/PageShell.jsx";
 import useAsyncResource from "../hooks/useAsyncResource.js";
 import { fetchSearchFeed, searchCatalog } from "../api/musicApi.js";
 import usePlayer from "../hooks/usePlayer.js";
+import useAuth from "../hooks/useAuth.js";
 import ResourceState from "../components/ResourceState.jsx";
 import { formatDurationClock } from "../utils/formatters.js";
 import ArtistInlineLinks from "../components/ArtistInlineLinks.jsx";
@@ -237,17 +238,20 @@ function readSearchHistory() {
 export default function SearchPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const loadSearchFeed = useCallback(() => fetchSearchFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadSearchFeed);
 
   const {
     trackMap,
     likedIds,
+    savedPlaylistIds,
     currentTrackId,
     playTrack,
     isArtistFollowed,
     toggleArtistFollow,
     toggleLikeTrack,
+    togglePlaylistSave,
     notify,
   } = usePlayer();
 
@@ -534,6 +538,24 @@ export default function SearchPage() {
     [notify]
   );
 
+  const handleTogglePlaylistSave = useCallback(
+    async (playlistId) => {
+      const normalizedPlaylistId = String(playlistId ?? "").trim();
+      if (!normalizedPlaylistId) {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        notify("Войди в аккаунт, чтобы сохранять плейлисты в свою музыку.");
+        navigate("/profile");
+        return;
+      }
+
+      await togglePlaylistSave(normalizedPlaylistId);
+    },
+    [isAuthenticated, navigate, notify, togglePlaylistSave]
+  );
+
   const openPlaylistCardMenu = useCallback(
     (event, playlist) => {
       if (!playlist?.id) {
@@ -664,14 +686,17 @@ export default function SearchPage() {
           suggestions={searchSuggestions}
           isArtistFollowed={isArtistFollowed}
           likedIds={likedIds}
+          savedPlaylistIds={savedPlaylistIds}
           currentTrackId={currentTrackId}
           emptyRecommendationTracks={emptySearchRecommendations}
           pagination={searchState.pagination}
           loadingMore={searchState.loadingMore}
           canPlayTrack={canPlayTrack}
+          currentUserId={user?.id ?? ""}
           onPlay={playTrack}
           onToggleArtistFollow={toggleArtistFollow}
           onToggleLike={toggleLikeTrack}
+          onTogglePlaylistSave={handleTogglePlaylistSave}
           onOpenPlaylist={(id) => navigate(`/playlist/${id}`)}
           onOpenArtist={(id) => navigate(`/artist/${id}`)}
           onOpenRelease={(id) => navigate(`/release/${id}`)}
@@ -769,11 +794,12 @@ export default function SearchPage() {
                   key={playlist.id}
                   playlist={playlist}
                   subtitle={playlist.artist}
-                  likedIds={likedIds}
+                  savedPlaylistIds={savedPlaylistIds}
                   canPlayTrack={canPlayTrack}
+                  currentUserId={user?.id ?? ""}
                   onOpenPlaylist={(playlistId) => navigate(`/playlist/${playlistId}`)}
                   onPlay={playTrack}
-                  onToggleLike={toggleLikeTrack}
+                  onTogglePlaylistSave={handleTogglePlaylistSave}
                   onOpenMenu={openPlaylistCardMenu}
                 />
               ))}
@@ -862,14 +888,17 @@ function SearchResults({
   suggestions,
   isArtistFollowed,
   likedIds,
+  savedPlaylistIds = [],
   currentTrackId,
   emptyRecommendationTracks = [],
   pagination,
   loadingMore,
   canPlayTrack,
+  currentUserId,
   onPlay,
   onToggleArtistFollow,
   onToggleLike,
+  onTogglePlaylistSave,
   onOpenPlaylist,
   onOpenArtist,
   onOpenRelease,
@@ -972,10 +1001,11 @@ function SearchResults({
                 key={playlist.id}
                 playlist={playlist}
                 subtitle={playlist.subtitle}
-                likedIds={likedIds}
+                savedPlaylistIds={savedPlaylistIds}
+                currentUserId={currentUserId}
                 onOpenPlaylist={onOpenPlaylist}
                 onPlay={onPlay}
-                onToggleLike={onToggleLike}
+                onTogglePlaylistSave={onTogglePlaylistSave}
                 onOpenMenu={onOpenPlaylistMenu}
               />
             ))}
@@ -1045,15 +1075,18 @@ function SearchResults({
 function PlaylistCard({
   playlist,
   subtitle,
-  likedIds,
+  savedPlaylistIds = [],
   canPlayTrack = () => true,
+  currentUserId = "",
   onOpenPlaylist,
   onPlay,
-  onToggleLike,
+  onTogglePlaylistSave,
   onOpenMenu,
 }) {
   const firstTrackId = playlist.trackIds?.[0] ?? null;
-  const isFirstTrackLiked = firstTrackId ? likedIds.includes(firstTrackId) : false;
+  const isOwner = Boolean(playlist.userId && currentUserId && playlist.userId === currentUserId);
+  const canSavePlaylist = Boolean(playlist.id) && !isOwner;
+  const isPlaylistSaved = playlist.id ? savedPlaylistIds.includes(playlist.id) : false;
   const canPlayFirstTrack = firstTrackId ? canPlayTrack(firstTrackId) : false;
 
   return (
@@ -1066,31 +1099,38 @@ function PlaylistCard({
         </span>
       </button>
       <span className={styles.cardActions}>
-        {firstTrackId ? (
+        {firstTrackId || canSavePlaylist ? (
           <>
-            <button
-              type="button"
-              className={styles.cardActionButton}
-              aria-label="Слушать"
-              disabled={!canPlayFirstTrack}
-              onClick={() => onPlay(firstTrackId)}
-            >
-              <BsFillPlayFill />
-            </button>
-            <button
-              type="button"
-              className={`${styles.cardActionButton} ${styles.cardActionButtonLike} ${isFirstTrackLiked ? styles.cardActionButtonLiked : ""}`.trim()}
-              aria-label={isFirstTrackLiked ? "Убрать из избранного" : "Добавить в избранное"}
-              aria-pressed={isFirstTrackLiked}
-              onClick={() => onToggleLike(firstTrackId)}
-            >
-              <span className={styles.cardActionHeartOutline} aria-hidden="true">
-                <LuHeart />
-              </span>
-              <span className={styles.cardActionHeartFilled} aria-hidden="true">
-                <BsHeartFill />
-              </span>
-            </button>
+            {firstTrackId ? (
+              <button
+                type="button"
+                className={styles.cardActionButton}
+                aria-label="Слушать"
+                disabled={!canPlayFirstTrack}
+                onClick={() => onPlay(firstTrackId)}
+              >
+                <BsFillPlayFill />
+              </button>
+            ) : null}
+            {canSavePlaylist ? (
+              <button
+                type="button"
+                className={`${styles.cardActionButton} ${styles.cardActionButtonLike} ${isPlaylistSaved ? styles.cardActionButtonLiked : ""}`.trim()}
+                aria-label={isPlaylistSaved ? "Убрать плейлист из моей музыки" : "Сохранить плейлист"}
+                aria-pressed={isPlaylistSaved}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onTogglePlaylistSave?.(playlist.id);
+                }}
+              >
+                <span className={styles.cardActionHeartOutline} aria-hidden="true">
+                  <LuHeart />
+                </span>
+                <span className={styles.cardActionHeartFilled} aria-hidden="true">
+                  <BsHeartFill />
+                </span>
+              </button>
+            ) : null}
           </>
         ) : null}
         <button

@@ -250,7 +250,7 @@ function areTrackQueuesEqual(left = [], right = []) {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const loadHomeFeed = useCallback(() => fetchHomeFeed(), []);
   const { status, data, error, reload } = useAsyncResource(loadHomeFeed);
 
@@ -267,9 +267,10 @@ export default function HomePage() {
     playQueue,
     togglePlay,
     likedIds,
+    savedPlaylistIds,
     isPlaying,
     notify,
-    toggleLikeTrack,
+    togglePlaylistSave,
   } = usePlayer();
   const { menuState, openTrackMenu, closeTrackMenu, addTrackToQueueNext } = useTrackQueueMenu();
   const {
@@ -491,6 +492,24 @@ export default function HomePage() {
       }
     },
     [notify]
+  );
+
+  const handleTogglePlaylistSave = useCallback(
+    async (playlistId) => {
+      const normalizedPlaylistId = String(playlistId ?? "").trim();
+      if (!normalizedPlaylistId) {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        notify("Войди в аккаунт, чтобы сохранять плейлисты в свою музыку.");
+        navigate("/profile");
+        return;
+      }
+
+      await togglePlaylistSave(normalizedPlaylistId);
+    },
+    [isAuthenticated, navigate, notify, togglePlaylistSave]
   );
 
   const openShowcaseMenu = useCallback(
@@ -937,7 +956,8 @@ export default function HomePage() {
               <div className={styles.showcaseGrid}>
                 {(data?.showcases ?? []).map((item) => {
                   const primaryTrackId = item.trackIds?.[0] ?? null;
-                  const isPrimaryTrackLiked = primaryTrackId ? likedIds.includes(primaryTrackId) : false;
+                  const playlistId = item.playlistId ?? "";
+                  const isPlaylistSaved = playlistId ? savedPlaylistIds.includes(playlistId) : false;
 
                   return (
                     <article key={item.id} className={styles.showcaseCard}>
@@ -951,30 +971,37 @@ export default function HomePage() {
                         <span className={styles.showcaseSubtitle}>{item.subtitle}</span>
                       </button>
                       <span className={styles.cardActions}>
-                        {primaryTrackId ? (
+                        {primaryTrackId || playlistId ? (
                           <>
-                            <button
-                              type="button"
-                              className={styles.cardActionButton}
-                              aria-label="Слушать трек"
-                              onClick={() => playTrack(primaryTrackId)}
-                            >
-                              <BsFillPlayFill />
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.cardActionButton} ${styles.cardActionButtonLike} ${isPrimaryTrackLiked ? styles.cardActionButtonLiked : ""}`.trim()}
-                              aria-label={isPrimaryTrackLiked ? "Убрать из избранного" : "Добавить в избранное"}
-                              aria-pressed={isPrimaryTrackLiked}
-                              onClick={() => toggleLikeTrack(primaryTrackId)}
-                            >
-                              <span className={styles.cardActionHeartOutline} aria-hidden="true">
-                                <LuHeart />
-                              </span>
-                              <span className={styles.cardActionHeartFilled} aria-hidden="true">
-                                <BsHeartFill />
-                              </span>
-                            </button>
+                            {primaryTrackId ? (
+                              <button
+                                type="button"
+                                className={styles.cardActionButton}
+                                aria-label="Слушать трек"
+                                onClick={() => playTrack(primaryTrackId)}
+                              >
+                                <BsFillPlayFill />
+                              </button>
+                            ) : null}
+                            {playlistId ? (
+                              <button
+                                type="button"
+                                className={`${styles.cardActionButton} ${styles.cardActionButtonLike} ${isPlaylistSaved ? styles.cardActionButtonLiked : ""}`.trim()}
+                                aria-label={isPlaylistSaved ? "Убрать плейлист из моей музыки" : "Сохранить плейлист"}
+                                aria-pressed={isPlaylistSaved}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleTogglePlaylistSave(playlistId);
+                                }}
+                              >
+                                <span className={styles.cardActionHeartOutline} aria-hidden="true">
+                                  <LuHeart />
+                                </span>
+                                <span className={styles.cardActionHeartFilled} aria-hidden="true">
+                                  <BsHeartFill />
+                                </span>
+                              </button>
+                            ) : null}
                           </>
                         ) : null}
                         <button
@@ -1081,5 +1108,3 @@ function TrackColumn({
     </ul>
   );
 }
-
-

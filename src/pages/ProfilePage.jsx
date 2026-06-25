@@ -39,8 +39,6 @@ const MAX_EMBEDDED_TRACK_COVER_BACKGROUND_LENGTH = 1_400_000;
 const INITIAL_PROFILE_HISTORY_LIMIT = 6;
 const INITIAL_PROFILE_FOLLOWED_ARTISTS_LIMIT = 2;
 const UPLOAD_GENRE_SUGGESTIONS_ID = "upload-track-genre-suggestions";
-const DEMO_AUTH_USERNAME = String(import.meta.env?.VITE_DEMO_USERNAME ?? "demo_user");
-const DEMO_AUTH_PASSWORD = String(import.meta.env?.VITE_DEMO_PASSWORD ?? "demo_password_123");
 const EMPTY_UPLOAD_FORM = {
   audio: null,
   audioFiles: [],
@@ -504,36 +502,6 @@ export default function ProfilePage() {
       }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Не удалось выполнить авторизацию.");
-    } finally {
-      setAuthSubmitting(false);
-    }
-  };
-
-  const handleDemoSignIn = async () => {
-    if (authSubmitting) {
-      return;
-    }
-
-    const username = DEMO_AUTH_USERNAME.trim();
-    const password = DEMO_AUTH_PASSWORD.trim();
-    if (!username || !password) {
-      setAuthError("Демо-вход не настроен. Проверь VITE_DEMO_USERNAME и VITE_DEMO_PASSWORD.");
-      return;
-    }
-
-    setAuthMode("login");
-    setCredentials({ username, password, displayName: "" });
-    setAuthError("");
-    setAuthSubmitting(true);
-    try {
-      await signIn({ username, password });
-      notify("Демо-профиль открыт.");
-    } catch (error) {
-      setAuthError(
-        error instanceof Error
-          ? error.message
-          : "Не удалось войти в демо-профиль. Проверь, что сидовый пользователь создан."
-      );
     } finally {
       setAuthSubmitting(false);
     }
@@ -1126,17 +1094,6 @@ export default function ProfilePage() {
                 <button type="submit" className={styles.authPrimaryButton} disabled={authSubmitting}>
                   {authSubmitting ? "Подключаем..." : authMode === "register" ? "Создать аккаунт" : "Войти"}
                 </button>
-
-                {authMode === "login" ? (
-                  <button
-                    type="button"
-                    className={styles.authDemoButton}
-                    disabled={authSubmitting}
-                    onClick={handleDemoSignIn}
-                  >
-                    Демо-вход
-                  </button>
-                ) : null}
 
                 <button
                   type="button"

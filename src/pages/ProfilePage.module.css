@@ -847,18 +847,6 @@
   cursor: pointer;
 }
 
-.authDemoButton {
-  min-height: 36px;
-  border-radius: 999px;
-  border: 1px solid rgba(110, 162, 255, 0.34);
-  background: rgba(110, 162, 255, 0.14);
-  color: rgba(224, 234, 255, 0.98);
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
 .authSecondaryButton {
   min-height: 36px;
   border-radius: 999px;
@@ -872,7 +860,6 @@
 }
 
 .filePickerButton:hover,
-.authDemoButton:hover,
 .authSecondaryButton:hover {
   background: rgba(255, 255, 255, 0.14);
 }
@@ -1229,7 +1216,6 @@
 .sectionToggleButton:focus-visible,
 .logoutButton:focus-visible,
 .authPrimaryButton:focus-visible,
-.authDemoButton:focus-visible,
 .authSecondaryButton:focus-visible,
 .filePickerButton:focus-visible,
 .releaseTypeButton:focus-visible,
